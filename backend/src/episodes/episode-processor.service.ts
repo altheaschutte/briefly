@@ -25,19 +25,22 @@ export class EpisodeProcessorService {
   async process(job: Job<{ episodeId: string; userId: string }>): Promise<void> {
     const { episodeId, userId } = job.data;
     try {
-      const episode = this.episodesService.getEpisode(userId, episodeId);
+      const episode = await this.episodesService.getEpisode(userId, episodeId);
       const targetDuration = episode.targetDurationMinutes;
       await this.markEpisodeStatus(userId, episodeId, 'rewriting_queries');
-      const topics = this.topicsService.listTopics(userId).filter((t) => t.isActive);
+      const topics = (await this.topicsService.listTopics(userId)).filter((t) => t.isActive);
       if (!topics.length) {
         throw new Error('No active topics configured for user');
       }
 
       const rewrittenTopics = await Promise.all(
         topics.map(async (topic) => {
+          if (topic.rewrittenQuery) {
+            return topic;
+          }
           const rewrittenQuery = await this.llmService.rewriteTopic(topic.originalText);
-          this.store.updateTopic(userId, topic.id, { rewrittenQuery });
-          return { ...topic, rewrittenQuery };
+          const updated = await this.topicsService.setRewrittenQuery(userId, topic.id, rewrittenQuery);
+          return updated;
         }),
       );
 
@@ -75,8 +78,8 @@ export class EpisodeProcessorService {
       const script = await this.llmService.generateScript(segments, targetDuration);
 
       await this.markEpisodeStatus(userId, episodeId, 'generating_audio');
-      const voiceA = process.env.TTS_VOICE_A || 'Rachel';
-      const voiceB = process.env.TTS_VOICE_B || 'Domi';
+      const voiceA = process.env.TTS_VOICE_A || 'abRFZIdN4pvo8ZPmGxHP';
+      const voiceB = process.env.TTS_VOICE_B || '5GZaeOOG7yqLdoTRsaa6';
       const ttsResult = await this.ttsService.synthesize(script, { voiceA, voiceB });
       const audioKey = ttsResult.storageKey ?? ttsResult.audioUrl;
 
@@ -85,7 +88,8 @@ export class EpisodeProcessorService {
         audioUrl: audioKey,
       });
     } catch (error: any) {
-      this.logger.error(`Failed to process episode ${episodeId}: ${error?.message || error}`);
+      const axiosData = error?.response?.data ? ` | data=${JSON.stringify(error.response.data)}` : '';
+      this.logger.error(`Failed to process episode ${episodeId}: ${error?.message || error}${axiosData}`);
       await this.markEpisodeStatus(userId, episodeId, 'failed', { errorMessage: error?.message || 'Unknown error' });
       throw error;
     }
@@ -97,6 +101,6 @@ export class EpisodeProcessorService {
     status: Episode['status'],
     extra?: Partial<Episode>,
   ) {
-    this.episodesService.updateEpisode(userId, episodeId, { status, ...extra });
+    await this.episodesService.updateEpisode(userId, episodeId, { status, ...extra });
   }
 }

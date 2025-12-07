@@ -1,54 +1,52 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { v4 as uuid } from 'uuid';
-import { InMemoryStoreService } from '../common/in-memory-store.service';
 import { Episode, EpisodeStatus } from '../domain/types';
+import { EPISODES_REPOSITORY, EpisodesRepository } from './episodes.repository';
 
 @Injectable()
 export class EpisodesService {
   private readonly defaultDuration: number;
 
   constructor(
-    private readonly store: InMemoryStoreService,
+    @Inject(EPISODES_REPOSITORY) private readonly repository: EpisodesRepository,
     private readonly configService: ConfigService,
   ) {
     this.defaultDuration = Number(this.configService.get('EPISODE_DEFAULT_DURATION_MINUTES')) || 20;
   }
 
-  createEpisode(userId: string, targetDurationMinutes?: number): Episode {
-    const now = new Date();
-    const episode: Episode = {
-      id: uuid(),
-      userId,
-      status: 'queued',
-      targetDurationMinutes: targetDurationMinutes || this.defaultDuration,
-      createdAt: now,
-      updatedAt: now,
-    };
-    this.store.saveEpisode(episode);
-    return episode;
+  createEpisode(userId: string, targetDurationMinutes?: number): Promise<Episode> {
+    return this.repository.create(userId, targetDurationMinutes || this.defaultDuration, 'queued');
   }
 
-  listEpisodes(userId: string): Episode[] {
-    return this.store.getEpisodes(userId);
+  listEpisodes(userId: string): Promise<Episode[]> {
+    return this.repository.listByUser(userId);
   }
 
-  getEpisode(userId: string, episodeId: string): Episode {
-    const episode = this.store.getEpisode(userId, episodeId);
+  async getEpisode(userId: string, episodeId: string): Promise<Episode> {
+    const episode = await this.repository.getById(userId, episodeId);
     if (!episode) {
       throw new NotFoundException('Episode not found');
     }
     return episode;
   }
 
-  updateEpisode(
+  async updateEpisode(
     userId: string,
     episodeId: string,
     updates: Partial<Episode> & { status?: EpisodeStatus },
-  ): Episode {
-    const existing = this.getEpisode(userId, episodeId);
-    const updated: Episode = { ...existing, ...updates, updatedAt: new Date() };
-    this.store.saveEpisode(updated);
+  ): Promise<Episode> {
+    const existing = await this.getEpisode(userId, episodeId);
+    const updated = await this.repository.update(userId, episodeId, {
+      ...updates,
+      targetDurationMinutes: updates.targetDurationMinutes ?? existing.targetDurationMinutes,
+      status: updates.status ?? existing.status,
+      audioUrl: updates.audioUrl ?? existing.audioUrl,
+      transcript: updates.transcript ?? existing.transcript,
+      errorMessage: updates.errorMessage ?? existing.errorMessage,
+    });
+    if (!updated) {
+      throw new NotFoundException('Episode not found');
+    }
     return updated;
   }
 }

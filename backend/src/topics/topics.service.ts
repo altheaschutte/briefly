@@ -1,40 +1,29 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { v4 as uuid } from 'uuid';
-import { InMemoryStoreService } from '../common/in-memory-store.service';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Topic } from '../domain/types';
+import { TOPICS_REPOSITORY, TopicsRepository } from './topics.repository';
 
 @Injectable()
 export class TopicsService {
-  constructor(private readonly store: InMemoryStoreService) {}
+  constructor(@Inject(TOPICS_REPOSITORY) private readonly repository: TopicsRepository) {}
 
-  listTopics(userId: string): Topic[] {
-    return this.store.getTopics(userId);
+  listTopics(userId: string): Promise<Topic[]> {
+    return this.repository.listByUser(userId);
   }
 
-  createTopic(userId: string, originalText: string): Topic {
-    const now = new Date();
-    const topic: Topic = {
-      id: uuid(),
-      userId,
-      originalText,
-      isActive: true,
-      createdAt: now,
-      updatedAt: now,
-    };
-    this.store.saveTopic(topic);
-    return topic;
+  async createTopic(userId: string, originalText: string): Promise<Topic> {
+    return this.repository.create(userId, originalText);
   }
 
-  updateTopic(
+  async updateTopic(
     userId: string,
     topicId: string,
     updates: { originalText?: string; isActive?: boolean },
-  ): Topic {
-    const topic = this.store.getTopics(userId).find((t) => t.id === topicId);
+  ): Promise<Topic> {
+    const topic = await this.repository.getById(userId, topicId);
     if (!topic) {
       throw new NotFoundException('Topic not found');
     }
-    const updated = this.store.updateTopic(userId, topicId, {
+    const updated = await this.repository.update(userId, topicId, {
       originalText: updates.originalText ?? topic.originalText,
       isActive: updates.isActive ?? topic.isActive,
     });
@@ -44,12 +33,24 @@ export class TopicsService {
     return updated;
   }
 
-  softDeleteTopic(userId: string, topicId: string): Topic {
-    const topic = this.store.getTopics(userId).find((t) => t.id === topicId);
+  async softDeleteTopic(userId: string, topicId: string): Promise<Topic> {
+    const topic = await this.repository.getById(userId, topicId);
     if (!topic) {
       throw new NotFoundException('Topic not found');
     }
-    const updated = this.store.updateTopic(userId, topicId, { isActive: false });
+    const updated = await this.repository.update(userId, topicId, { isActive: false });
+    if (!updated) {
+      throw new NotFoundException('Topic not found');
+    }
+    return updated;
+  }
+
+  async setRewrittenQuery(userId: string, topicId: string, rewrittenQuery: string): Promise<Topic> {
+    const topic = await this.repository.getById(userId, topicId);
+    if (!topic) {
+      throw new NotFoundException('Topic not found');
+    }
+    const updated = await this.repository.update(userId, topicId, { rewrittenQuery });
     if (!updated) {
       throw new NotFoundException('Topic not found');
     }

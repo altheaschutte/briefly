@@ -22,7 +22,10 @@ export class OpenAiLlmProvider implements LlmProvider {
         {
           role: 'system',
           content:
-            'Rewrite the provided topic into a concise, high-signal search query for current news and analysis. Return only the rewritten query.',
+            `Rewrite the user's topic as a search query optimized for Perplexity-style retrieval.
+Prioritize: temporal accuracy, location specificity, domain clarity, and minimal tokens.
+Transform vague requests into concrete query language without adding new facts.
+Return only the query.`,
         },
         { role: 'user', content: topic },
       ],

@@ -7,8 +7,12 @@
   "scripts": {
     "build": "nest build",
     "start": "nest start",
+    "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
-    "start:worker": "node dist/worker/worker-main.js"
+    "start:worker": "node dist/worker/worker-main.js",
+    "start:worker:dev": "nodemon --watch src --watch worker --ext ts,js --exec \"ts-node -r tsconfig-paths/register worker/worker-main.ts\"",
+    "db:seed": "supabase db seed",
+    "db:migrate": "supabase db push --db-url \"$SUPABASE_DB_URL\""
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.590.0",
@@ -17,10 +21,12 @@
     "@nestjs/config": "^3.2.2",
     "@nestjs/core": "^10.3.8",
     "@nestjs/platform-express": "^10.3.8",
+    "@supabase/supabase-js": "^2.86.2",
     "axios": "^1.6.8",
     "bullmq": "^5.4.4",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "dotenv": "^17.2.3",
     "ioredis": "^5.3.2",
     "jose": "^4.15.5",
     "openai": "^4.28.0",
@@ -32,7 +38,10 @@
     "@nestjs/cli": "^10.3.2",
     "@nestjs/schematics": "^10.1.1",
     "@nestjs/testing": "^10.3.8",
+    "@types/express": "^5.0.6",
     "@types/node": "^20.12.7",
+    "@types/uuid": "^10.0.0",
+    "nodemon": "^3.1.11",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.4.5"

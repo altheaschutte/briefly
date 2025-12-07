@@ -8,7 +8,8 @@ import { TtsProvider, TtsSynthesisResult } from './tts.interfaces';
 @Injectable()
 export class ElevenLabsProvider implements TtsProvider {
   private readonly baseUrl: string;
-  private readonly defaultVoice: string;
+  private readonly hostVoiceId: string;
+  private readonly guestVoiceId: string;
   private readonly modelId: string;
 
   constructor(
@@ -16,8 +17,10 @@ export class ElevenLabsProvider implements TtsProvider {
     private readonly storageService: StorageService,
   ) {
     this.baseUrl = this.configService.get<string>('ELEVENLABS_BASE_URL') ?? 'https://api.elevenlabs.io';
-    this.defaultVoice = this.configService.get<string>('ELEVENLABS_DEFAULT_VOICE') ?? 'Rachel';
-    this.modelId = this.configService.get<string>('ELEVENLABS_MODEL_ID') ?? 'eleven_multilingual_v2';
+    this.hostVoiceId = this.configService.get<string>('ELEVENLABS_HOST_VOICE_ID') ?? 'abRFZIdN4pvo8ZPmGxHP';
+    this.guestVoiceId = this.configService.get<string>('ELEVENLABS_GUEST_VOICE_ID') ?? '5GZaeOOG7yqLdoTRsaa6';
+    // Default to cost-effective flash model
+    this.modelId = this.configService.get<string>('ELEVENLABS_MODEL_ID') ?? 'eleven_flash_v2_5';
   }
 
   async synthesize(
@@ -25,17 +28,16 @@ export class ElevenLabsProvider implements TtsProvider {
     options: { voiceA: string; voiceB: string },
   ): Promise<TtsSynthesisResult> {
     const apiKey = this.getApiKey();
-    const voiceId = options.voiceA || this.defaultVoice;
-    const url = `${this.baseUrl}/v1/text-to-speech/${voiceId}`;
+    const voiceId = options.voiceA || this.hostVoiceId;
 
     const response = await axios.post<ArrayBuffer>(
-      url,
+      `${this.baseUrl}/v1/text-to-speech/${voiceId}/stream`,
       {
-        text: script,
         model_id: this.modelId,
+        text: script,
         voice_settings: {
-          stability: 0.55,
-          similarity_boost: 0.75,
+          stability: 0.5,
+          similarity_boost: 0.5,
         },
       },
       {
@@ -48,9 +50,8 @@ export class ElevenLabsProvider implements TtsProvider {
       },
     );
 
-    const buffer = Buffer.from(response.data);
     const key = `audio/${uuid()}.mp3`;
-    const upload = await this.storageService.uploadAudio(buffer, key);
+    const upload = await this.storageService.uploadAudio(Buffer.from(response.data), key);
     return { audioUrl: upload.key, storageKey: upload.key };
   }
 

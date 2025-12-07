@@ -16,19 +16,19 @@ export class EpisodesController {
   @Post()
   async createEpisode(@Req() req: Request, @Body('duration') duration?: number) {
     const userId = (req as any).user?.id as string;
-    const episode = this.episodesService.createEpisode(userId, duration);
+    const episode = await this.episodesService.createEpisode(userId, duration);
     await this.episodesQueue.add('generate', { episodeId: episode.id, userId, duration });
     return { episodeId: episode.id, status: episode.status };
   }
 
   @Get()
-  listEpisodes(@Req() req: Request) {
+  async listEpisodes(@Req() req: Request) {
     const userId = (req as any).user?.id as string;
     return this.episodesService.listEpisodes(userId);
   }
 
   @Get(':id')
-  getEpisode(@Req() req: Request, @Param('id') id: string) {
+  async getEpisode(@Req() req: Request, @Param('id') id: string) {
     const userId = (req as any).user?.id as string;
     return this.episodesService.getEpisode(userId, id);
   }
@@ -36,7 +36,7 @@ export class EpisodesController {
   @Get(':id/audio')
   async getEpisodeAudio(@Req() req: Request, @Param('id') id: string) {
     const userId = (req as any).user?.id as string;
-    const episode = this.episodesService.getEpisode(userId, id);
+    const episode = await this.episodesService.getEpisode(userId, id);
     if (!episode.audioUrl) {
       return { audioUrl: null };
     }

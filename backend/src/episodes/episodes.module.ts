@@ -9,11 +9,36 @@ import { PerplexityModule } from '../perplexity/perplexity.module';
 import { TtsModule } from '../tts/tts.module';
 import { StorageModule } from '../storage/storage.module';
 import { EpisodeProcessorService } from './episode-processor.service';
+import { Provider } from '@nestjs/common';
+import { EPISODES_REPOSITORY } from './episodes.repository';
+import { ConfigService } from '@nestjs/config';
+import { InMemoryStoreService } from '../common/in-memory-store.service';
+import { InMemoryEpisodesRepository } from './in-memory-episodes.repository';
+import { SupabaseEpisodesRepository } from './supabase-episodes.repository';
+
+const episodesRepositoryProvider: Provider = {
+  provide: EPISODES_REPOSITORY,
+  inject: [ConfigService, InMemoryStoreService],
+  useFactory: (configService: ConfigService, store: InMemoryStoreService) => {
+    const supabaseUrl = configService.get<string>('SUPABASE_PROJECT_URL');
+    const supabaseKey = configService.get<string>('SUPABASE_SERVICE_ROLE_KEY');
+    const storagePref = (configService.get<string>('EPISODES_STORAGE') || 'auto').toLowerCase();
+    const canUseSupabase = Boolean(supabaseUrl && supabaseKey);
+
+    if (storagePref === 'memory' || (!canUseSupabase && storagePref === 'auto')) {
+      return new InMemoryEpisodesRepository(store);
+    }
+    if (!canUseSupabase) {
+      throw new Error('EPISODES_STORAGE is set to supabase but Supabase env vars are missing');
+    }
+    return new SupabaseEpisodesRepository(configService);
+  },
+};
 
 @Module({
   imports: [ConfigModule, QueueModule, TopicsModule, LlmModule, PerplexityModule, TtsModule, StorageModule],
   controllers: [EpisodesController],
-  providers: [EpisodesService, EpisodeProcessorService],
+  providers: [EpisodesService, EpisodeProcessorService, episodesRepositoryProvider],
   exports: [EpisodesService, EpisodeProcessorService],
 })
 export class EpisodesModule {}

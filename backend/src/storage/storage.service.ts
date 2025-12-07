@@ -3,16 +3,30 @@ import { ConfigService } from '@nestjs/config';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl as getS3SignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuid } from 'uuid';
+import { promises as fs } from 'fs';
+import path from 'path';
 
 @Injectable()
 export class StorageService {
   private bucket?: string;
   private region?: string;
   private client?: S3Client;
+  private readonly driver: 's3' | 'local';
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly configService: ConfigService) {
+    this.driver = (this.configService.get<string>('STORAGE_DRIVER') || 's3').toLowerCase() === 'local' ? 'local' : 's3';
+  }
 
   async uploadAudio(buffer: Buffer, key?: string): Promise<{ key: string; url: string }> {
+    if (this.driver === 'local') {
+      const objectKey = key ?? `audio/${uuid()}.mp3`;
+      const baseDir = path.resolve(process.cwd(), 'tmp');
+      const fullPath = path.join(baseDir, objectKey);
+      await fs.mkdir(path.dirname(fullPath), { recursive: true });
+      await fs.writeFile(fullPath, buffer);
+      return { key: fullPath, url: `file://${fullPath}` };
+    }
+
     const { bucket, client } = this.getClient();
     const objectKey = key ?? `audio/${uuid()}.mp3`;
     await client.send(
@@ -27,6 +41,9 @@ export class StorageService {
   }
 
   async getSignedUrl(key: string, expiresInSeconds = 60 * 60 * 6): Promise<string> {
+    if (this.driver === 'local') {
+      return key.startsWith('file://') ? key : `file://${key}`;
+    }
     const { bucket, client } = this.getClient();
     const command = new GetObjectCommand({
       Bucket: bucket,
@@ -36,6 +53,9 @@ export class StorageService {
   }
 
   getPublicUrl(key: string): string {
+    if (this.driver === 'local') {
+      return key.startsWith('file://') ? key : `file://${path.resolve(key)}`;
+    }
     const { bucket, region } = this.requireConfigBundle();
     return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
   }

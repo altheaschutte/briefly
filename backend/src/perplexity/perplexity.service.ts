@@ -12,7 +12,8 @@ export class PerplexityService {
   private readonly model: string;
 
   constructor(private readonly configService: ConfigService) {
-    this.model = this.configService.get<string>('PERPLEXITY_MODEL') ?? 'sonar-small-chat';
+    // Use a permitted model; see https://docs.perplexity.ai/getting-started/models
+    this.model = this.configService.get<string>('PERPLEXITY_MODEL') ?? 'sonar';
   }
 
   async search(query: string): Promise<PerplexityResult> {

@@ -7,13 +7,13 @@ export class TopicsController {
   constructor(private readonly topicsService: TopicsService) {}
 
   @Get()
-  getTopics(@Req() req: Request) {
+  async getTopics(@Req() req: Request) {
     const userId = (req as any).user?.id as string;
     return this.topicsService.listTopics(userId);
   }
 
   @Post()
-  createTopic(@Req() req: Request, @Body('original_text') originalText: string) {
+  async createTopic(@Req() req: Request, @Body('original_text') originalText: string) {
     const userId = (req as any).user?.id as string;
     if (!originalText) {
       throw new BadRequestException('original_text is required');
@@ -22,7 +22,7 @@ export class TopicsController {
   }
 
   @Patch(':id')
-  updateTopic(
+  async updateTopic(
     @Req() req: Request,
     @Param('id') id: string,
     @Body('original_text') originalText?: string,
@@ -33,7 +33,7 @@ export class TopicsController {
   }
 
   @Delete(':id')
-  deleteTopic(@Req() req: Request, @Param('id') id: string) {
+  async deleteTopic(@Req() req: Request, @Param('id') id: string) {
     const userId = (req as any).user?.id as string;
     return this.topicsService.softDeleteTopic(userId, id);
   }

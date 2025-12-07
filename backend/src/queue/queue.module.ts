@@ -15,7 +15,8 @@ import { EPISODES_QUEUE_NAME, EPISODES_QUEUE_TOKEN, REDIS_CONNECTION_TOKEN } fro
         if (!redisUrl) {
           throw new Error('REDIS_URL must be set for queue connections');
         }
-        return new Redis(redisUrl);
+        // BullMQ requires maxRetriesPerRequest = null for blocking commands
+        return new Redis(redisUrl, { maxRetriesPerRequest: null });
       },
     },
     {
