@@ -19,8 +19,8 @@ export class ElevenLabsProvider implements TtsProvider {
     this.baseUrl = this.configService.get<string>('ELEVENLABS_BASE_URL') ?? 'https://api.elevenlabs.io';
     this.hostVoiceId = this.configService.get<string>('ELEVENLABS_HOST_VOICE_ID') ?? 'abRFZIdN4pvo8ZPmGxHP';
     this.guestVoiceId = this.configService.get<string>('ELEVENLABS_GUEST_VOICE_ID') ?? '5GZaeOOG7yqLdoTRsaa6';
-    // Default to cost-effective flash model
-    this.modelId = this.configService.get<string>('ELEVENLABS_MODEL_ID') ?? 'eleven_flash_v2_5';
+    // Default to expressive Eleven v3 (alpha) model
+    this.modelId = this.configService.get<string>('ELEVENLABS_MODEL_ID') ?? 'eleven_v3';
   }
 
   async synthesize(

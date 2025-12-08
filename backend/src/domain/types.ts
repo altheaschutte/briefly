@@ -24,6 +24,7 @@ export interface Episode {
   targetDurationMinutes: number;
   audioUrl?: string;
   transcript?: string;
+  scriptPrompt?: string;
   errorMessage?: string;
   createdAt: Date;
   updatedAt: Date;

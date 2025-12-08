@@ -42,6 +42,7 @@ export class EpisodesService {
       status: updates.status ?? existing.status,
       audioUrl: updates.audioUrl ?? existing.audioUrl,
       transcript: updates.transcript ?? existing.transcript,
+      scriptPrompt: updates.scriptPrompt ?? existing.scriptPrompt,
       errorMessage: updates.errorMessage ?? existing.errorMessage,
     });
     if (!updated) {

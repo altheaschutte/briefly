@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { LLM_PROVIDER_TOKEN } from './llm.constants';
-import { LlmProvider } from './llm.provider';
+import { LlmProvider, ScriptGenerationResult } from './llm.provider';
 
 @Injectable()
 export class LlmService implements LlmProvider {
@@ -10,7 +10,7 @@ export class LlmService implements LlmProvider {
     return this.provider.rewriteTopic(topic);
   }
 
-  generateScript(segments: any[], targetDurationMinutes?: number): Promise<string> {
+  generateScript(segments: any[], targetDurationMinutes?: number): Promise<ScriptGenerationResult> {
     return this.provider.generateScript(segments, targetDurationMinutes);
   }
 }

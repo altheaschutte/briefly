@@ -75,7 +75,7 @@ export class EpisodeProcessorService {
       this.store.setSources(episodeId, sources);
 
       await this.markEpisodeStatus(userId, episodeId, 'generating_script');
-      const script = await this.llmService.generateScript(segments, targetDuration);
+      const { script, prompt } = await this.llmService.generateScript(segments, targetDuration);
 
       await this.markEpisodeStatus(userId, episodeId, 'generating_audio');
       const voiceA = process.env.TTS_VOICE_A || 'abRFZIdN4pvo8ZPmGxHP';
@@ -85,6 +85,7 @@ export class EpisodeProcessorService {
 
       await this.markEpisodeStatus(userId, episodeId, 'ready', {
         transcript: script,
+        scriptPrompt: prompt,
         audioUrl: audioKey,
       });
     } catch (error: any) {

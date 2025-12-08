@@ -5,6 +5,7 @@ export type EpisodeRow = {
   target_duration_minutes: number;
   audio_url?: string | null;
   transcript?: string | null;
+  script_prompt?: string | null;
   error_message?: string | null;
   created_at: string;
   updated_at: string;
