@@ -2,8 +2,7 @@ import SwiftUI
 
 struct TopicReviewView: View {
     @ObservedObject var viewModel: OnboardingViewModel
-    @State private var newTitle: String = ""
-    @State private var newDescription: String = ""
+    @State private var newText: String = ""
     let onConfirm: () -> Void
 
     var body: some View {
@@ -27,11 +26,9 @@ struct TopicReviewView: View {
             List {
                 ForEach($viewModel.topics) { $topic in
                     VStack(alignment: .leading, spacing: 8) {
-                        TextField("Topic title", text: $topic.title)
+                        TextField("Topic", text: $topic.originalText, axis: .vertical)
                             .font(.headline)
-                        TextField("Description", text: $topic.description)
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .inputFieldStyle()
                         Toggle("Active", isOn: $topic.isActive)
                             .toggleStyle(SwitchToggleStyle(tint: .blue))
                         Button("Save") {
@@ -46,14 +43,13 @@ struct TopicReviewView: View {
                 }
 
                 Section(header: Text("Add topic")) {
-                    TextField("Title", text: $newTitle)
-                    TextField("Description", text: $newDescription)
+                    TextField("Topic", text: $newText, axis: .vertical)
+                        .inputFieldStyle()
                     Button("Add topic") {
-                        guard !newTitle.isEmpty, !newDescription.isEmpty else { return }
+                        guard !newText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
                         Task {
-                            await viewModel.addTopic(title: newTitle, description: newDescription)
-                            newTitle = ""
-                            newDescription = ""
+                            await viewModel.addTopic(text: newText)
+                            newText = ""
                         }
                     }
                 }

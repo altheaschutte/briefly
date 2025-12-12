@@ -48,8 +48,10 @@ struct AuthFlowView: View {
                 .textInputAutocapitalization(.never)
                 .keyboardType(.emailAddress)
                 .textContentType(.username)
+                .inputFieldStyle()
             SecureField("Password", text: $viewModel.password)
                 .textContentType(.password)
+                .inputFieldStyle()
 
             if let error = viewModel.errorMessage {
                 Text(error)
@@ -81,8 +83,11 @@ struct AuthFlowView: View {
             TextField("Email", text: $viewModel.email)
                 .textInputAutocapitalization(.never)
                 .keyboardType(.emailAddress)
+                .inputFieldStyle()
             SecureField("Password", text: $viewModel.password)
+                .inputFieldStyle()
             SecureField("Confirm Password", text: $viewModel.confirmPassword)
+                .inputFieldStyle()
 
             if let error = viewModel.errorMessage {
                 Text(error)
@@ -120,6 +125,7 @@ struct AuthFlowView: View {
             TextField("Email", text: $viewModel.email)
                 .textInputAutocapitalization(.never)
                 .keyboardType(.emailAddress)
+                .inputFieldStyle()
 
             Button("Send reset link") { }
                 .frame(maxWidth: .infinity)

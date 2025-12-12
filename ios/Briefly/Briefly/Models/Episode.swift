@@ -1,6 +1,6 @@
 import Foundation
 
-struct Episode: Codable, Identifiable, Equatable, Hashable {
+struct Episode: Codable, Identifiable, Hashable {
     var id: UUID
     var title: String
     var summary: String
@@ -27,5 +27,13 @@ struct Episode: Codable, Identifiable, Equatable, Hashable {
                 durationSeconds: 600,
                 publishedAt: Date(),
                 topics: [Topic.placeholder])
+    }
+
+    static func == (lhs: Episode, rhs: Episode) -> Bool {
+        lhs.id == rhs.id
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
     }
 }

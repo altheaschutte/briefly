@@ -44,16 +44,4 @@ export class TopicsService {
     }
     return updated;
   }
-
-  async setRewrittenQuery(userId: string, topicId: string, rewrittenQuery: string): Promise<Topic> {
-    const topic = await this.repository.getById(userId, topicId);
-    if (!topic) {
-      throw new NotFoundException('Topic not found');
-    }
-    const updated = await this.repository.update(userId, topicId, { rewrittenQuery });
-    if (!updated) {
-      throw new NotFoundException('Topic not found');
-    }
-    return updated;
-  }
 }

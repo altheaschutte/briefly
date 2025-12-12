@@ -18,6 +18,14 @@ final class EpisodesViewModel: ObservableObject {
         self.episodeService = episodeService
     }
 
+    var latestEpisode: Episode? {
+        episodes.first
+    }
+
+    var previousEpisodes: [Episode] {
+        Array(episodes.dropFirst())
+    }
+
     var sections: [EpisodeSection] {
         let calendar = Calendar.current
         let now = Date()
@@ -48,7 +56,12 @@ final class EpisodesViewModel: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         do {
-            episodes = try await episodeService.fetchEpisodes()
+            let fetched = try await episodeService.fetchEpisodes()
+            episodes = fetched.sorted { lhs, rhs in
+                let lhsDate = lhs.publishedAt ?? .distantPast
+                let rhsDate = rhs.publishedAt ?? .distantPast
+                return lhsDate > rhsDate
+            }
         } catch {
             errorMessage = error.localizedDescription
         }

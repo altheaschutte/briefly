@@ -7,11 +7,15 @@ import { EpisodeSegment } from '../domain/types';
 export class LlmService implements LlmProvider {
   constructor(@Inject(LLM_PROVIDER_TOKEN) private readonly provider: LlmProvider) {}
 
-  rewriteTopic(topic: string): Promise<string> {
-    return this.provider.rewriteTopic(topic);
+  generateTopicQueries(topic: string, previousQueries: string[]): Promise<string[]> {
+    return this.provider.generateTopicQueries(topic, previousQueries);
   }
 
   generateScript(segments: EpisodeSegment[], targetDurationMinutes?: number): Promise<ScriptGenerationResult> {
     return this.provider.generateScript(segments, targetDurationMinutes);
+  }
+
+  extractTopicBriefs(transcript: string): Promise<string[]> {
+    return this.provider.extractTopicBriefs(transcript);
   }
 }

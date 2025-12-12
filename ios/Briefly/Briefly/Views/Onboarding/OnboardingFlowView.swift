@@ -9,7 +9,10 @@ struct OnboardingFlowView: View {
         _onboardingViewModel = StateObject(wrappedValue: OnboardingViewModel(
             topicService: appViewModel.topicService,
             episodeService: appViewModel.episodeService,
-            voiceService: OnboardingVoiceService(streamURL: APIConfig.baseURL.appendingPathComponent("onboarding/stream"))
+            voiceService: OnboardingVoiceService(
+                streamURL: APIConfig.baseURL.appendingPathComponent("onboarding/stream"),
+                tokenProvider: { appViewModel.authManager.currentToken?.accessToken }
+            )
         ))
     }
 

@@ -10,6 +10,7 @@ final class AudioPlayerManager: NSObject, ObservableObject {
 
     private var player: AVPlayer?
     private var timeObserver: Any?
+    private var playbackSpeed: Double = 1.0
 
     override init() {
         super.init()
@@ -22,6 +23,7 @@ final class AudioPlayerManager: NSObject, ObservableObject {
         player = AVPlayer(url: url)
         addTimeObserver()
         player?.play()
+        player?.rate = Float(playbackSpeed)
         isPlaying = true
         durationSeconds = episode.durationSeconds ?? player?.currentItem?.asset.duration.seconds ?? 0
     }
@@ -33,6 +35,7 @@ final class AudioPlayerManager: NSObject, ObservableObject {
 
     func resume() {
         player?.play()
+        player?.rate = Float(playbackSpeed)
         isPlaying = true
     }
 
@@ -50,6 +53,13 @@ final class AudioPlayerManager: NSObject, ObservableObject {
         player?.seek(to: time) { [weak self] _ in
             self?.currentTimeSeconds = seconds
             self?.progress = progress
+        }
+    }
+
+    func setPlaybackSpeed(_ speed: Double) {
+        playbackSpeed = max(0.5, min(speed, 2.0))
+        if isPlaying {
+            player?.rate = Float(playbackSpeed)
         }
     }
 

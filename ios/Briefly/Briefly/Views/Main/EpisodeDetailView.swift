@@ -21,8 +21,8 @@ struct EpisodeDetailView: View {
                         .font(.headline)
                     ForEach(topics) { topic in
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(topic.title).bold()
-                            Text(topic.description).foregroundColor(.secondary)
+                            Text(topic.originalText)
+                                .foregroundColor(.primary)
                         }
                         .padding()
                         .background(Color(.secondarySystemBackground))

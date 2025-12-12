@@ -15,8 +15,18 @@ struct SettingsView: View {
             }
 
             Section(header: Text("Playback")) {
+                Picker("Speed", selection: $viewModel.playbackSpeed) {
+                    ForEach([0.8, 1.0, 1.2, 1.5, 2.0], id: \.self) { speed in
+                        Text("\(String(format: "%.1fx", speed))").tag(speed)
+                    }
+                }
                 Toggle("Auto-play latest episode", isOn: $viewModel.autoPlayLatest)
                 Toggle("Resume last episode", isOn: $viewModel.resumeLast)
+            }
+
+            Section(header: Text("Voices")) {
+                Text("Voice selection coming soon.")
+                    .foregroundColor(.secondary)
             }
 
             Section(header: Text("Notifications")) {

@@ -2,18 +2,16 @@ import SwiftUI
 
 struct TopicsView: View {
     @ObservedObject var viewModel: TopicsViewModel
-    @State private var newTitle: String = ""
-    @State private var newDescription: String = ""
+    @State private var newTopicText: String = ""
 
     var body: some View {
         List {
             Section(header: Text("Your topics")) {
                 ForEach($viewModel.topics) { $topic in
                     VStack(alignment: .leading, spacing: 8) {
-                        TextField("Title", text: $topic.title)
-                            .font(.headline)
-                        TextField("Description", text: $topic.description)
+                        TextField("Topic", text: $topic.originalText, axis: .vertical)
                             .font(.subheadline)
+                            .inputFieldStyle()
                         Toggle("Active", isOn: $topic.isActive)
                             .toggleStyle(.switch)
                         Button("Save") {
@@ -29,14 +27,13 @@ struct TopicsView: View {
             }
 
             Section(header: Text("Add topic")) {
-                TextField("Title", text: $newTitle)
-                TextField("Description", text: $newDescription)
+                TextField("Topic", text: $newTopicText, axis: .vertical)
+                    .inputFieldStyle()
                 Button("Add") {
-                    guard !newTitle.isEmpty, !newDescription.isEmpty else { return }
+                    guard !newTopicText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
                     Task {
-                        await viewModel.addTopic(title: newTitle, description: newDescription)
-                        newTitle = ""
-                        newDescription = ""
+                        await viewModel.addTopic(text: newTopicText)
+                        newTopicText = ""
                     }
                 }
             }

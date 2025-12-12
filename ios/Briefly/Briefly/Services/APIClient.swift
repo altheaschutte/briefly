@@ -93,8 +93,7 @@ final class APIClient {
         }
     }
 
-    @discardableResult
-    func requestVoid(_ endpoint: APIEndpoint) async throws -> Void {
+    func requestVoid(_ endpoint: APIEndpoint) async throws {
         _ = try await requestData(endpoint)
     }
 

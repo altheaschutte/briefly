@@ -1,0 +1,18 @@
+import { TopicQuery } from '../domain/types';
+
+export const TOPIC_QUERIES_REPOSITORY = 'TOPIC_QUERIES_REPOSITORY';
+
+export interface TopicQueryCreateInput {
+  topicId: string;
+  episodeId: string;
+  query: string;
+  answer: string;
+  citations: string[];
+  orderIndex: number;
+}
+
+export interface TopicQueriesRepository {
+  listByTopic(userId: string, topicId: string): Promise<TopicQuery[]>;
+  listByEpisode(userId: string, episodeId: string): Promise<TopicQuery[]>;
+  createMany(userId: string, inputs: TopicQueryCreateInput[]): Promise<TopicQuery[]>;
+}

@@ -5,7 +5,6 @@ export const TOPICS_REPOSITORY = 'TOPICS_REPOSITORY';
 export interface TopicUpdateInput {
   originalText?: string;
   isActive?: boolean;
-  rewrittenQuery?: string;
 }
 
 export interface TopicsRepository {

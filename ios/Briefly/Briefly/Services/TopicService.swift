@@ -1,10 +1,8 @@
 import Foundation
 
 protocol TopicProviding {
-    func submitTranscript(_ text: String) async throws
-    func fetchSuggestedTopics() async throws -> [Topic]
     func fetchTopics() async throws -> [Topic]
-    func createTopic(title: String, description: String) async throws -> Topic
+    func createTopic(originalText: String) async throws -> Topic
     func updateTopic(_ topic: Topic) async throws -> Topic
     func deleteTopic(id: UUID) async throws
 }
@@ -16,59 +14,84 @@ final class TopicService: TopicProviding {
         self.apiClient = apiClient
     }
 
-    func submitTranscript(_ text: String) async throws {
-        let body = ["transcriptText": text]
-        let endpoint = APIEndpoint(path: "/onboarding/transcripts",
-                                   method: .post,
-                                   body: AnyEncodable(body))
-        try await apiClient.requestVoid(endpoint)
-    }
-
-    func fetchSuggestedTopics() async throws -> [Topic] {
-        let endpoint = APIEndpoint(path: "/onboarding/topics",
-                                   method: .get)
-        if let direct: [Topic] = try? await apiClient.request(endpoint) {
-            return direct
-        }
-        struct Response: Decodable { let data: [Topic] }
-        let response: Response = try await apiClient.request(endpoint)
-        return response.data
-    }
-
     func fetchTopics() async throws -> [Topic] {
         let endpoint = APIEndpoint(path: "/topics", method: .get)
-        if let direct: [Topic] = try? await apiClient.request(endpoint) {
-            return direct
-        }
-        struct Response: Decodable { let data: [Topic] }
-        let response: Response = try await apiClient.request(endpoint)
-        return response.data
+        let backendTopics: [BackendTopic] = try await apiClient.request(endpoint)
+        return backendTopics.map { $0.toTopic() }
     }
 
-    func createTopic(title: String, description: String) async throws -> Topic {
-        let body = ["title": title, "description": description]
+    func createTopic(originalText: String) async throws -> Topic {
+        let body = ["original_text": originalText]
         let endpoint = APIEndpoint(path: "/topics",
                                    method: .post,
                                    body: AnyEncodable(body))
-        return try await apiClient.request(endpoint)
+        let backendTopic: BackendTopic = try await apiClient.request(endpoint)
+        return backendTopic.toTopic()
     }
 
     func updateTopic(_ topic: Topic) async throws -> Topic {
         guard let id = topic.id else { throw APIError.invalidURL }
         struct Payload: Encodable {
-            let title: String
-            let description: String
-            let active: Bool
+            let original_text: String
+            let is_active: Bool
         }
-        let body = Payload(title: topic.title, description: topic.description, active: topic.isActive)
+        let body = Payload(original_text: topic.originalText, is_active: topic.isActive)
         let endpoint = APIEndpoint(path: "/topics/\(id.uuidString)",
-                                   method: .put,
+                                   method: .patch,
                                    body: AnyEncodable(body))
-        return try await apiClient.request(endpoint)
+        let backendTopic: BackendTopic = try await apiClient.request(endpoint)
+        return backendTopic.toTopic()
     }
 
     func deleteTopic(id: UUID) async throws {
         let endpoint = APIEndpoint(path: "/topics/\(id.uuidString)", method: .delete)
         try await apiClient.requestVoid(endpoint)
+    }
+}
+
+// MARK: - DTO
+
+private struct BackendTopic: Decodable {
+    let id: String
+    let originalText: String
+    let rewrittenQuery: String?
+    let isActive: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case originalTextCamel = "originalText"
+        case originalTextSnake = "original_text"
+        case rewrittenQuery
+        case rewrittenQuerySnake = "rewritten_query"
+        case isActive
+        case isActiveSnake = "is_active"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        if let camel = try? container.decode(String.self, forKey: .originalTextCamel) {
+            originalText = camel
+        } else {
+            originalText = try container.decode(String.self, forKey: .originalTextSnake)
+        }
+        if let camel = try? container.decode(String.self, forKey: .rewrittenQuery) {
+            rewrittenQuery = camel
+        } else {
+            rewrittenQuery = try container.decodeIfPresent(String.self, forKey: .rewrittenQuerySnake)
+        }
+        if let camel = try? container.decode(Bool.self, forKey: .isActive) {
+            isActive = camel
+        } else {
+            isActive = try container.decode(Bool.self, forKey: .isActiveSnake)
+        }
+    }
+
+    func toTopic() -> Topic {
+        Topic(
+            id: UUID(uuidString: id) ?? UUID(),
+            originalText: originalText,
+            isActive: isActive
+        )
     }
 }

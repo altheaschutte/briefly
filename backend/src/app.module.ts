@@ -9,6 +9,7 @@ import { TtsModule } from './tts/tts.module';
 import { PerplexityModule } from './perplexity/perplexity.module';
 import { StorageModule } from './storage/storage.module';
 import { CommonModule } from './common/common.module';
+import { OnboardingModule } from './onboarding/onboarding.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { CommonModule } from './common/common.module';
     TtsModule,
     PerplexityModule,
     StorageModule,
+    OnboardingModule,
   ],
 })
 export class AppModule {}

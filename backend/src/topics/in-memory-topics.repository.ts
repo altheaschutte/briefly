@@ -34,7 +34,6 @@ export class InMemoryTopicsRepository implements TopicsRepository {
     return this.store.updateTopic(userId, topicId, {
       originalText: updates.originalText,
       isActive: updates.isActive,
-      rewrittenQuery: updates.rewrittenQuery,
     });
   }
 }

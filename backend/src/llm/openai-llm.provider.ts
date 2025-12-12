@@ -8,44 +8,83 @@ import { EpisodeSegment, EpisodeSource } from '../domain/types';
 @Injectable()
 export class OpenAiLlmProvider implements LlmProvider {
   private client: OpenAI | null = null;
-  private readonly rewriteModel: string;
+  private readonly queryModel: string;
   private readonly scriptModel: string;
+  private readonly transcriptExtractionModel: string;
 
   constructor(private readonly configService: ConfigService) {
-    this.rewriteModel = this.configService.get<string>('LLM_PROVIDER_REWRITE_MODEL') ?? 'gpt-4.1';
+    this.queryModel = this.configService.get<string>('LLM_PROVIDER_REWRITE_MODEL') ?? 'gpt-4.1';
     this.scriptModel = this.configService.get<string>('LLM_PROVIDER_SCRIPT_MODEL') ?? 'gpt-4.1';
+    this.transcriptExtractionModel =
+      this.configService.get<string>('LLM_PROVIDER_EXTRACTION_MODEL') ?? this.queryModel;
   }
 
-  async rewriteTopic(topic: string): Promise<string> {
+  async generateTopicQueries(topic: string, previousQueries: string[]): Promise<string[]> {
     const client = this.getClient();
     const isoDate = new Date().toISOString().split('T')[0];
+    const history = (previousQueries || []).map((q) => q.trim()).filter(Boolean).slice(-12);
+    const historyBlock = history.length ? history.map((q, idx) => `${idx + 1}. ${q}`).join('\n') : 'None';
     const messages = [
       {
         role: 'system',
-        content:
-          `You rewrite user topic requests into up-to-date search queries for Perplexity-style retrieval.
-Current date: ${isoDate} (UTC). This feeds a daily episode, so prioritize recency and fresh angles.
-If a previous episode transcript appears in the user message, avoid repeat coverage and steer toward new developments.
-Guidelines:
-- Anchor queries to the current date with explicit timeframes (e.g., past week, ${isoDate}, 2025) when the user is vague.
-- Emphasize current events, breaking changes, and what is new; avoid stale results unless the user asks for history.
-- Add disambiguation (location, entity, domain) to reduce ambiguity while keeping tokens tight.
-- Do not invent facts, dates, or names; keep it factual and concise.
-Return only the rewritten query.`,
+        content: `You craft high-signal web search queries for a news research agent.
+- Suggest between 1 and 5 concise queries per topic; default to 3-5 unless the topic is extremely narrow.
+- Prioritize recency (${isoDate}) and angles that surface new developments, exclusives, or authoritative explainers.
+- Do not repeat, lightly rephrase, or overlap with any previous queries supplied; aim for fresh coverage.
+- Keep each query lean, disambiguated (entities, locations, timeframes), and ready for direct use in a search API.
+Respond as JSON with the shape {"queries": ["query one", "query two"]}.`,
       },
-      { role: 'user', content: topic },
+      {
+        role: 'user',
+        content: `Topic brief: ${topic}
+Previously used queries (avoid repeating): 
+${historyBlock}`,
+      },
     ] satisfies ChatCompletionMessageParam[];
     const response = await client.chat.completions.create({
-      model: this.rewriteModel,
+      model: this.queryModel,
       messages,
-      temperature: 0.3,
-      max_tokens: 128,
+      temperature: 0.35,
+      max_tokens: 220,
+      response_format: { type: 'json_object' },
     });
     const content = response.choices[0]?.message?.content;
     if (!content) {
-      throw new Error('OpenAI returned empty content for topic rewrite');
+      throw new Error('OpenAI returned empty content for topic queries');
     }
-    return content.trim();
+    const queries = this.parseList(content);
+    if (!queries.length) {
+      throw new Error('OpenAI did not return any topic queries');
+    }
+    return queries.slice(0, 5);
+  }
+
+  async extractTopicBriefs(transcript: string): Promise<string[]> {
+    const client = this.getClient();
+    const response = await client.chat.completions.create({
+      model: this.transcriptExtractionModel,
+      temperature: 0.25,
+      max_tokens: 220,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You extract concise topic briefs from a spoken transcript. Return 1-4 distinct, specific topic briefs capturing what the user wants to hear about. Avoid filler, requests to play music, or chit-chat. Respond as JSON with shape {"topics": ["brief 1", "brief 2"]}.',
+        },
+        { role: 'user', content: transcript },
+      ],
+    });
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error('OpenAI returned empty content for transcript topic extraction');
+    }
+
+    const topics = this.parseList(content);
+    if (!topics.length) {
+      throw new Error('OpenAI did not return any topics from transcript extraction');
+    }
+    return topics;
   }
 
   async generateScript(
@@ -165,5 +204,37 @@ Return only the final script as plain text.`,
       return '- None provided';
     }
     return lines.join('\n');
+  }
+
+  private parseList(content: string): string[] {
+    const normalizedContent = content.trim();
+    let topics: string[] = [];
+    try {
+      const parsed = JSON.parse(normalizedContent);
+      if (Array.isArray(parsed)) {
+        topics = parsed;
+      } else if (parsed && Array.isArray((parsed as any).topics)) {
+        topics = (parsed as any).topics;
+      }
+    } catch {
+      // Fallback handled below
+    }
+
+    if (!topics.length) {
+      topics = normalizedContent.split(/\n|,/).map((t) => t.trim()).filter(Boolean);
+    }
+
+    const seen = new Set<string>();
+    return topics
+      .map((topic) => topic.trim())
+      .filter((topic) => topic.length > 2)
+      .filter((topic) => {
+        const key = topic.toLowerCase();
+        if (seen.has(key)) {
+          return false;
+        }
+        seen.add(key);
+        return true;
+      });
   }
 }

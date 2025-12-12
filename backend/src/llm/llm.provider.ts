@@ -7,6 +7,7 @@ export interface ScriptGenerationResult {
 }
 
 export interface LlmProvider {
-  rewriteTopic(topic: string): Promise<string>;
+  generateTopicQueries(topic: string, previousQueries: string[]): Promise<string[]>;
   generateScript(segments: EpisodeSegment[], targetDurationMinutes?: number): Promise<ScriptGenerationResult>;
+  extractTopicBriefs(transcript: string): Promise<string[]>;
 }

@@ -37,10 +37,8 @@ struct GenerateEpisodeView: View {
             Spacer()
         }
         .padding()
-        .onChange(of: didGenerate) { _ in
-            if didGenerate {
-                onDone()
-            }
+        .onChange(of: didGenerate) { _, newValue in
+            if newValue { onDone() }
         }
     }
 

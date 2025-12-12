@@ -22,9 +22,9 @@ final class TopicsViewModel: ObservableObject {
         }
     }
 
-    func addTopic(title: String, description: String) async {
+    func addTopic(text: String) async {
         do {
-            let topic = try await topicService.createTopic(title: title, description: description)
+            let topic = try await topicService.createTopic(originalText: text)
             topics.append(topic)
         } catch {
             errorMessage = error.localizedDescription

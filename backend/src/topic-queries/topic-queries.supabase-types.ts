@@ -1,23 +1,27 @@
-export type TopicRow = {
+export type TopicQueryRow = {
   id: string;
   user_id: string;
-  original_text: string;
-  is_active: boolean;
+  topic_id: string;
+  episode_id: string;
+  query: string;
+  answer?: string | null;
+  citations?: string[] | null;
+  order_index: number;
   created_at: string;
   updated_at: string;
 };
 
-type TopicsTable = {
-  Row: TopicRow;
-  Insert: TopicRow;
-  Update: Partial<TopicRow>;
+type TopicQueriesTable = {
+  Row: TopicQueryRow;
+  Insert: TopicQueryRow;
+  Update: Partial<TopicQueryRow>;
   Relationships: [];
 };
 
 export type SupabaseDatabase = {
   public: {
     Tables: {
-      topics: TopicsTable;
+      topic_queries: TopicQueriesTable;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

@@ -1,32 +1,41 @@
 import Foundation
 import AVFoundation
 
+struct OnboardingCompletion: Equatable {
+    let transcript: String
+    let topics: [String]
+    let createdTopicIds: [UUID]
+}
+
 @MainActor
 final class OnboardingVoiceService: NSObject, ObservableObject {
     @Published var transcript: String = ""
     @Published var isRecording: Bool = false
+    @Published var isUploading: Bool = false
     @Published var errorMessage: String?
+    @Published var completion: OnboardingCompletion?
 
-    private let audioEngine = AVAudioEngine()
-    private let audioSession = AVAudioSession.sharedInstance()
-    private var websocketTask: URLSessionWebSocketTask?
     private let streamURL: URL
-    private let decoder = JSONDecoder()
+    private let tokenProvider: () -> String?
+    private var recorder: AVAudioRecorder?
+    private var uploadTask: URLSessionUploadTask?
+    private var session: URLSession?
+    private var incomingBuffer = Data()
+    private var currentRecordingURL: URL?
 
-    init(streamURL: URL) {
+    init(streamURL: URL, tokenProvider: @escaping () -> String?) {
         self.streamURL = streamURL
+        self.tokenProvider = tokenProvider
     }
 
     func startRecording() async {
+        resetState()
         do {
             try await requestPermission()
             try configureSession()
-            guard connectWebSocket() else {
-                throw NSError(domain: "OnboardingVoiceService", code: 2, userInfo: [NSLocalizedDescriptionKey: "Unable to connect to the voice service."])
-            }
-            try startEngine()
+            let url = try startRecorder()
+            currentRecordingURL = url
             isRecording = true
-            listenForTranscription()
         } catch {
             errorMessage = error.localizedDescription
             stopRecording()
@@ -34,127 +43,195 @@ final class OnboardingVoiceService: NSObject, ObservableObject {
     }
 
     func stopRecording() {
-        if audioEngine.isRunning {
-            audioEngine.stop()
-            audioEngine.inputNode.removeTap(onBus: 0)
-        }
-        websocketTask?.cancel(with: .goingAway, reason: nil)
-        websocketTask = nil
+        guard isRecording else { return }
+        recorder?.stop()
+        recorder = nil
         isRecording = false
+        if let fileURL = currentRecordingURL {
+            uploadRecording(fileURL)
+        }
     }
 
     func clearTranscript() {
         transcript = ""
+        completion = nil
+        errorMessage = nil
     }
+
+    // MARK: - Recording
 
     private func requestPermission() async throws {
         let granted = await withCheckedContinuation { continuation in
-            audioSession.requestRecordPermission { allowed in
+            AVAudioSession.sharedInstance().requestRecordPermission { allowed in
                 continuation.resume(returning: allowed)
             }
         }
-        guard granted else { throw NSError(domain: "OnboardingVoiceService", code: 1, userInfo: [NSLocalizedDescriptionKey: "Microphone access is required."]) }
+        guard granted else {
+            throw NSError(domain: "OnboardingVoiceService", code: 1, userInfo: [NSLocalizedDescriptionKey: "Microphone access is required."])
+        }
     }
 
     private func configureSession() throws {
-        try audioSession.setCategory(.record, mode: .spokenAudio, options: [.duckOthers])
-        try audioSession.setActive(true)
+        let session = AVAudioSession.sharedInstance()
+        try session.setCategory(.record, mode: .spokenAudio, options: [.duckOthers])
+        try session.setActive(true)
     }
 
-    private func connectWebSocket() -> Bool {
-        guard let wsURL = webSocketURL(from: streamURL) else {
-            errorMessage = "Invalid WebSocket URL"
-            return false
+    private func startRecorder() throws -> URL {
+        let filename = "onboarding-\(UUID().uuidString).m4a"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatMPEG4AAC,
+            AVSampleRateKey: 44_100,
+            AVNumberOfChannelsKey: 1,
+            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
+        ]
+        recorder = try AVAudioRecorder(url: url, settings: settings)
+        recorder?.prepareToRecord()
+        recorder?.record()
+        return url
+    }
+
+    // MARK: - Upload + SSE
+
+    private func uploadRecording(_ fileURL: URL) {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            errorMessage = "No recording found to upload."
+            return
         }
-        let task = URLSession(configuration: .default).webSocketTask(with: wsURL)
-        websocketTask = task
-        task.resume()
-        return true
+        var request = URLRequest(url: streamURL)
+        request.httpMethod = "POST"
+        request.setValue("audio/m4a", forHTTPHeaderField: "Content-Type")
+        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        if let token = tokenProvider() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = 300
+        configuration.timeoutIntervalForResource = 300
+        let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+        self.session = session
+
+        isUploading = true
+        incomingBuffer = Data()
+        uploadTask = session.uploadTask(with: request, fromFile: fileURL)
+        uploadTask?.resume()
     }
 
-    private func startEngine() throws {
-        let input = audioEngine.inputNode
-        let format = input.outputFormat(forBus: 0)
+    private func resetState() {
+        transcript = ""
+        completion = nil
+        errorMessage = nil
+        isRecording = false
+        isUploading = false
+        incomingBuffer = Data()
+        currentRecordingURL = nil
+        uploadTask?.cancel()
+        uploadTask = nil
+        session?.invalidateAndCancel()
+        session = nil
+    }
+}
 
-        input.installTap(onBus: 0, bufferSize: 2048, format: format) { [weak self] buffer, _ in
-            guard let self else { return }
-            if let data = self.pcmData(from: buffer) {
-                let message = URLSessionWebSocketTask.Message.data(data)
-                self.websocketTask?.send(message) { error in
-                    if let error {
-                        DispatchQueue.main.async {
-                            self.errorMessage = error.localizedDescription
-                            self.stopRecording()
-                        }
-                    }
-                }
+// MARK: - URLSessionDataDelegate
+
+extension OnboardingVoiceService: URLSessionDataDelegate {
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        incomingBuffer.append(data)
+        processBuffer()
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        isUploading = false
+        if let error {
+            errorMessage = error.localizedDescription
+        }
+        if let url = currentRecordingURL {
+            try? FileManager.default.removeItem(at: url)
+        }
+        currentRecordingURL = nil
+    }
+
+    private func processBuffer() {
+        let separator = Data("\n\n".utf8)
+        while let range = incomingBuffer.range(of: separator) {
+            let chunk = incomingBuffer.subdata(in: 0..<range.lowerBound)
+            incomingBuffer.removeSubrange(0..<range.upperBound)
+            handleEventChunk(chunk)
+        }
+    }
+
+    private func handleEventChunk(_ data: Data) {
+        guard let text = String(data: data, encoding: .utf8) else { return }
+        var eventName: String = "message"
+        var dataLines: [String] = []
+
+        text.split(separator: "\n").forEach { line in
+            if line.hasPrefix("event:") {
+                eventName = line.replacingOccurrences(of: "event:", with: "").trimmingCharacters(in: .whitespaces)
+            } else if line.hasPrefix("data:") {
+                dataLines.append(line.replacingOccurrences(of: "data:", with: "").trimmingCharacters(in: .whitespaces))
             }
         }
 
-        audioEngine.prepare()
-        try audioEngine.start()
-    }
-
-    private func listenForTranscription() {
-        websocketTask?.receive { [weak self] result in
-            guard let self else { return }
-            switch result {
-            case .success(let message):
-                switch message {
-                case .string(let string):
-                    Task { @MainActor in
-                        self.transcript = string
-                    }
-                case .data(let data):
-                    if let text = self.decodeTranscript(from: data) {
-                        Task { @MainActor in self.transcript = text }
-                    }
-                @unknown default:
-                    break
-                }
-                self.listenForTranscription()
-            case .failure(let error):
-                Task { @MainActor in
-                    self.errorMessage = error.localizedDescription
-                    self.stopRecording()
-                }
+        let payload = dataLines.joined(separator: "\n")
+        switch eventName {
+        case "transcript":
+            if let data = payload.data(using: .utf8),
+               let message = try? JSONDecoder().decode(TranscriptMessage.self, from: data) {
+                transcript = message.transcript
+            } else if payload.isEmpty == false {
+                transcript = payload
             }
-        }
-    }
-
-    private func pcmData(from buffer: AVAudioPCMBuffer) -> Data? {
-        guard let channelData = buffer.floatChannelData?[0] else { return nil }
-        let frameLength = Int(buffer.frameLength)
-        let bytes = UnsafeBufferPointer(start: channelData, count: frameLength)
-        return Data(buffer: bytes)
-    }
-
-    private func decodeTranscript(from data: Data) -> String? {
-        if let text = String(data: data, encoding: .utf8) {
-            return text
-        }
-        struct TranscriptMessage: Decodable { let transcript: String }
-        if let message = try? decoder.decode(TranscriptMessage.self, from: data) {
-            return message.transcript
-        }
-        return nil
-    }
-
-    // WebSocket tasks must use ws/wss; convert from http/https if needed.
-    private func webSocketURL(from url: URL) -> URL? {
-        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
-            return nil
-        }
-        switch components.scheme?.lowercased() {
-        case "http":
-            components.scheme = "ws"
-        case "https":
-            components.scheme = "wss"
-        case "ws", "wss":
+        case "session":
             break
+        case "completed":
+            handleCompletion(payload: payload)
+        case "error":
+            errorMessage = payload.isEmpty ? "Transcription failed." : payload
         default:
-            return nil
+            if payload.isEmpty == false {
+                transcript = payload
+            }
         }
-        return components.url
+    }
+
+    private func handleCompletion(payload: String) {
+        guard let data = payload.data(using: .utf8),
+              let message = try? JSONDecoder().decode(CompletionMessage.self, from: data) else {
+            return
+        }
+        isUploading = false
+        transcript = message.transcript
+        let ids = message.createdTopicIds.compactMap { UUID(uuidString: $0) }
+        let result = OnboardingCompletion(transcript: message.transcript, topics: message.topics, createdTopicIds: ids)
+        completion = result
+    }
+}
+
+// MARK: - DTOs
+
+private struct TranscriptMessage: Decodable {
+    let sessionId: String?
+    let transcript: String
+
+    enum CodingKeys: String, CodingKey {
+        case sessionId = "session_id"
+        case transcript
+    }
+}
+
+private struct CompletionMessage: Decodable {
+    let sessionId: String?
+    let transcript: String
+    let topics: [String]
+    let createdTopicIds: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case sessionId = "session_id"
+        case transcript
+        case topics
+        case createdTopicIds = "created_topic_ids"
     }
 }

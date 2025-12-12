@@ -14,6 +14,7 @@ final class OnboardingViewModel: ObservableObject {
     @Published var transcript: String = ""
     @Published var isRecording: Bool = false
     @Published var isSubmitting: Bool = false
+    @Published var isProcessingAudio: Bool = false
     @Published var isPollingTopics: Bool = false
     @Published var topics: [Topic] = []
     @Published var errorMessage: String?
@@ -38,7 +39,6 @@ final class OnboardingViewModel: ObservableObject {
 
     func stopVoiceCapture() {
         voiceService.stopRecording()
-        isRecording = false
     }
 
     func clearTranscript() {
@@ -51,12 +51,19 @@ final class OnboardingViewModel: ObservableObject {
             errorMessage = "Please capture or enter what you want to hear about."
             return
         }
+        if isProcessingAudio {
+            errorMessage = "Finishing your transcription, please wait…"
+            return
+        }
         isSubmitting = true
         errorMessage = nil
         do {
-            try await topicService.submitTranscript(transcript)
-            currentStep = .review
+            if voiceService.completion == nil {
+                // Manual entry path: create a topic directly
+                _ = try await topicService.createTopic(originalText: transcript)
+            }
             await fetchTopicsWithPolling()
+            currentStep = .review
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -71,18 +78,10 @@ final class OnboardingViewModel: ObservableObject {
     func fetchTopicsWithPolling() async {
         isPollingTopics = true
         defer { isPollingTopics = false }
-        for _ in 0..<6 {
-            do {
-                let suggestions = try await topicService.fetchSuggestedTopics()
-                if suggestions.isEmpty == false {
-                    topics = suggestions
-                    return
-                }
-            } catch {
-                errorMessage = error.localizedDescription
-                return
-            }
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
+        do {
+            topics = try await topicService.fetchTopics()
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -106,9 +105,9 @@ final class OnboardingViewModel: ObservableObject {
         }
     }
 
-    func addTopic(title: String, description: String) async {
+    func addTopic(text: String) async {
         do {
-            let topic = try await topicService.createTopic(title: title, description: description)
+            let topic = try await topicService.createTopic(originalText: text)
             topics.append(topic)
         } catch {
             errorMessage = error.localizedDescription
@@ -133,10 +132,22 @@ final class OnboardingViewModel: ObservableObject {
             .receive(on: RunLoop.main)
             .assign(to: &$isRecording)
 
+        voiceService.$isUploading
+            .receive(on: RunLoop.main)
+            .assign(to: &$isProcessingAudio)
+
         voiceService.$errorMessage
             .receive(on: RunLoop.main)
             .sink { [weak self] message in
                 self?.errorMessage = message
+            }
+            .store(in: &cancellables)
+
+        voiceService.$completion
+            .compactMap { $0 }
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                Task { await self?.fetchTopicsWithPolling() }
             }
             .store(in: &cancellables)
     }

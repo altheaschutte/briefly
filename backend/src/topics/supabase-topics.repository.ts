@@ -74,7 +74,6 @@ export class SupabaseTopicsRepository implements TopicsRepository {
       id: uuid(),
       user_id: userId,
       original_text: originalText,
-      rewritten_query: null,
       is_active: true,
       created_at: now,
       updated_at: now,
@@ -106,9 +105,6 @@ export class SupabaseTopicsRepository implements TopicsRepository {
     if (updates.isActive !== undefined) {
       payload.is_active = updates.isActive;
     }
-    if (updates.rewrittenQuery !== undefined) {
-      payload.rewritten_query = updates.rewrittenQuery ?? null;
-    }
 
     const { data, error } = await this.client
       .from('topics')
@@ -138,7 +134,6 @@ export class SupabaseTopicsRepository implements TopicsRepository {
       id: row.id,
       userId: row.user_id,
       originalText: row.original_text,
-      rewrittenQuery: row.rewritten_query ?? undefined,
       isActive: row.is_active,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),

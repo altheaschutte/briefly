@@ -2,8 +2,33 @@ export interface Topic {
   id: string;
   userId: string;
   originalText: string;
-  rewrittenQuery?: string;
   isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface TopicQuery {
+  id: string;
+  userId: string;
+  topicId: string;
+  episodeId: string;
+  query: string;
+  answer: string;
+  citations: string[];
+  orderIndex: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type OnboardingTranscriptStatus = 'in_progress' | 'completed' | 'failed';
+
+export interface OnboardingTranscript {
+  id: string;
+  userId: string;
+  transcript: string;
+  status: OnboardingTranscriptStatus;
+  extractedTopics?: string[];
+  errorMessage?: string;
   createdAt: Date;
   updatedAt: Date;
 }

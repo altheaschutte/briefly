@@ -19,6 +19,7 @@ import { EpisodeSourcesService } from './episode-sources.service';
 import { EPISODE_SOURCES_REPOSITORY } from './episode-sources.repository';
 import { InMemoryEpisodeSourcesRepository } from './in-memory-episode-sources.repository';
 import { SupabaseEpisodeSourcesRepository } from './supabase-episode-sources.repository';
+import { TopicQueriesModule } from '../topic-queries/topic-queries.module';
 
 const episodesRepositoryProvider: Provider = {
   provide: EPISODES_REPOSITORY,
@@ -59,7 +60,16 @@ const episodeSourcesRepositoryProvider: Provider = {
 };
 
 @Module({
-  imports: [ConfigModule, QueueModule, TopicsModule, LlmModule, PerplexityModule, TtsModule, StorageModule],
+  imports: [
+    ConfigModule,
+    QueueModule,
+    TopicsModule,
+    TopicQueriesModule,
+    LlmModule,
+    PerplexityModule,
+    TtsModule,
+    StorageModule,
+  ],
   controllers: [EpisodesController],
   providers: [
     EpisodesService,

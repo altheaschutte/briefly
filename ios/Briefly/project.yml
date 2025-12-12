@@ -20,7 +20,7 @@ targets:
       path: Briefly/Resources/Info.plist
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.briefly.app
-      TARGETED_DEVICE_FAMILY: 1
+      TARGETED_DEVICE_FAMILY: "1,2"
       SUPPORTS_MACCATALYST: NO
       CODE_SIGN_STYLE: Automatic
       DEVELOPMENT_TEAM: ""

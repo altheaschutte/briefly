@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Episode, EpisodeSegment, EpisodeSource, Topic } from '../domain/types';
+import { Episode, EpisodeSegment, EpisodeSource, OnboardingTranscript, Topic, TopicQuery } from '../domain/types';
 
 @Injectable()
 export class InMemoryStoreService {
@@ -7,6 +7,9 @@ export class InMemoryStoreService {
   private readonly episodesByUser: Map<string, Episode[]> = new Map();
   private readonly segmentsByEpisode: Map<string, EpisodeSegment[]> = new Map();
   private readonly sourcesByEpisode: Map<string, EpisodeSource[]> = new Map();
+  private readonly onboardingByUser: Map<string, OnboardingTranscript[]> = new Map();
+  private readonly topicQueriesByTopic: Map<string, TopicQuery[]> = new Map();
+  private readonly topicQueriesByEpisode: Map<string, TopicQuery[]> = new Map();
 
   getTopics(userId: string): Topic[] {
     return this.topicsByUser.get(userId) ?? [];
@@ -75,5 +78,75 @@ export class InMemoryStoreService {
 
   getSources(episodeId: string): EpisodeSource[] {
     return this.sourcesByEpisode.get(episodeId) ?? [];
+  }
+
+  getTopicQueries(topicId: string): TopicQuery[] {
+    return this.topicQueriesByTopic.get(topicId) ?? [];
+  }
+
+  getTopicQueriesForEpisode(episodeId: string): TopicQuery[] {
+    return this.topicQueriesByEpisode.get(episodeId) ?? [];
+  }
+
+  saveTopicQueries(queries: TopicQuery[]): TopicQuery[] {
+    for (const query of queries) {
+      const topicList = this.topicQueriesByTopic.get(query.topicId) ?? [];
+      const topicIdx = topicList.findIndex((q) => q.id === query.id);
+      if (topicIdx >= 0) {
+        topicList[topicIdx] = query;
+      } else {
+        topicList.push(query);
+      }
+      this.topicQueriesByTopic.set(query.topicId, topicList);
+
+      const episodeList = this.topicQueriesByEpisode.get(query.episodeId) ?? [];
+      const episodeIdx = episodeList.findIndex((q) => q.id === query.id);
+      if (episodeIdx >= 0) {
+        episodeList[episodeIdx] = query;
+      } else {
+        episodeList.push(query);
+      }
+      this.topicQueriesByEpisode.set(query.episodeId, episodeList);
+    }
+    return queries;
+  }
+
+  getOnboardingTranscripts(userId: string): OnboardingTranscript[] {
+    return this.onboardingByUser.get(userId) ?? [];
+  }
+
+  getOnboardingTranscript(userId: string, recordId: string): OnboardingTranscript | undefined {
+    return this.getOnboardingTranscripts(userId).find((t) => t.id === recordId);
+  }
+
+  saveOnboardingTranscript(record: OnboardingTranscript): OnboardingTranscript {
+    const list = this.onboardingByUser.get(record.userId) ?? [];
+    const idx = list.findIndex((t) => t.id === record.id);
+    if (idx >= 0) {
+      list[idx] = record;
+    } else {
+      list.push(record);
+    }
+    this.onboardingByUser.set(record.userId, list);
+    return record;
+  }
+
+  updateOnboardingTranscript(
+    userId: string,
+    recordId: string,
+    updates: Partial<OnboardingTranscript>,
+  ): OnboardingTranscript | undefined {
+    const list = this.onboardingByUser.get(userId);
+    if (!list) {
+      return undefined;
+    }
+    const idx = list.findIndex((t) => t.id === recordId);
+    if (idx === -1) {
+      return undefined;
+    }
+    const updated: OnboardingTranscript = { ...list[idx], ...updates, updatedAt: new Date() };
+    list[idx] = updated;
+    this.onboardingByUser.set(userId, list);
+    return updated;
   }
 }

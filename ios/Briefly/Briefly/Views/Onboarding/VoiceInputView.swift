@@ -24,6 +24,7 @@ struct VoiceInputView: View {
                         .foregroundColor(.white)
                 }
             }
+            .disabled(viewModel.isProcessingAudio)
             Text(viewModel.isRecording ? "Listening…" : "Tap and tell me what you want to hear about.")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
@@ -32,6 +33,15 @@ struct VoiceInputView: View {
                 .multilineTextAlignment(.center)
                 .foregroundColor(.secondary)
                 .padding(.horizontal)
+
+            if viewModel.isProcessingAudio {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Processing your audio…")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                }
+            }
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 8) {
@@ -73,7 +83,7 @@ struct VoiceInputView: View {
                     }
                 }
             }) {
-                if viewModel.isSubmitting {
+                if viewModel.isSubmitting || viewModel.isProcessingAudio {
                     ProgressView()
                         .frame(maxWidth: .infinity)
                         .padding()
@@ -87,6 +97,7 @@ struct VoiceInputView: View {
             .foregroundColor(.white)
             .cornerRadius(12)
             .padding(.bottom)
+            .disabled(viewModel.isSubmitting || viewModel.isProcessingAudio)
 
             Spacer()
         }

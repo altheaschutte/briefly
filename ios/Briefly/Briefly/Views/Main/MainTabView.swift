@@ -1,49 +1,48 @@
 import SwiftUI
 
 struct MainTabView: View {
-    @StateObject private var homeViewModel: HomeViewModel
-    @StateObject private var episodesViewModel: EpisodesViewModel
+    private enum Tab {
+        case feed, setup, settings
+    }
+
+    @StateObject private var feedViewModel: EpisodesViewModel
     @StateObject private var topicsViewModel: TopicsViewModel
     @StateObject private var settingsViewModel: SettingsViewModel
+    @State private var selection: Tab
     private let appViewModel: AppViewModel
 
     init(appViewModel: AppViewModel) {
         self.appViewModel = appViewModel
-        _homeViewModel = StateObject(wrappedValue: HomeViewModel(episodeService: appViewModel.episodeService,
-                                                                 audioManager: appViewModel.audioPlayer))
-        _episodesViewModel = StateObject(wrappedValue: EpisodesViewModel(episodeService: appViewModel.episodeService))
+        _feedViewModel = StateObject(wrappedValue: EpisodesViewModel(episodeService: appViewModel.episodeService))
         _topicsViewModel = StateObject(wrappedValue: TopicsViewModel(topicService: appViewModel.topicService))
-        _settingsViewModel = StateObject(wrappedValue: SettingsViewModel(appViewModel: appViewModel))
+        _settingsViewModel = StateObject(wrappedValue: SettingsViewModel(appViewModel: appViewModel,
+                                                                         audioManager: appViewModel.audioPlayer))
+        _selection = State(initialValue: appViewModel.hasCompletedOnboarding ? .feed : .setup)
     }
 
     var body: some View {
-        TabView {
+        TabView(selection: $selection) {
             NavigationStack {
-                HomeView(viewModel: homeViewModel)
+                FeedView(viewModel: feedViewModel)
             }
-            .tabItem {
-                Label("Home", systemImage: "house.fill")
-            }
+            .tabItem { Label("Your Feed", systemImage: "play.square.stack") }
+            .tag(Tab.feed)
 
             NavigationStack {
-                EpisodesView(viewModel: episodesViewModel)
+                SetupView(topicsViewModel: topicsViewModel, appViewModel: appViewModel)
             }
-            .tabItem {
-                Label("Episodes", systemImage: "list.bullet.rectangle")
-            }
-
-            NavigationStack {
-                TopicsView(viewModel: topicsViewModel)
-            }
-            .tabItem {
-                Label("Topics", systemImage: "text.bubble")
-            }
+            .tabItem { Label("Setup", systemImage: "mic.circle") }
+            .tag(Tab.setup)
 
             NavigationStack {
                 SettingsView(viewModel: settingsViewModel, email: appViewModel.currentUserEmail)
             }
-            .tabItem {
-                Label("Settings", systemImage: "gear")
+            .tabItem { Label("Settings", systemImage: "gear") }
+            .tag(Tab.settings)
+        }
+        .onChange(of: appViewModel.hasCompletedOnboarding) { completed in
+            if completed {
+                selection = .feed
             }
         }
     }

@@ -20,10 +20,8 @@ struct AppRootView: View {
         Group {
             if appViewModel.isAuthenticated == false {
                 AuthFlowView(appViewModel: appViewModel)
-            } else if appViewModel.hasCompletedOnboarding {
-                MainTabView(appViewModel: appViewModel)
             } else {
-                OnboardingFlowView(appViewModel: appViewModel)
+                MainTabView(appViewModel: appViewModel)
             }
         }
         .onAppear {
