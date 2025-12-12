@@ -15,6 +15,10 @@ import { ConfigService } from '@nestjs/config';
 import { InMemoryStoreService } from '../common/in-memory-store.service';
 import { InMemoryEpisodesRepository } from './in-memory-episodes.repository';
 import { SupabaseEpisodesRepository } from './supabase-episodes.repository';
+import { EpisodeSourcesService } from './episode-sources.service';
+import { EPISODE_SOURCES_REPOSITORY } from './episode-sources.repository';
+import { InMemoryEpisodeSourcesRepository } from './in-memory-episode-sources.repository';
+import { SupabaseEpisodeSourcesRepository } from './supabase-episode-sources.repository';
 
 const episodesRepositoryProvider: Provider = {
   provide: EPISODES_REPOSITORY,
@@ -35,10 +39,35 @@ const episodesRepositoryProvider: Provider = {
   },
 };
 
+const episodeSourcesRepositoryProvider: Provider = {
+  provide: EPISODE_SOURCES_REPOSITORY,
+  inject: [ConfigService, InMemoryStoreService],
+  useFactory: (configService: ConfigService, store: InMemoryStoreService) => {
+    const supabaseUrl = configService.get<string>('SUPABASE_PROJECT_URL');
+    const supabaseKey = configService.get<string>('SUPABASE_SERVICE_ROLE_KEY');
+    const storagePref = (configService.get<string>('EPISODES_STORAGE') || 'auto').toLowerCase();
+    const canUseSupabase = Boolean(supabaseUrl && supabaseKey);
+
+    if (storagePref === 'memory' || (!canUseSupabase && storagePref === 'auto')) {
+      return new InMemoryEpisodeSourcesRepository(store);
+    }
+    if (!canUseSupabase) {
+      throw new Error('EPISODES_STORAGE is set to supabase but Supabase env vars are missing');
+    }
+    return new SupabaseEpisodeSourcesRepository(configService);
+  },
+};
+
 @Module({
   imports: [ConfigModule, QueueModule, TopicsModule, LlmModule, PerplexityModule, TtsModule, StorageModule],
   controllers: [EpisodesController],
-  providers: [EpisodesService, EpisodeProcessorService, episodesRepositoryProvider],
-  exports: [EpisodesService, EpisodeProcessorService],
+  providers: [
+    EpisodesService,
+    EpisodeProcessorService,
+    EpisodeSourcesService,
+    episodesRepositoryProvider,
+    episodeSourcesRepositoryProvider,
+  ],
+  exports: [EpisodesService, EpisodeProcessorService, EpisodeSourcesService],
 })
 export class EpisodesModule {}

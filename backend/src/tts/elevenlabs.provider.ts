@@ -19,8 +19,8 @@ export class ElevenLabsProvider implements TtsProvider {
     this.baseUrl = this.configService.get<string>('ELEVENLABS_BASE_URL') ?? 'https://api.elevenlabs.io';
     this.hostVoiceId = this.configService.get<string>('ELEVENLABS_HOST_VOICE_ID') ?? 'abRFZIdN4pvo8ZPmGxHP';
     this.guestVoiceId = this.configService.get<string>('ELEVENLABS_GUEST_VOICE_ID') ?? '5GZaeOOG7yqLdoTRsaa6';
-    // Default to expressive Eleven v3 (alpha) model
-    this.modelId = this.configService.get<string>('ELEVENLABS_MODEL_ID') ?? 'eleven_v3';
+    // Default to Eleven Multilingual v2 per requested tuning
+    this.modelId = this.configService.get<string>('ELEVENLABS_MODEL_ID') ?? 'eleven_multilingual_v2';
   }
 
   async synthesize(
@@ -36,8 +36,11 @@ export class ElevenLabsProvider implements TtsProvider {
         model_id: this.modelId,
         text: script,
         voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.5,
+          stability: 0.53,
+          similarity_boost: 0.54,
+          style: 0.22,
+          use_speaker_boost: true,
+          speed: 0.99,
         },
       },
       {
@@ -52,7 +55,7 @@ export class ElevenLabsProvider implements TtsProvider {
 
     const key = `audio/${uuid()}.mp3`;
     const upload = await this.storageService.uploadAudio(Buffer.from(response.data), key);
-    return { audioUrl: upload.key, storageKey: upload.key };
+    return { audioUrl: upload.url, storageKey: upload.key };
   }
 
   private getApiKey(): string {

@@ -8,6 +8,7 @@ import { PerplexityService } from '../perplexity/perplexity.service';
 import { TtsService } from '../tts/tts.service';
 import { Episode, EpisodeSegment, EpisodeSource } from '../domain/types';
 import { InMemoryStoreService } from '../common/in-memory-store.service';
+import { EpisodeSourcesService } from './episode-sources.service';
 
 @Injectable()
 export class EpisodeProcessorService {
@@ -19,6 +20,7 @@ export class EpisodeProcessorService {
     private readonly llmService: LlmService,
     private readonly perplexityService: PerplexityService,
     private readonly ttsService: TtsService,
+    private readonly episodeSourcesService: EpisodeSourcesService,
     private readonly store: InMemoryStoreService,
   ) {}
 
@@ -53,40 +55,35 @@ export class EpisodeProcessorService {
           continue;
         }
         const perplexityResult = await this.perplexityService.search(topic.rewrittenQuery);
+        const segmentSources = this.buildEpisodeSources(perplexityResult.citations, episodeId);
         segments.push({
           id: uuid(),
           episodeId,
           orderIndex: index,
           title: topic.originalText,
           rawContent: perplexityResult.answer,
-          rawSources: perplexityResult.citations,
+          rawSources: segmentSources,
         });
-        perplexityResult.citations.forEach((citation) => {
-          sources.push({
-            id: uuid(),
-            episodeId,
-            sourceTitle: citation,
-            url: citation,
-          });
-        });
+        sources.push(...segmentSources);
       }
 
       this.store.setSegments(episodeId, segments);
-      this.store.setSources(episodeId, sources);
+      await this.episodeSourcesService.replaceSources(episodeId, sources);
 
       await this.markEpisodeStatus(userId, episodeId, 'generating_script');
-      const { script, prompt } = await this.llmService.generateScript(segments, targetDuration);
+      const { script, prompt, showNotes } = await this.llmService.generateScript(segments, targetDuration);
 
       await this.markEpisodeStatus(userId, episodeId, 'generating_audio');
       const voiceA = process.env.TTS_VOICE_A || 'abRFZIdN4pvo8ZPmGxHP';
       const voiceB = process.env.TTS_VOICE_B || '5GZaeOOG7yqLdoTRsaa6';
       const ttsResult = await this.ttsService.synthesize(script, { voiceA, voiceB });
-      const audioKey = ttsResult.storageKey ?? ttsResult.audioUrl;
+      const audioUrl = ttsResult.audioUrl ?? ttsResult.storageKey;
 
       await this.markEpisodeStatus(userId, episodeId, 'ready', {
         transcript: script,
         scriptPrompt: prompt,
-        audioUrl: audioKey,
+        showNotes,
+        audioUrl: audioUrl,
       });
     } catch (error: any) {
       const axiosData = error?.response?.data ? ` | data=${JSON.stringify(error.response.data)}` : '';
@@ -103,5 +100,31 @@ export class EpisodeProcessorService {
     extra?: Partial<Episode>,
   ) {
     await this.episodesService.updateEpisode(userId, episodeId, { status, ...extra });
+  }
+
+  private buildEpisodeSources(citations: string[], episodeId: string): EpisodeSource[] {
+    const seen = new Set<string>();
+    const results: EpisodeSource[] = [];
+
+    for (const raw of citations || []) {
+      const citation = (raw || '').trim();
+      if (!citation) {
+        continue;
+      }
+      const normalized = citation.toLowerCase();
+      if (seen.has(normalized)) {
+        continue;
+      }
+      seen.add(normalized);
+      results.push({
+        id: uuid(),
+        episodeId,
+        sourceTitle: citation,
+        url: citation,
+        type: 'perplexity_citation',
+      });
+    }
+
+    return results;
   }
 }

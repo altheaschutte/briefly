@@ -25,6 +25,7 @@ export interface Episode {
   audioUrl?: string;
   transcript?: string;
   scriptPrompt?: string;
+  showNotes?: string;
   errorMessage?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -36,7 +37,7 @@ export interface EpisodeSegment {
   orderIndex: number;
   title?: string;
   rawContent: string;
-  rawSources: any;
+  rawSources: EpisodeSource[];
 }
 
 export interface EpisodeSource {

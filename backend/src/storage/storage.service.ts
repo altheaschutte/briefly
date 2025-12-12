@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl as getS3SignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -8,6 +8,7 @@ import path from 'path';
 
 @Injectable()
 export class StorageService {
+  private readonly logger = new Logger(StorageService.name);
   private bucket?: string;
   private region?: string;
   private client?: S3Client;
@@ -17,14 +18,11 @@ export class StorageService {
     this.driver = (this.configService.get<string>('STORAGE_DRIVER') || 's3').toLowerCase() === 'local' ? 'local' : 's3';
   }
 
-  async uploadAudio(buffer: Buffer, key?: string): Promise<{ key: string; url: string }> {
+  async uploadAudio(buffer: Buffer, key?: string): Promise<{ key: string; url: string; localPath?: string }> {
     if (this.driver === 'local') {
       const objectKey = key ?? `audio/${uuid()}.mp3`;
-      const baseDir = path.resolve(process.cwd(), 'tmp');
-      const fullPath = path.join(baseDir, objectKey);
-      await fs.mkdir(path.dirname(fullPath), { recursive: true });
-      await fs.writeFile(fullPath, buffer);
-      return { key: fullPath, url: `file://${fullPath}` };
+      const fullPath = await this.saveLocalCopy(objectKey, buffer);
+      return { key: fullPath, url: `file://${fullPath}`, localPath: fullPath };
     }
 
     const { bucket, client } = this.getClient();
@@ -37,7 +35,15 @@ export class StorageService {
         ContentType: 'audio/mpeg',
       }),
     );
-    return { key: objectKey, url: this.getPublicUrl(objectKey) };
+    let localPath: string | undefined;
+    if (this.shouldMirrorToLocal()) {
+      try {
+        localPath = await this.saveLocalCopy(objectKey, buffer);
+      } catch (error) {
+        this.logger.warn(`Failed to save local audio copy for ${objectKey}: ${error instanceof Error ? error.message : error}`);
+      }
+    }
+    return { key: objectKey, url: this.getPublicUrl(objectKey), localPath };
   }
 
   async getSignedUrl(key: string, expiresInSeconds = 60 * 60 * 6): Promise<string> {
@@ -47,7 +53,7 @@ export class StorageService {
     const { bucket, client } = this.getClient();
     const command = new GetObjectCommand({
       Bucket: bucket,
-      Key: key,
+      Key: this.normalizeKey(key),
     });
     return getS3SignedUrl(client, command, { expiresIn: expiresInSeconds });
   }
@@ -58,6 +64,34 @@ export class StorageService {
     }
     const { bucket, region } = this.requireConfigBundle();
     return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
+  }
+
+  private shouldMirrorToLocal(): boolean {
+    const flag = this.configService.get<string>('SAVE_LOCAL_AUDIO_COPY');
+    if (flag !== undefined) {
+      return flag.toLowerCase() === 'true';
+    }
+    return process.env.NODE_ENV !== 'production';
+  }
+
+  private normalizeKey(keyOrUrl: string): string {
+    if (!/^https?:\/\//i.test(keyOrUrl)) {
+      return keyOrUrl.replace(/^file:\/\//, '').replace(/^\/+/, '');
+    }
+    try {
+      const url = new URL(keyOrUrl);
+      return url.pathname.replace(/^\/+/, '');
+    } catch {
+      return keyOrUrl;
+    }
+  }
+
+  private async saveLocalCopy(objectKey: string, buffer: Buffer): Promise<string> {
+    const baseDir = path.resolve(process.cwd(), 'tmp');
+    const fullPath = path.join(baseDir, objectKey);
+    await fs.mkdir(path.dirname(fullPath), { recursive: true });
+    await fs.writeFile(fullPath, buffer);
+    return fullPath;
   }
 
   private getClient(): { bucket: string; region: string; client: S3Client } {

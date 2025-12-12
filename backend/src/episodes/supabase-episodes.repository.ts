@@ -39,6 +39,7 @@ export class SupabaseEpisodesRepository implements EpisodesRepository {
       audio_url: null,
       transcript: null,
       script_prompt: null,
+      show_notes: null,
       error_message: null,
       created_at: now,
       updated_at: now,
@@ -98,6 +99,7 @@ export class SupabaseEpisodesRepository implements EpisodesRepository {
     if (updates.audioUrl !== undefined) payload.audio_url = updates.audioUrl ?? null;
     if (updates.transcript !== undefined) payload.transcript = updates.transcript ?? null;
     if (updates.scriptPrompt !== undefined) payload.script_prompt = updates.scriptPrompt ?? null;
+    if (updates.showNotes !== undefined) payload.show_notes = updates.showNotes ?? null;
     if (updates.errorMessage !== undefined) payload.error_message = updates.errorMessage ?? null;
     if (updates.targetDurationMinutes !== undefined)
       payload.target_duration_minutes = updates.targetDurationMinutes;
@@ -129,6 +131,7 @@ export class SupabaseEpisodesRepository implements EpisodesRepository {
       audioUrl: row.audio_url ?? undefined,
       transcript: row.transcript ?? undefined,
       scriptPrompt: row.script_prompt ?? undefined,
+      showNotes: row.show_notes ?? undefined,
       errorMessage: row.error_message ?? undefined,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),

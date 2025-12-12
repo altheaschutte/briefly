@@ -43,6 +43,7 @@ export class EpisodesService {
       audioUrl: updates.audioUrl ?? existing.audioUrl,
       transcript: updates.transcript ?? existing.transcript,
       scriptPrompt: updates.scriptPrompt ?? existing.scriptPrompt,
+      showNotes: updates.showNotes ?? existing.showNotes,
       errorMessage: updates.errorMessage ?? existing.errorMessage,
     });
     if (!updated) {

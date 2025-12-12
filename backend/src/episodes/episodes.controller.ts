@@ -4,12 +4,14 @@ import { Queue } from 'bullmq';
 import { EpisodesService } from './episodes.service';
 import { EPISODES_QUEUE_TOKEN } from '../queue/queue.constants';
 import { StorageService } from '../storage/storage.service';
+import { EpisodeSourcesService } from './episode-sources.service';
 
 @Controller('episodes')
 export class EpisodesController {
   constructor(
     private readonly episodesService: EpisodesService,
     private readonly storageService: StorageService,
+    private readonly episodeSourcesService: EpisodeSourcesService,
     @Inject(EPISODES_QUEUE_TOKEN) private readonly episodesQueue: Queue,
   ) {}
 
@@ -31,6 +33,13 @@ export class EpisodesController {
   async getEpisode(@Req() req: Request, @Param('id') id: string) {
     const userId = (req as any).user?.id as string;
     return this.episodesService.getEpisode(userId, id);
+  }
+
+  @Get(':id/sources')
+  async getEpisodeSources(@Req() req: Request, @Param('id') id: string) {
+    const userId = (req as any).user?.id as string;
+    await this.episodesService.getEpisode(userId, id);
+    return this.episodeSourcesService.listSources(id);
   }
 
   @Get(':id/audio')
