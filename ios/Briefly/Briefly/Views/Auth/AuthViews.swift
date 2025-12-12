@@ -20,7 +20,7 @@ struct AuthFlowView: View {
         NavigationStack {
             VStack(spacing: 16) {
                 Picker("", selection: $mode) {
-                    ForEach([AuthMode.login, .signup, .forgot]) { mode in
+                    ForEach([AuthMode.login, .signup]) { mode in
                         Text(mode.rawValue).tag(mode)
                     }
                 }
@@ -54,9 +54,7 @@ struct AuthFlowView: View {
                 .inputFieldStyle()
 
             if let error = viewModel.errorMessage {
-                Text(error)
-                    .foregroundColor(.red)
-                    .font(.footnote)
+                InlineErrorText(message: error)
             }
 
             Button(action: {
@@ -75,6 +73,12 @@ struct AuthFlowView: View {
             .background(Color.blue)
             .foregroundColor(.white)
             .cornerRadius(12)
+
+            Button(action: { mode = .forgot }) {
+                Text("Forgot password?")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+            }
         }
     }
 
@@ -90,9 +94,7 @@ struct AuthFlowView: View {
                 .inputFieldStyle()
 
             if let error = viewModel.errorMessage {
-                Text(error)
-                    .foregroundColor(.red)
-                    .font(.footnote)
+                InlineErrorText(message: error)
             }
 
             Button(action: {
@@ -132,6 +134,12 @@ struct AuthFlowView: View {
                 .padding()
                 .background(Color(.secondarySystemBackground))
                 .cornerRadius(12)
+
+            Button("Back to login") {
+                mode = .login
+            }
+            .font(.footnote)
+            .foregroundColor(.secondary)
         }
     }
 }

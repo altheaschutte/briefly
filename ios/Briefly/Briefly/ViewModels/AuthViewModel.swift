@@ -18,6 +18,7 @@ final class AuthViewModel: ObservableObject {
 
     func login() async {
         os_log("Login tapped for email: %{public}@", log: authLog, type: .info, email)
+        errorMessage = nil
         guard validateEmail() else {
             os_log("Login blocked due to invalid email: %{public}@", log: authLog, type: .error, email)
             return
@@ -38,6 +39,7 @@ final class AuthViewModel: ObservableObject {
     }
 
     func signup() async {
+        errorMessage = nil
         guard validateEmail(), password == confirmPassword else {
             errorMessage = "Passwords must match."
             return

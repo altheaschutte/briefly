@@ -7,9 +7,9 @@ struct EpisodeDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Text(episode.title)
+                Text(episode.displayTitle)
                     .font(.title.bold())
-                if let date = episode.publishedAt {
+                if let date = episode.displayDate {
                     Text(date.formatted(date: .abbreviated, time: .shortened))
                         .foregroundColor(.secondary)
                 }

@@ -34,8 +34,9 @@ final class TopicService: TopicProviding {
         struct Payload: Encodable {
             let original_text: String
             let is_active: Bool
+            let order_index: Int
         }
-        let body = Payload(original_text: topic.originalText, is_active: topic.isActive)
+        let body = Payload(original_text: topic.originalText, is_active: topic.isActive, order_index: topic.orderIndex)
         let endpoint = APIEndpoint(path: "/topics/\(id.uuidString)",
                                    method: .patch,
                                    body: AnyEncodable(body))
@@ -56,6 +57,7 @@ private struct BackendTopic: Decodable {
     let originalText: String
     let rewrittenQuery: String?
     let isActive: Bool
+    let orderIndex: Int
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -65,6 +67,8 @@ private struct BackendTopic: Decodable {
         case rewrittenQuerySnake = "rewritten_query"
         case isActive
         case isActiveSnake = "is_active"
+        case orderIndexCamel = "orderIndex"
+        case orderIndexSnake = "order_index"
     }
 
     init(from decoder: Decoder) throws {
@@ -85,12 +89,20 @@ private struct BackendTopic: Decodable {
         } else {
             isActive = try container.decode(Bool.self, forKey: .isActiveSnake)
         }
+        if let camel = try? container.decode(Int.self, forKey: .orderIndexCamel) {
+            orderIndex = camel
+        } else if let snake = try? container.decode(Int.self, forKey: .orderIndexSnake) {
+            orderIndex = snake
+        } else {
+            orderIndex = 0
+        }
     }
 
     func toTopic() -> Topic {
         Topic(
             id: UUID(uuidString: id) ?? UUID(),
             originalText: originalText,
+            orderIndex: orderIndex,
             isActive: isActive
         )
     }

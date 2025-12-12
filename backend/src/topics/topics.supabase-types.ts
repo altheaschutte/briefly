@@ -3,6 +3,7 @@ export type TopicRow = {
   user_id: string;
   original_text: string;
   is_active: boolean;
+  order_index: number;
   created_at: string;
   updated_at: string;
 };

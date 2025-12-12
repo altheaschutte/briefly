@@ -19,12 +19,16 @@ export class EpisodesService {
   }
 
   listEpisodes(userId: string): Promise<Episode[]> {
-    return this.repository.listByUser(userId);
+    return this.repository.listByUser(userId).then((episodes) =>
+      episodes
+        .filter((e) => e.status !== 'failed' && !e.archivedAt)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    );
   }
 
   async getEpisode(userId: string, episodeId: string): Promise<Episode> {
     const episode = await this.repository.getById(userId, episodeId);
-    if (!episode) {
+    if (!episode || episode.archivedAt) {
       throw new NotFoundException('Episode not found');
     }
     return episode;
@@ -38,17 +42,32 @@ export class EpisodesService {
     const existing = await this.getEpisode(userId, episodeId);
     const updated = await this.repository.update(userId, episodeId, {
       ...updates,
+      episodeNumber: updates.episodeNumber ?? existing.episodeNumber,
+      title: updates.title ?? existing.title,
       targetDurationMinutes: updates.targetDurationMinutes ?? existing.targetDurationMinutes,
       status: updates.status ?? existing.status,
       audioUrl: updates.audioUrl ?? existing.audioUrl,
+      coverImageUrl: updates.coverImageUrl ?? existing.coverImageUrl,
+      coverPrompt: updates.coverPrompt ?? existing.coverPrompt,
       transcript: updates.transcript ?? existing.transcript,
       scriptPrompt: updates.scriptPrompt ?? existing.scriptPrompt,
       showNotes: updates.showNotes ?? existing.showNotes,
+      description: updates.description ?? existing.description,
       errorMessage: updates.errorMessage ?? existing.errorMessage,
+      durationSeconds: updates.durationSeconds ?? existing.durationSeconds,
+      archivedAt: updates.archivedAt ?? existing.archivedAt,
     });
     if (!updated) {
       throw new NotFoundException('Episode not found');
     }
     return updated;
+  }
+
+  async archiveEpisode(userId: string, episodeId: string): Promise<Episode> {
+    const archived = await this.repository.archive(userId, episodeId);
+    if (!archived) {
+      throw new NotFoundException('Episode not found');
+    }
+    return archived;
   }
 }

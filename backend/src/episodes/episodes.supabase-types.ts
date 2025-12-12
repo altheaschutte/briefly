@@ -1,12 +1,19 @@
 export type EpisodeRow = {
   id: string;
   user_id: string;
+  title?: string | null;
+  episode_number?: number | null;
   status: string;
+  archived_at?: string | null;
   target_duration_minutes: number;
+  duration_seconds?: number | null;
   audio_url?: string | null;
+  cover_image_url?: string | null;
+  cover_prompt?: string | null;
   transcript?: string | null;
   script_prompt?: string | null;
   show_notes?: string | null;
+  description?: string | null;
   error_message?: string | null;
   created_at: string;
   updated_at: string;

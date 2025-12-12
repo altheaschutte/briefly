@@ -2,7 +2,7 @@ import SwiftUI
 
 struct MainTabView: View {
     private enum Tab {
-        case feed, setup, settings
+        case feed, create, settings
     }
 
     @StateObject private var feedViewModel: EpisodesViewModel
@@ -17,22 +17,24 @@ struct MainTabView: View {
         _topicsViewModel = StateObject(wrappedValue: TopicsViewModel(topicService: appViewModel.topicService))
         _settingsViewModel = StateObject(wrappedValue: SettingsViewModel(appViewModel: appViewModel,
                                                                          audioManager: appViewModel.audioPlayer))
-        _selection = State(initialValue: appViewModel.hasCompletedOnboarding ? .feed : .setup)
+        _selection = State(initialValue: appViewModel.hasCompletedOnboarding ? .feed : .create)
     }
 
     var body: some View {
         TabView(selection: $selection) {
             NavigationStack {
-                FeedView(viewModel: feedViewModel)
+                FeedView(viewModel: feedViewModel) {
+                    selection = .create
+                }
             }
-            .tabItem { Label("Your Feed", systemImage: "play.square.stack") }
+            .tabItem { Label("Your Library", systemImage: "play.square.stack") }
             .tag(Tab.feed)
 
             NavigationStack {
                 SetupView(topicsViewModel: topicsViewModel, appViewModel: appViewModel)
             }
-            .tabItem { Label("Setup", systemImage: "mic.circle") }
-            .tag(Tab.setup)
+            .tabItem { Label("Create", systemImage: "sparkles") }
+            .tag(Tab.create)
 
             NavigationStack {
                 SettingsView(viewModel: settingsViewModel, email: appViewModel.currentUserEmail)

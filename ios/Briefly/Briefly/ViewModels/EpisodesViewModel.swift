@@ -34,7 +34,7 @@ final class EpisodesViewModel: ObservableObject {
         var older: [Episode] = []
 
         for episode in episodes {
-            guard let date = episode.publishedAt else { continue }
+            guard let date = episode.displayDate else { continue }
             if calendar.isDateInToday(date) {
                 today.append(episode)
             } else if let weekAgo = calendar.date(byAdding: .day, value: -7, to: now),
@@ -54,16 +54,37 @@ final class EpisodesViewModel: ObservableObject {
 
     func load() async {
         isLoading = true
+        errorMessage = nil
         defer { isLoading = false }
         do {
             let fetched = try await episodeService.fetchEpisodes()
-            episodes = fetched.sorted { lhs, rhs in
-                let lhsDate = lhs.publishedAt ?? .distantPast
-                let rhsDate = rhs.publishedAt ?? .distantPast
-                return lhsDate > rhsDate
-            }
+            episodes = sortAndDeduplicate(fetched)
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    func deleteEpisode(_ episode: Episode) async {
+        do {
+            try await episodeService.deleteEpisode(id: episode.id)
+            episodes.removeAll { $0.id == episode.id }
+        } catch {
+            errorMessage = "Couldn't delete episode: \(error.localizedDescription)"
+        }
+    }
+
+    private func sortAndDeduplicate(_ episodes: [Episode]) -> [Episode] {
+        let sorted = episodes.sorted { lhs, rhs in
+            let lhsDate = lhs.displayDate ?? .distantPast
+            let rhsDate = rhs.displayDate ?? .distantPast
+            return lhsDate > rhsDate
+        }
+
+        var seen = Set<UUID>()
+        var unique: [Episode] = []
+        for episode in sorted where seen.insert(episode.id).inserted {
+            unique.append(episode)
+        }
+        return unique
     }
 }

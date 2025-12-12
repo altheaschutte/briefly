@@ -58,6 +58,7 @@ struct AnyEncodable: Encodable {
 final class APIClient {
     let baseURL: URL
     var tokenProvider: (() -> String?)?
+    var unauthorizedHandler: (() -> Void)?
     private let session: URLSession
 
     init(baseURL: URL, session: URLSession = .shared, tokenProvider: (() -> String?)? = nil) {
@@ -67,7 +68,22 @@ final class APIClient {
     }
 
     func request<T: Decodable>(_ endpoint: APIEndpoint, decoder: JSONDecoder = JSONDecoder()) async throws -> T {
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let string = try container.decode(String.self)
+
+            if let date = APIClient.iso8601WithFractionalSeconds.date(from: string) {
+                return date
+            }
+            if let date = APIClient.iso8601Basic.date(from: string) {
+                return date
+            }
+
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Invalid date format: \(string)",
+            )
+        }
         let data = try await requestData(endpoint)
         do {
             return try decoder.decode(T.self, from: data)
@@ -87,6 +103,7 @@ final class APIClient {
         case 200..<300:
             return data
         case 401:
+            unauthorizedHandler?()
             throw APIError.unauthorized
         default:
             throw APIError.statusCode(httpResponse.statusCode)
@@ -122,4 +139,18 @@ final class APIClient {
 
         return request
     }
+}
+
+private extension APIClient {
+    static let iso8601Basic: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    static let iso8601WithFractionalSeconds: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
 }

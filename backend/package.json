@@ -12,7 +12,10 @@
     "start:worker": "node dist/worker/worker-main.js",
     "start:worker:dev": "nodemon --watch src --watch worker --ext ts,js --exec \"ts-node -r tsconfig-paths/register worker/worker-main.ts\"",
     "db:seed": "supabase db seed",
-    "db:migrate": "supabase db push --db-url \"$SUPABASE_DB_URL\""
+    "db:migrate": "supabase db push --db-url \"$SUPABASE_DB_URL\"",
+    "backfill:cover": "ts-node -r tsconfig-paths/register scripts/backfill-cover.ts",
+    "backfill:metadata": "ts-node -r tsconfig-paths/register scripts/backfill-metadata.ts",
+    "backfill:episode-numbers": "ts-node -r tsconfig-paths/register scripts/backfill-episode-numbers.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.590.0",
@@ -29,6 +32,7 @@
     "dotenv": "^17.2.3",
     "ioredis": "^5.3.2",
     "jose": "^4.15.5",
+    "music-metadata": "^11.10.3",
     "openai": "^4.28.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",

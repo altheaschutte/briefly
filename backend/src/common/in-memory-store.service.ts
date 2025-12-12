@@ -23,6 +23,7 @@ export class InMemoryStoreService {
     } else {
       list.push(topic);
     }
+    list.sort((a, b) => a.orderIndex - b.orderIndex);
     this.topicsByUser.set(topic.userId, list);
     return topic;
   }
@@ -38,6 +39,7 @@ export class InMemoryStoreService {
     }
     const updated: Topic = { ...list[idx], ...updates, updatedAt: new Date() };
     list[idx] = updated;
+    list.sort((a, b) => a.orderIndex - b.orderIndex);
     this.topicsByUser.set(userId, list);
     return updated;
   }
@@ -148,5 +150,14 @@ export class InMemoryStoreService {
     list[idx] = updated;
     this.onboardingByUser.set(userId, list);
     return updated;
+  }
+
+  deleteOnboardingTranscript(userId: string, recordId: string): void {
+    const list = this.onboardingByUser.get(userId);
+    if (!list) {
+      return;
+    }
+    const next = list.filter((record) => record.id !== recordId);
+    this.onboardingByUser.set(userId, next);
   }
 }

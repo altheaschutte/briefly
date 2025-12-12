@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { SupabaseClient, createClient } from '@supabase/supabase-js';
 import { v4 as uuid } from 'uuid';
 import { Topic } from '../domain/types';
-import { TopicUpdateInput, TopicsRepository } from './topics.repository';
+import { TopicListFilter, TopicUpdateInput, TopicsRepository } from './topics.repository';
 import { SupabaseDatabase, TopicRow } from './topics.supabase-types';
 
 @Injectable()
@@ -29,11 +29,17 @@ export class SupabaseTopicsRepository implements TopicsRepository {
     });
   }
 
-  async listByUser(userId: string): Promise<Topic[]> {
-    const { data, error } = await this.client
+  async listByUser(userId: string, filter?: TopicListFilter): Promise<Topic[]> {
+    let query = this.client
       .from('topics')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', userId);
+    if (filter?.isActive !== undefined) {
+      query = query.eq('is_active', filter.isActive);
+    }
+
+    const { data, error } = await query
+      .order('order_index', { ascending: true })
       .order('created_at', { ascending: true });
 
     if (error) {
@@ -70,10 +76,12 @@ export class SupabaseTopicsRepository implements TopicsRepository {
 
   async create(userId: string, originalText: string): Promise<Topic> {
     const now = new Date().toISOString();
+    const nextOrderIndex = await this.getNextOrderIndex(userId);
     const payload: TopicRow = {
       id: uuid(),
       user_id: userId,
       original_text: originalText,
+      order_index: nextOrderIndex,
       is_active: true,
       created_at: now,
       updated_at: now,
@@ -105,6 +113,9 @@ export class SupabaseTopicsRepository implements TopicsRepository {
     if (updates.isActive !== undefined) {
       payload.is_active = updates.isActive;
     }
+    if (updates.orderIndex !== undefined) {
+      payload.order_index = updates.orderIndex;
+    }
 
     const { data, error } = await this.client
       .from('topics')
@@ -134,9 +145,28 @@ export class SupabaseTopicsRepository implements TopicsRepository {
       id: row.id,
       userId: row.user_id,
       originalText: row.original_text,
+      orderIndex: row.order_index,
       isActive: row.is_active,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
     };
+  }
+
+  private async getNextOrderIndex(userId: string): Promise<number> {
+    const { data, error } = await this.client
+      .from('topics')
+      .select('order_index')
+      .eq('user_id', userId)
+      .order('order_index', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error && error.code !== 'PGRST116') {
+      this.logger.error(`Failed to compute next order_index for user ${userId}: ${error.message}`);
+      throw error;
+    }
+
+    const currentMax = (data as TopicRow | null)?.order_index;
+    return currentMax !== undefined && currentMax !== null ? currentMax + 1 : 0;
   }
 }

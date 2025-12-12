@@ -16,6 +16,7 @@ final class HomeViewModel: ObservableObject {
 
     func loadLatest() async {
         isLoading = true
+        errorMessage = nil
         defer { isLoading = false }
         do {
             latestEpisode = try await episodeService.fetchLatestEpisode()

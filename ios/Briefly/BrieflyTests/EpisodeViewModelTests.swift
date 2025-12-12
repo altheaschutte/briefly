@@ -33,4 +33,16 @@ struct MockEpisodeProvider: EpisodeProviding {
     func generateEpisode() async throws -> Episode? {
         episodes.first
     }
+
+    func requestEpisodeGeneration() async throws -> EpisodeCreation {
+        EpisodeCreation(episodeId: episodes.first?.id ?? UUID(), status: "ready")
+    }
+
+    func fetchEpisode(id: UUID) async throws -> Episode {
+        episodes.first { $0.id == id } ?? episodes.first!
+    }
+
+    func deleteEpisode(id: UUID) async throws {
+        // No-op for tests
+    }
 }

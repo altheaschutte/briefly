@@ -3,6 +3,7 @@ import Foundation
 struct Topic: Codable, Identifiable, Equatable, Hashable {
     var id: UUID?
     var originalText: String
+    var orderIndex: Int
     var isActive: Bool
 
     enum CodingKeys: String, CodingKey {
@@ -11,14 +12,17 @@ struct Topic: Codable, Identifiable, Equatable, Hashable {
         case originalTextSnake = "original_text"
         case titleFallback = "title"
         case descriptionFallback = "description"
+        case orderIndexCamel = "orderIndex"
+        case orderIndexSnake = "order_index"
         case isActiveCamel = "isActive"
         case isActiveSnake = "is_active"
         case isActiveLegacy = "active"
     }
 
-    init(id: UUID? = nil, originalText: String, isActive: Bool) {
+    init(id: UUID? = nil, originalText: String, orderIndex: Int, isActive: Bool) {
         self.id = id
         self.originalText = originalText
+        self.orderIndex = orderIndex
         self.isActive = isActive
     }
 
@@ -38,6 +42,14 @@ struct Topic: Codable, Identifiable, Equatable, Hashable {
             originalText = ""
         }
 
+        if let camel = try? container.decode(Int.self, forKey: .orderIndexCamel) {
+            orderIndex = camel
+        } else if let snake = try? container.decode(Int.self, forKey: .orderIndexSnake) {
+            orderIndex = snake
+        } else {
+            orderIndex = 0
+        }
+
         if let camel = try? container.decode(Bool.self, forKey: .isActiveCamel) {
             isActive = camel
         } else if let snake = try? container.decode(Bool.self, forKey: .isActiveSnake) {
@@ -53,10 +65,11 @@ struct Topic: Codable, Identifiable, Equatable, Hashable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encodeIfPresent(id, forKey: .id)
         try container.encode(originalText, forKey: .originalTextSnake)
+        try container.encode(orderIndex, forKey: .orderIndexSnake)
         try container.encode(isActive, forKey: .isActiveSnake)
     }
 
     static var placeholder: Topic {
-        Topic(id: UUID(), originalText: "Local arts: upcoming exhibitions and creative events this week.", isActive: true)
+        Topic(id: UUID(), originalText: "Local arts: upcoming exhibitions and creative events this week.", orderIndex: 0, isActive: true)
     }
 }

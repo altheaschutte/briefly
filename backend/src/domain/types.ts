@@ -2,6 +2,7 @@ export interface Topic {
   id: string;
   userId: string;
   originalText: string;
+  orderIndex: number;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -20,7 +21,7 @@ export interface TopicQuery {
   updatedAt: Date;
 }
 
-export type OnboardingTranscriptStatus = 'in_progress' | 'completed' | 'failed';
+export type OnboardingTranscriptStatus = 'in_progress' | 'completed' | 'failed' | 'cancelled';
 
 export interface OnboardingTranscript {
   id: string;
@@ -45,12 +46,19 @@ export type EpisodeStatus =
 export interface Episode {
   id: string;
   userId: string;
+  episodeNumber?: number;
+  title?: string;
   status: EpisodeStatus;
+  archivedAt?: Date;
   targetDurationMinutes: number;
+  durationSeconds?: number;
   audioUrl?: string;
+  coverImageUrl?: string;
+  coverPrompt?: string;
   transcript?: string;
   scriptPrompt?: string;
   showNotes?: string;
+  description?: string;
   errorMessage?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -63,6 +71,10 @@ export interface EpisodeSegment {
   title?: string;
   rawContent: string;
   rawSources: EpisodeSource[];
+  script?: string;
+  audioUrl?: string;
+  startTimeSeconds?: number;
+  durationSeconds?: number;
 }
 
 export interface EpisodeSource {

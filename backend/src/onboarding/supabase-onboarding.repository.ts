@@ -136,6 +136,21 @@ export class SupabaseOnboardingRepository implements OnboardingTranscriptsReposi
     return this.mapRow(data as OnboardingTranscriptRow);
   }
 
+  async delete(userId: string, recordId: string): Promise<void> {
+    const { error } = await this.client
+      .from('onboarding_transcripts')
+      .delete()
+      .eq('id', recordId)
+      .eq('user_id', userId);
+
+    if (error) {
+      this.logger.error(
+        `Failed to delete onboarding transcript ${recordId} for user ${userId}: ${error.message}`,
+      );
+      throw error;
+    }
+  }
+
   private mapRow(row: OnboardingTranscriptRow): OnboardingTranscript {
     return {
       id: row.id,

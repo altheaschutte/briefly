@@ -78,6 +78,7 @@ final class OnboardingViewModel: ObservableObject {
     func fetchTopicsWithPolling() async {
         isPollingTopics = true
         defer { isPollingTopics = false }
+        errorMessage = nil
         do {
             topics = try await topicService.fetchTopics()
         } catch {
@@ -95,6 +96,7 @@ final class OnboardingViewModel: ObservableObject {
     }
 
     func updateTopic(_ topic: Topic) async {
+        errorMessage = nil
         do {
             let updated = try await topicService.updateTopic(topic)
             if let index = topics.firstIndex(where: { $0.id == updated.id }) {
@@ -106,6 +108,7 @@ final class OnboardingViewModel: ObservableObject {
     }
 
     func addTopic(text: String) async {
+        errorMessage = nil
         do {
             let topic = try await topicService.createTopic(originalText: text)
             topics.append(topic)
@@ -115,6 +118,7 @@ final class OnboardingViewModel: ObservableObject {
     }
 
     func generateFirstEpisode() async -> Episode? {
+        errorMessage = nil
         do {
             return try await episodeService.generateEpisode()
         } catch {

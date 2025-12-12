@@ -20,7 +20,7 @@ struct TopicReviewView: View {
             }
 
             if let error = viewModel.errorMessage {
-                Text(error).foregroundColor(.red)
+                InlineErrorText(message: error)
             }
 
             List {
@@ -45,6 +45,7 @@ struct TopicReviewView: View {
                 Section(header: Text("Add topic")) {
                     TextField("Topic", text: $newText, axis: .vertical)
                         .inputFieldStyle()
+                        .padding(8)
                     Button("Add topic") {
                         guard !newText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
                         Task {

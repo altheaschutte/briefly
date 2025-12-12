@@ -16,7 +16,7 @@ struct GenerateEpisodeView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             if let error = viewModel.errorMessage {
-                Text(error).foregroundColor(.red)
+                InlineErrorText(message: error)
             }
 
             Button(action: generate) {

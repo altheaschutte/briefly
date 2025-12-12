@@ -32,6 +32,12 @@ final class AppViewModel: ObservableObject {
         self.apiClient = apiClient
         self.topicService = TopicService(apiClient: apiClient)
         self.episodeService = EpisodeService(apiClient: apiClient)
+
+        self.apiClient.unauthorizedHandler = { [weak self] in
+            Task { @MainActor in
+                self?.logout()
+            }
+        }
     }
 
     func bootstrap() {

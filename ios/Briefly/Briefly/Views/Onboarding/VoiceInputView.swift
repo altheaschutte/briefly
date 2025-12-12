@@ -60,9 +60,7 @@ struct VoiceInputView: View {
             .frame(maxHeight: 240)
 
             if let error = viewModel.errorMessage {
-                Text(error)
-                    .foregroundColor(.red)
-                    .font(.footnote)
+                InlineErrorText(message: error)
             }
 
             HStack {

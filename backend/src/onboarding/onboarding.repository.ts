@@ -17,4 +17,5 @@ export interface OnboardingTranscriptsRepository {
     updates: OnboardingTranscriptUpdateInput,
   ): Promise<OnboardingTranscript | undefined>;
   getById(userId: string, recordId: string): Promise<OnboardingTranscript | undefined>;
+  delete(userId: string, recordId: string): Promise<void>;
 }

@@ -2,8 +2,10 @@ import SwiftUI
 
 struct OnboardingFlowView: View {
     @EnvironmentObject private var appViewModel: AppViewModel
+    @Environment(\.dismiss) private var dismiss
     @StateObject private var onboardingViewModel: OnboardingViewModel
     @State private var path: [OnboardingStep] = []
+    @State private var hasStartedRecording = false
 
     init(appViewModel: AppViewModel) {
         _onboardingViewModel = StateObject(wrappedValue: OnboardingViewModel(
@@ -20,8 +22,14 @@ struct OnboardingFlowView: View {
         NavigationStack(path: $path) {
             VoiceInputView(
                 viewModel: onboardingViewModel,
-                onContinue: { path.append(.review) },
-                onManual: { path.append(.manual) }
+                onContinue: {
+                    onboardingViewModel.stopVoiceCapture()
+                    path.append(.review)
+                },
+                onManual: {
+                    onboardingViewModel.stopVoiceCapture()
+                    path.append(.manual)
+                }
             )
             .navigationTitle("Set up your Briefly")
             .navigationBarTitleDisplayMode(.inline)
@@ -45,6 +53,22 @@ struct OnboardingFlowView: View {
                     EmptyView()
                 }
             }
+        }
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Done") {
+                    onboardingViewModel.stopVoiceCapture()
+                    dismiss()
+                }
+            }
+        }
+        .onAppear {
+            guard !hasStartedRecording else { return }
+            hasStartedRecording = true
+            onboardingViewModel.startVoiceCapture()
+        }
+        .onDisappear {
+            onboardingViewModel.stopVoiceCapture()
         }
     }
 }

@@ -93,6 +93,9 @@ export class SupabaseTopicQueriesRepository implements TopicQueriesRepository {
   }
 
   private mapRow(row: TopicQueryRow): TopicQuery {
+    const citations = Array.isArray(row.citations)
+      ? row.citations.map((citation) => String(citation))
+      : [];
     return {
       id: row.id,
       userId: row.user_id,
@@ -100,7 +103,7 @@ export class SupabaseTopicQueriesRepository implements TopicQueriesRepository {
       episodeId: row.episode_id,
       query: row.query,
       answer: row.answer ?? '',
-      citations: row.citations ?? [],
+      citations,
       orderIndex: row.order_index,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),

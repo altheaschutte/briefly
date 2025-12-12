@@ -7,6 +7,7 @@ create table if not exists public.topics (
   user_id uuid not null,
   original_text text not null,
   rewritten_query text,
+  order_index integer not null default 0,
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -15,6 +16,7 @@ create table if not exists public.topics (
 
 create index if not exists idx_topics_user_id on public.topics (user_id);
 create index if not exists idx_topics_user_active on public.topics (user_id, is_active);
+create index if not exists idx_topics_user_order on public.topics (user_id, order_index);
 
 alter table public.topics enable row level security;
 
@@ -50,7 +52,9 @@ end $$;
 create table if not exists public.episodes (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null,
+  title text,
   status episode_status not null,
+  archived_at timestamptz,
   target_duration_minutes integer not null,
   audio_url text,
   transcript text,
@@ -61,6 +65,7 @@ create table if not exists public.episodes (
 
 create index if not exists idx_episodes_user on public.episodes (user_id);
 create index if not exists idx_episodes_user_status on public.episodes (user_id, status);
+create index if not exists idx_episodes_user_not_archived on public.episodes (user_id) where archived_at is null;
 
 alter table public.episodes enable row level security;
 

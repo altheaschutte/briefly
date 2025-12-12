@@ -2,7 +2,7 @@ export type OnboardingTranscriptRow = {
   id: string;
   user_id: string;
   transcript: string;
-  status: 'in_progress' | 'completed' | 'failed';
+  status: 'in_progress' | 'completed' | 'failed' | 'cancelled';
   extracted_topics?: string[] | null;
   error_message?: string | null;
   created_at: string;

@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { SupabaseClient, createClient } from '@supabase/supabase-js';
 import { v4 as uuid } from 'uuid';
 import { Episode } from '../domain/types';
-import { EpisodesRepository } from './episodes.repository';
+import { EpisodesRepository, ListEpisodesOptions } from './episodes.repository';
 import { EpisodeRow, SupabaseDatabase } from './episodes.supabase-types';
 
 @Injectable()
@@ -34,12 +34,19 @@ export class SupabaseEpisodesRepository implements EpisodesRepository {
     const payload: EpisodeRow = {
       id: uuid(),
       user_id: userId,
+      title: null,
+      episode_number: null,
       status,
+      archived_at: null,
       target_duration_minutes: targetDurationMinutes,
+      duration_seconds: null,
       audio_url: null,
+      cover_image_url: null,
+      cover_prompt: null,
       transcript: null,
       script_prompt: null,
       show_notes: null,
+      description: null,
       error_message: null,
       created_at: now,
       updated_at: now,
@@ -56,12 +63,18 @@ export class SupabaseEpisodesRepository implements EpisodesRepository {
     return this.mapRow(data as EpisodeRow);
   }
 
-  async listByUser(userId: string): Promise<Episode[]> {
-    const { data, error } = await this.client
-      .from('episodes')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: true });
+  async listByUser(userId: string, options?: ListEpisodesOptions): Promise<Episode[]> {
+    const { includeArchived = false, includeFailed = false } = options || {};
+    let query = this.client.from('episodes').select('*').eq('user_id', userId);
+
+    if (!includeFailed) {
+      query = query.neq('status', 'failed');
+    }
+    if (!includeArchived) {
+      query = query.is('archived_at', null);
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false });
 
     if (error) {
       this.logger.error(`Failed to list episodes for user ${userId}: ${error.message}`);
@@ -77,6 +90,7 @@ export class SupabaseEpisodesRepository implements EpisodesRepository {
       .select('*')
       .eq('id', episodeId)
       .eq('user_id', userId)
+      .is('archived_at', null)
       .maybeSingle();
 
     if (error) {
@@ -96,13 +110,20 @@ export class SupabaseEpisodesRepository implements EpisodesRepository {
     };
 
     if (updates.status !== undefined) payload.status = updates.status;
+    if (updates.title !== undefined) payload.title = updates.title ?? null;
+    if (updates.episodeNumber !== undefined) payload.episode_number = updates.episodeNumber ?? null;
+    if (updates.archivedAt !== undefined) payload.archived_at = updates.archivedAt?.toISOString() ?? null;
     if (updates.audioUrl !== undefined) payload.audio_url = updates.audioUrl ?? null;
     if (updates.transcript !== undefined) payload.transcript = updates.transcript ?? null;
     if (updates.scriptPrompt !== undefined) payload.script_prompt = updates.scriptPrompt ?? null;
+    if (updates.coverImageUrl !== undefined) payload.cover_image_url = updates.coverImageUrl ?? null;
+    if (updates.coverPrompt !== undefined) payload.cover_prompt = updates.coverPrompt ?? null;
     if (updates.showNotes !== undefined) payload.show_notes = updates.showNotes ?? null;
+    if (updates.description !== undefined) payload.description = updates.description ?? null;
     if (updates.errorMessage !== undefined) payload.error_message = updates.errorMessage ?? null;
     if (updates.targetDurationMinutes !== undefined)
       payload.target_duration_minutes = updates.targetDurationMinutes;
+    if (updates.durationSeconds !== undefined) payload.duration_seconds = updates.durationSeconds ?? null;
 
     const { data, error } = await this.client
       .from('episodes')
@@ -122,16 +143,44 @@ export class SupabaseEpisodesRepository implements EpisodesRepository {
     return this.mapRow(data as EpisodeRow);
   }
 
+  async archive(userId: string, episodeId: string): Promise<Episode | undefined> {
+    const now = new Date().toISOString();
+    const { data, error } = await this.client
+      .from('episodes')
+      .update({ archived_at: now, updated_at: now })
+      .eq('id', episodeId)
+      .eq('user_id', userId)
+      .is('archived_at', null)
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      this.logger.error(`Failed to archive episode ${episodeId} for user ${userId}: ${error.message}`);
+      throw error;
+    }
+    if (!data) {
+      return undefined;
+    }
+    return this.mapRow(data as EpisodeRow);
+  }
+
   private mapRow(row: EpisodeRow): Episode {
     return {
       id: row.id,
       userId: row.user_id,
+      episodeNumber: row.episode_number ?? undefined,
+      title: row.title ?? undefined,
       status: row.status as Episode['status'],
+      archivedAt: row.archived_at ? new Date(row.archived_at) : undefined,
       targetDurationMinutes: row.target_duration_minutes,
+      durationSeconds: row.duration_seconds ?? undefined,
       audioUrl: row.audio_url ?? undefined,
+      coverImageUrl: row.cover_image_url ?? undefined,
+      coverPrompt: row.cover_prompt ?? undefined,
       transcript: row.transcript ?? undefined,
       scriptPrompt: row.script_prompt ?? undefined,
       showNotes: row.show_notes ?? undefined,
+      description: row.description ?? undefined,
       errorMessage: row.error_message ?? undefined,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),

@@ -36,4 +36,8 @@ export class InMemoryOnboardingRepository implements OnboardingTranscriptsReposi
   async getById(userId: string, recordId: string): Promise<OnboardingTranscript | undefined> {
     return this.store.getOnboardingTranscript(userId, recordId);
   }
+
+  async delete(userId: string, recordId: string): Promise<void> {
+    this.store.deleteOnboardingTranscript(userId, recordId);
+  }
 }

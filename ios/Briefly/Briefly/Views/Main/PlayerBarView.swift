@@ -4,36 +4,35 @@ struct PlayerBarView: View {
     @EnvironmentObject private var audioManager: AudioPlayerManager
 
     var body: some View {
-        VStack(spacing: 8) {
+        Group {
             if let episode = audioManager.currentEpisode {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(episode.title)
-                            .font(.headline)
-                        Text(timeString(audioManager.currentTimeSeconds) + " / " + timeString(audioManager.durationSeconds))
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                VStack(spacing: 8) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(episode.displayTitle)
+                                .font(.headline)
+                            Text(timeString(audioManager.currentTimeSeconds) + " / " + timeString(audioManager.durationSeconds))
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        Button(action: togglePlay) {
+                            Image(systemName: audioManager.isPlaying ? "pause.fill" : "play.fill")
+                                .font(.title2)
+                        }
                     }
-                    Spacer()
-                    Button(action: togglePlay) {
-                        Image(systemName: audioManager.isPlaying ? "pause.fill" : "play.fill")
-                            .font(.title2)
-                    }
+                    Slider(value: Binding(get: {
+                        audioManager.progress
+                    }, set: { newValue in
+                        audioManager.seek(to: newValue)
+                    }))
                 }
-                Slider(value: Binding(get: {
-                    audioManager.progress
-                }, set: { newValue in
-                    audioManager.seek(to: newValue)
-                }))
-            } else {
-                Text("Nothing playing")
-                    .foregroundColor(.secondary)
+                .padding(12)
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(12)
+                .padding(.horizontal)
             }
         }
-        .padding(12)
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(12)
-        .padding(.horizontal)
     }
 
     private func togglePlay() {

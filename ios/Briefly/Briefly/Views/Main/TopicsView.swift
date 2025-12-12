@@ -12,23 +12,35 @@ struct TopicsView: View {
                         TextField("Topic", text: $topic.originalText, axis: .vertical)
                             .font(.subheadline)
                             .inputFieldStyle()
-                        Toggle("Active", isOn: $topic.isActive)
-                            .toggleStyle(.switch)
-                        Button("Save") {
-                            Task { await viewModel.updateTopic(topic) }
+                        HStack(spacing: 8) {
+                            Text("Active")
+                                .foregroundColor(.secondary)
+                            Toggle("", isOn: $topic.isActive)
+                                .labelsHidden()
+                                .toggleStyle(.switch)
                         }
-                        .frame(maxWidth: .infinity, alignment: .trailing)
                     }
                     .padding(.vertical, 6)
                 }
                 .onDelete { indexSet in
                     Task { await viewModel.deleteTopic(at: indexSet) }
                 }
+
+                if !viewModel.topics.isEmpty {
+                    Button {
+                        Task { await viewModel.saveChanges() }
+                    } label: {
+                        Text("Save changes")
+                            .frame(maxWidth: .infinity, alignment: .center)
+                    }
+                    .disabled(!viewModel.hasChanges || viewModel.isLoading)
+                }
             }
 
             Section(header: Text("Add topic")) {
                 TextField("Topic", text: $newTopicText, axis: .vertical)
                     .inputFieldStyle()
+                    .padding(.vertical, 6)
                 Button("Add") {
                     guard !newTopicText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
                     Task {

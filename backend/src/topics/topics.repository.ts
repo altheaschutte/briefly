@@ -5,10 +5,15 @@ export const TOPICS_REPOSITORY = 'TOPICS_REPOSITORY';
 export interface TopicUpdateInput {
   originalText?: string;
   isActive?: boolean;
+  orderIndex?: number;
+}
+
+export interface TopicListFilter {
+  isActive?: boolean;
 }
 
 export interface TopicsRepository {
-  listByUser(userId: string): Promise<Topic[]>;
+  listByUser(userId: string, filter?: TopicListFilter): Promise<Topic[]>;
   getById(userId: string, topicId: string): Promise<Topic | undefined>;
   create(userId: string, originalText: string): Promise<Topic>;
   update(userId: string, topicId: string, updates: TopicUpdateInput): Promise<Topic | undefined>;

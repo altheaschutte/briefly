@@ -77,6 +77,11 @@ export class OnboardingService {
     };
   }
 
+  async cancelSession(userId: string, sessionId: string): Promise<void> {
+    await this.repository.update(userId, sessionId, { status: 'cancelled' });
+    await this.repository.delete(userId, sessionId);
+  }
+
   async markFailure(userId: string, sessionId: string, error: unknown): Promise<void> {
     const message = error instanceof Error ? error.message : String(error);
     await this.repository.update(userId, sessionId, { status: 'failed', errorMessage: message });

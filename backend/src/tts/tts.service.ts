@@ -6,7 +6,10 @@ import { TtsProvider, TtsSynthesisResult } from './tts.interfaces';
 export class TtsService {
   constructor(@Inject(TTS_PROVIDER_TOKEN) private readonly provider: TtsProvider) {}
 
-  synthesize(script: string, options: { voiceA: string; voiceB: string }): Promise<TtsSynthesisResult> {
+  synthesize(
+    script: string,
+    options: { voiceA: string; voiceB: string; storageKey?: string },
+  ): Promise<TtsSynthesisResult> {
     return this.provider.synthesize(script, options);
   }
 }

@@ -20,6 +20,7 @@ import { EPISODE_SOURCES_REPOSITORY } from './episode-sources.repository';
 import { InMemoryEpisodeSourcesRepository } from './in-memory-episode-sources.repository';
 import { SupabaseEpisodeSourcesRepository } from './supabase-episode-sources.repository';
 import { TopicQueriesModule } from '../topic-queries/topic-queries.module';
+import { CoverImageService } from './cover-image.service';
 
 const episodesRepositoryProvider: Provider = {
   provide: EPISODES_REPOSITORY,
@@ -75,6 +76,7 @@ const episodeSourcesRepositoryProvider: Provider = {
     EpisodesService,
     EpisodeProcessorService,
     EpisodeSourcesService,
+    CoverImageService,
     episodesRepositoryProvider,
     episodeSourcesRepositoryProvider,
   ],

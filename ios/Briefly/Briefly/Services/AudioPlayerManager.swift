@@ -19,13 +19,18 @@ final class AudioPlayerManager: NSObject, ObservableObject {
 
     func play(episode: Episode) {
         guard let url = episode.audioURL else { return }
+        // Stop observing the previous player before swapping in a new instance.
+        removeTimeObserverIfNeeded()
+        player?.pause()
+
         currentEpisode = episode
-        player = AVPlayer(url: url)
+        let newPlayer = AVPlayer(url: url)
+        player = newPlayer
         addTimeObserver()
-        player?.play()
-        player?.rate = Float(playbackSpeed)
+        newPlayer.play()
+        newPlayer.rate = Float(playbackSpeed)
         isPlaying = true
-        durationSeconds = episode.durationSeconds ?? player?.currentItem?.asset.duration.seconds ?? 0
+        durationSeconds = episode.durationSeconds ?? newPlayer.currentItem?.asset.duration.seconds ?? 0
     }
 
     func pause() {
@@ -63,6 +68,27 @@ final class AudioPlayerManager: NSObject, ObservableObject {
         }
     }
 
+    /// Refresh the current episode metadata with a freshly fetched list.
+    /// If the episode no longer exists, stop playback to keep UI in sync.
+    func syncCurrentEpisode(with episodes: [Episode]) {
+        guard let current = currentEpisode else { return }
+        if let updated = episodes.first(where: { $0.id == current.id }) {
+            // Only update when metadata changes to avoid unnecessary publishes.
+            if updated.title != current.title ||
+                updated.episodeNumber != current.episodeNumber ||
+                updated.summary != current.summary ||
+                updated.audioURL != current.audioURL ||
+                updated.durationSeconds != current.durationSeconds ||
+                updated.status != current.status {
+                currentEpisode = updated
+                durationSeconds = updated.durationSeconds ?? durationSeconds
+            }
+        } else {
+            stop()
+            currentEpisode = nil
+        }
+    }
+
     private func configureSession() {
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, options: [.interruptSpokenAudioAndMixWithOthers])
@@ -72,7 +98,7 @@ final class AudioPlayerManager: NSObject, ObservableObject {
     }
 
     private func addTimeObserver() {
-        timeObserver.map { player?.removeTimeObserver($0) }
+        removeTimeObserverIfNeeded()
         let interval = CMTime(seconds: 0.5, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
         timeObserver = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             guard let self, let duration = self.player?.currentItem?.duration.seconds, duration.isFinite else { return }
@@ -83,9 +109,14 @@ final class AudioPlayerManager: NSObject, ObservableObject {
         }
     }
 
-    deinit {
-        if let timeObserver {
-            player?.removeTimeObserver(timeObserver)
+    private func removeTimeObserverIfNeeded() {
+        if let player, let timeObserver {
+            player.removeTimeObserver(timeObserver)
+            self.timeObserver = nil
         }
+    }
+
+    deinit {
+        removeTimeObserverIfNeeded()
     }
 }

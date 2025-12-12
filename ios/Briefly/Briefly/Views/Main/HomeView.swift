@@ -3,6 +3,7 @@ import SwiftUI
 struct HomeView: View {
     @ObservedObject var viewModel: HomeViewModel
     @EnvironmentObject private var audioManager: AudioPlayerManager
+    @State private var bannerMessage: String?
 
     var body: some View {
         VStack(spacing: 20) {
@@ -10,7 +11,7 @@ struct HomeView: View {
             magicButton
             if let episode = viewModel.latestEpisode {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(episode.title)
+                    Text(episode.displayTitle)
                         .font(.title2.bold())
                     Text(episode.summary)
                         .foregroundColor(.secondary)
@@ -19,7 +20,7 @@ struct HomeView: View {
                 .padding()
             } else if viewModel.isLoading {
                 ProgressView("Loading latest episode…")
-            } else {
+            } else if viewModel.errorMessage == nil {
                 Text("No episode yet. Generate one from onboarding.")
                     .foregroundColor(.secondary)
             }
@@ -31,8 +32,23 @@ struct HomeView: View {
         .onAppear {
             Task { await viewModel.loadLatest() }
         }
-        .alert(item: Binding.constant(viewModel.errorMessage.map { LocalizedErrorWrapper(message: $0) })) { wrapper in
-            Alert(title: Text("Error"), message: Text(wrapper.message), dismissButton: .default(Text("OK")))
+        .overlay(alignment: .top) {
+            bannerView
+        }
+        .overlay {
+            if let message = viewModel.errorMessage, viewModel.latestEpisode == nil {
+                FullScreenErrorView(
+                    title: "Couldn't load Briefly",
+                    message: message,
+                    actionTitle: "Retry"
+                ) {
+                    Task { await viewModel.loadLatest() }
+                }
+                .transition(.opacity)
+            }
+        }
+        .onChange(of: viewModel.errorMessage) { newValue in
+            handleErrorChange(newValue)
         }
     }
 
@@ -54,7 +70,46 @@ struct HomeView: View {
     }
 }
 
-struct LocalizedErrorWrapper: Identifiable {
-    let id = UUID()
-    let message: String
+private extension HomeView {
+    @ViewBuilder
+    var bannerView: some View {
+        if let bannerMessage {
+            ErrorBanner(
+                message: bannerMessage,
+                actionTitle: "Retry",
+                action: { Task { await viewModel.loadLatest() } },
+                onDismiss: { hideBanner(message: bannerMessage) }
+            )
+            .transition(.move(edge: .top).combined(with: .opacity))
+            .padding(.top, 8)
+        }
+    }
+
+    func handleErrorChange(_ message: String?) {
+        guard let message else {
+            hideBanner()
+            return
+        }
+        if viewModel.latestEpisode == nil {
+            hideBanner()
+        } else {
+            showBanner(message)
+        }
+    }
+
+    func showBanner(_ message: String) {
+        withAnimation {
+            bannerMessage = message
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+            hideBanner(message: message)
+        }
+    }
+
+    func hideBanner(message: String? = nil) {
+        guard message == nil || message == bannerMessage else { return }
+        withAnimation {
+            bannerMessage = nil
+        }
+    }
 }

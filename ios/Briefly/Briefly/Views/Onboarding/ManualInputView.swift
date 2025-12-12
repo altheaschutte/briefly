@@ -25,9 +25,7 @@ struct ManualInputView: View {
                 }
 
             if let error = viewModel.errorMessage {
-                Text(error)
-                    .foregroundColor(.red)
-                    .font(.footnote)
+                InlineErrorText(message: error)
             }
 
             Button(action: {

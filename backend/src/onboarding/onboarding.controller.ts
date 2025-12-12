@@ -21,6 +21,7 @@ export class OnboardingController {
     let debounce: NodeJS.Timeout | null = null;
     let processing = false;
     let closed = false;
+    let finished = false;
 
     const flushPartial = async () => {
       if (closed || processing) {
@@ -79,6 +80,7 @@ export class OnboardingController {
           await this.onboardingService.recordPartialTranscript(userId, session.id, lastTranscript);
         }
         const result = await this.onboardingService.finalizeSession(userId, session.id, lastTranscript);
+        finished = true;
         this.writeEvent(res, 'completed', {
           session_id: session.id,
           transcript: result.record.transcript,
@@ -102,6 +104,15 @@ export class OnboardingController {
       closed = true;
       if (debounce) {
         clearTimeout(debounce);
+      }
+      if (!finished) {
+        this.onboardingService
+          .cancelSession(userId, session.id)
+          .catch((error) =>
+            this.logger.error(
+              `Failed to cancel onboarding session ${session.id}: ${error instanceof Error ? error.message : error}`,
+            ),
+          );
       }
       if (!res.writableEnded) {
         res.end();

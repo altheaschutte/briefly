@@ -12,6 +12,9 @@ export class StorageService {
   private bucket?: string;
   private region?: string;
   private client?: S3Client;
+  private imageBucket?: string;
+  private imageRegion?: string;
+  private imageClient?: S3Client;
   private readonly driver: 's3' | 'local';
 
   constructor(private readonly configService: ConfigService) {
@@ -46,6 +49,36 @@ export class StorageService {
     return { key: objectKey, url: this.getPublicUrl(objectKey), localPath };
   }
 
+  async uploadImage(buffer: Buffer, key?: string): Promise<{ key: string; url: string; localPath?: string }> {
+    if (this.driver === 'local') {
+      const objectKey = key ?? `images/${uuid()}.png`;
+      const fullPath = await this.saveLocalCopy(objectKey, buffer);
+      return { key: fullPath, url: `file://${fullPath}`, localPath: fullPath };
+    }
+
+    const { bucket, region, client } = this.getImageClient();
+    const objectKey = key ?? `images/${uuid()}.png`;
+    await client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: objectKey,
+        Body: buffer,
+        ContentType: 'image/png',
+      }),
+    );
+    let localPath: string | undefined;
+    if (this.shouldMirrorToLocal()) {
+      try {
+        localPath = await this.saveLocalCopy(objectKey, buffer);
+      } catch (error) {
+        this.logger.warn(
+          `Failed to save local image copy for ${objectKey}: ${error instanceof Error ? error.message : error}`,
+        );
+      }
+    }
+    return { key: objectKey, url: this.getPublicUrlForBucket(bucket, region, objectKey), localPath };
+  }
+
   async getSignedUrl(key: string, expiresInSeconds = 60 * 60 * 6): Promise<string> {
     if (this.driver === 'local') {
       return key.startsWith('file://') ? key : `file://${key}`;
@@ -56,14 +89,6 @@ export class StorageService {
       Key: this.normalizeKey(key),
     });
     return getS3SignedUrl(client, command, { expiresIn: expiresInSeconds });
-  }
-
-  getPublicUrl(key: string): string {
-    if (this.driver === 'local') {
-      return key.startsWith('file://') ? key : `file://${path.resolve(key)}`;
-    }
-    const { bucket, region } = this.requireConfigBundle();
-    return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
   }
 
   private shouldMirrorToLocal(): boolean {
@@ -114,6 +139,26 @@ export class StorageService {
     return { bucket, region, client: this.client };
   }
 
+  private getImageClient(): { bucket: string; region: string; client: S3Client } {
+    if (this.imageClient && this.imageBucket && this.imageRegion) {
+      return { bucket: this.imageBucket, region: this.imageRegion, client: this.imageClient };
+    }
+
+    const { bucket, region, accessKeyId, secretAccessKey, endpoint } = this.requireImageConfigBundle();
+    this.imageClient = new S3Client({
+      region,
+      endpoint: endpoint || undefined,
+      forcePathStyle: Boolean(endpoint),
+      credentials: {
+        accessKeyId,
+        secretAccessKey,
+      },
+    });
+    this.imageBucket = bucket;
+    this.imageRegion = region;
+    return { bucket, region, client: this.imageClient };
+  }
+
   private requireConfigBundle() {
     const bucket = this.requireConfig('S3_BUCKET_NAME');
     const region = this.requireConfig('S3_REGION');
@@ -123,11 +168,34 @@ export class StorageService {
     return { bucket, region, accessKeyId, secretAccessKey, endpoint };
   }
 
+  private requireImageConfigBundle() {
+    const base = this.requireConfigBundle();
+    const imageBucket = this.configService.get<string>('S3_IMAGES_BUCKET_NAME');
+    const imageRegion = this.configService.get<string>('S3_IMAGES_REGION');
+    return {
+      ...base,
+      bucket: imageBucket || base.bucket,
+      region: imageRegion || base.region,
+    };
+  }
+
   private requireConfig(key: string): string {
     const value = this.configService.get<string>(key);
     if (!value) {
       throw new Error(`Missing required env var: ${key}`);
     }
     return value;
+  }
+
+  getPublicUrl(key: string): string {
+    if (this.driver === 'local') {
+      return key.startsWith('file://') ? key : `file://${path.resolve(key)}`;
+    }
+    const { bucket, region } = this.requireConfigBundle();
+    return this.getPublicUrlForBucket(bucket, region, key);
+  }
+
+  private getPublicUrlForBucket(bucket: string, region: string, key: string): string {
+    return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
   }
 }

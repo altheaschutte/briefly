@@ -1,7 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { LLM_PROVIDER_TOKEN } from './llm.constants';
 import { LlmProvider, ScriptGenerationResult } from './llm.provider';
-import { EpisodeSegment } from '../domain/types';
+import { EpisodeSegment, EpisodeSource } from '../domain/types';
+import { EpisodeMetadata } from './llm.provider';
 
 @Injectable()
 export class LlmService implements LlmProvider {
@@ -9,6 +10,19 @@ export class LlmService implements LlmProvider {
 
   generateTopicQueries(topic: string, previousQueries: string[]): Promise<string[]> {
     return this.provider.generateTopicQueries(topic, previousQueries);
+  }
+
+  generateSegmentScript(
+    title: string,
+    findings: string,
+    sources: EpisodeSource[],
+    targetDurationMinutes?: number,
+  ): Promise<string> {
+    return this.provider.generateSegmentScript(title, findings, sources, targetDurationMinutes);
+  }
+
+  generateEpisodeMetadata(script: string, segments: EpisodeSegment[]): Promise<EpisodeMetadata> {
+    return this.provider.generateEpisodeMetadata(script, segments);
   }
 
   generateScript(segments: EpisodeSegment[], targetDurationMinutes?: number): Promise<ScriptGenerationResult> {

@@ -1,7 +1,8 @@
 import axios from 'axios';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { v4 as uuid } from 'uuid';
+import { parseBuffer } from 'music-metadata';
 import { StorageService } from '../storage/storage.service';
 import { TtsProvider, TtsSynthesisResult } from './tts.interfaces';
 
@@ -11,6 +12,7 @@ export class ElevenLabsProvider implements TtsProvider {
   private readonly hostVoiceId: string;
   private readonly guestVoiceId: string;
   private readonly modelId: string;
+  private readonly logger = new Logger(ElevenLabsProvider.name);
 
   constructor(
     private readonly configService: ConfigService,
@@ -25,7 +27,7 @@ export class ElevenLabsProvider implements TtsProvider {
 
   async synthesize(
     script: string,
-    options: { voiceA: string; voiceB: string },
+    options: { voiceA: string; voiceB: string; storageKey?: string },
   ): Promise<TtsSynthesisResult> {
     const apiKey = this.getApiKey();
     const voiceId = options.voiceA || this.hostVoiceId;
@@ -53,9 +55,11 @@ export class ElevenLabsProvider implements TtsProvider {
       },
     );
 
-    const key = `audio/${uuid()}.mp3`;
-    const upload = await this.storageService.uploadAudio(Buffer.from(response.data), key);
-    return { audioUrl: upload.url, storageKey: upload.key };
+    const buffer = Buffer.from(response.data);
+    const durationSeconds = await this.measureDurationSeconds(buffer);
+    const key = options.storageKey || `audio/${uuid()}.mp3`;
+    const upload = await this.storageService.uploadAudio(buffer, key);
+    return { audioUrl: upload.url, storageKey: upload.key, durationSeconds };
   }
 
   private getApiKey(): string {
@@ -64,5 +68,21 @@ export class ElevenLabsProvider implements TtsProvider {
       throw new Error('ELEVENLABS_API_KEY must be set for ElevenLabs TTS');
     }
     return apiKey;
+  }
+
+  private async measureDurationSeconds(buffer: Buffer): Promise<number | undefined> {
+    try {
+      const metadata = await parseBuffer(buffer, 'audio/mpeg');
+      const seconds = metadata?.format?.duration;
+      if (!seconds || !isFinite(seconds) || seconds <= 0) {
+        return undefined;
+      }
+      return Math.round(seconds);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to read audio duration from ElevenLabs response: ${error instanceof Error ? error.message : error}`,
+      );
+      return undefined;
+    }
   }
 }

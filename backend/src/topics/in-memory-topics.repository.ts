@@ -2,14 +2,18 @@ import { Injectable } from '@nestjs/common';
 import { v4 as uuid } from 'uuid';
 import { InMemoryStoreService } from '../common/in-memory-store.service';
 import { Topic } from '../domain/types';
-import { TopicUpdateInput, TopicsRepository } from './topics.repository';
+import { TopicListFilter, TopicUpdateInput, TopicsRepository } from './topics.repository';
 
 @Injectable()
 export class InMemoryTopicsRepository implements TopicsRepository {
   constructor(private readonly store: InMemoryStoreService) {}
 
-  async listByUser(userId: string): Promise<Topic[]> {
-    return this.store.getTopics(userId);
+  async listByUser(userId: string, filter?: TopicListFilter): Promise<Topic[]> {
+    const topics = this.store.getTopics(userId);
+    if (filter?.isActive === undefined) {
+      return topics;
+    }
+    return topics.filter((topic) => topic.isActive === filter.isActive);
   }
 
   async getById(userId: string, topicId: string): Promise<Topic | undefined> {
@@ -18,10 +22,13 @@ export class InMemoryTopicsRepository implements TopicsRepository {
 
   async create(userId: string, originalText: string): Promise<Topic> {
     const now = new Date();
+    const existing = await this.listByUser(userId);
+    const nextOrder = existing.length ? Math.max(...existing.map((t) => t.orderIndex)) + 1 : 0;
     const topic: Topic = {
       id: uuid(),
       userId,
       originalText,
+      orderIndex: nextOrder,
       isActive: true,
       createdAt: now,
       updatedAt: now,
@@ -34,6 +41,7 @@ export class InMemoryTopicsRepository implements TopicsRepository {
     return this.store.updateTopic(userId, topicId, {
       originalText: updates.originalText,
       isActive: updates.isActive,
+      orderIndex: updates.orderIndex,
     });
   }
 }
