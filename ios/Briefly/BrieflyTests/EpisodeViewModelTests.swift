@@ -17,6 +17,32 @@ final class EpisodeViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.sections.first?.episodes.first?.title, "Morning Briefly")
     }
+
+    func testLatestEpisodeSkipsNonReadyEpisodes() async {
+        let now = Date()
+        let pending = Episode(id: UUID(),
+                              title: "Pending Briefly",
+                              summary: "Still generating.",
+                              audioURL: nil,
+                              createdAt: now,
+                              topics: [],
+                              status: "queued")
+        let ready = Episode(id: UUID(),
+                            title: "Ready Briefly",
+                            summary: "Finished episode.",
+                            audioURL: URL(string: "https://example.com/audio.mp3"),
+                            createdAt: now.addingTimeInterval(-3600),
+                            topics: [],
+                            status: "ready")
+        let service = MockEpisodeProvider(episodes: [pending, ready])
+        let viewModel = EpisodesViewModel(episodeService: service)
+
+        await viewModel.load()
+
+        XCTAssertEqual(viewModel.latestEpisode?.id, ready.id)
+        XCTAssertFalse(viewModel.previousEpisodes.contains(where: { $0.id == pending.id }))
+        XCTAssertEqual(viewModel.sections.flatMap(\.episodes).count, 1)
+    }
 }
 
 struct MockEpisodeProvider: EpisodeProviding {

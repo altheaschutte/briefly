@@ -18,15 +18,20 @@ final class EpisodesViewModel: ObservableObject {
         self.episodeService = episodeService
     }
 
+    private var readyEpisodes: [Episode] {
+        episodes.filter { $0.isReady }
+    }
+
     var latestEpisode: Episode? {
-        episodes.first
+        readyEpisodes.first
     }
 
     var previousEpisodes: [Episode] {
-        Array(episodes.dropFirst())
+        Array(readyEpisodes.dropFirst())
     }
 
     var sections: [EpisodeSection] {
+        let episodes = readyEpisodes
         let calendar = Calendar.current
         let now = Date()
         var today: [Episode] = []

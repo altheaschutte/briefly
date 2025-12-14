@@ -96,6 +96,13 @@ export class SupabaseTopicQueriesRepository implements TopicQueriesRepository {
     const citations = Array.isArray(row.citations)
       ? row.citations.map((citation) => String(citation))
       : [];
+    const normalizedIntent = typeof row.intent === 'string' ? row.intent.trim().toLowerCase() : undefined;
+    const intent =
+      normalizedIntent === 'multi_item'
+        ? 'multi_item'
+        : normalizedIntent === 'single_story'
+            ? 'single_story'
+            : undefined;
     return {
       id: row.id,
       userId: row.user_id,
@@ -105,6 +112,7 @@ export class SupabaseTopicQueriesRepository implements TopicQueriesRepository {
       answer: row.answer ?? '',
       citations,
       orderIndex: row.order_index,
+      intent,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
     };

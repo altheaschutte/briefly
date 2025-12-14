@@ -10,7 +10,8 @@ struct PlayerBarView: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(episode.displayTitle)
-                                .font(.headline)
+                                .font(.caption2)
+                                .lineLimit(1)
                             Text(timeString(audioManager.currentTimeSeconds) + " / " + timeString(audioManager.durationSeconds))
                                 .font(.caption)
                                 .foregroundColor(.secondary)

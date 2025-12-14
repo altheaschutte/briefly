@@ -17,7 +17,7 @@ struct MainTabView: View {
         _topicsViewModel = StateObject(wrappedValue: TopicsViewModel(topicService: appViewModel.topicService))
         _settingsViewModel = StateObject(wrappedValue: SettingsViewModel(appViewModel: appViewModel,
                                                                          audioManager: appViewModel.audioPlayer))
-        _selection = State(initialValue: appViewModel.hasCompletedOnboarding ? .feed : .create)
+        _selection = State(initialValue: .feed)
     }
 
     var body: some View {

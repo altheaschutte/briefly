@@ -64,12 +64,32 @@ final class EpisodeService: EpisodeProviding {
 
     func fetchEpisode(id: UUID) async throws -> Episode {
         let detail = APIEndpoint(path: "/episodes/\(id.uuidString)", method: .get)
-        return try await apiClient.request(detail)
+        var episode: Episode = try await apiClient.request(detail)
+        if episode.audioURL == nil {
+            episode.audioURL = await fetchSignedAudioURL(for: id)
+        }
+        return episode
     }
 
     func deleteEpisode(id: UUID) async throws {
         let endpoint = APIEndpoint(path: "/episodes/\(id.uuidString)", method: .delete)
         try await apiClient.requestVoid(endpoint)
+    }
+
+    private func fetchSignedAudioURL(for id: UUID) async -> URL? {
+        let endpoint = APIEndpoint(path: "/episodes/\(id.uuidString)/audio", method: .get)
+        struct Response: Decodable {
+            let audioUrl: String?
+            let audio_url: String?
+        }
+        guard let response: Response = try? await apiClient.request(endpoint) else {
+            return nil
+        }
+        let value = response.audioUrl ?? response.audio_url
+        guard let urlString = value, let url = URL(string: urlString) else {
+            return nil
+        }
+        return url
     }
 }
 

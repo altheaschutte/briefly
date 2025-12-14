@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Job } from 'bullmq';
 import { v4 as uuid } from 'uuid';
 import { TopicsService } from '../topics/topics.service';
@@ -6,12 +7,21 @@ import { EpisodesService } from './episodes.service';
 import { LlmService } from '../llm/llm.service';
 import { PerplexityService } from '../perplexity/perplexity.service';
 import { TtsService } from '../tts/tts.service';
-import { Episode, EpisodeSegment, EpisodeSource, TopicQuery } from '../domain/types';
+import { Episode, EpisodeSegment, EpisodeSource } from '../domain/types';
 import { InMemoryStoreService } from '../common/in-memory-store.service';
 import { EpisodeSourcesService } from './episode-sources.service';
 import { TopicQueriesService } from '../topic-queries/topic-queries.service';
 import { TopicQueryCreateInput } from '../topic-queries/topic-queries.repository';
 import { CoverImageService } from './cover-image.service';
+import { getDefaultVoices } from '../tts/voice-config';
+import {
+  buildEpisodeSources,
+  buildSegmentContent,
+  combineDialogueScripts,
+  estimateDurationSeconds,
+  renderDialogueScript,
+  selectFreshQueries,
+} from './episode-script.utils';
 
 @Injectable()
 export class EpisodeProcessorService {
@@ -27,6 +37,7 @@ export class EpisodeProcessorService {
     private readonly episodeSourcesService: EpisodeSourcesService,
     private readonly store: InMemoryStoreService,
     private readonly coverImageService: CoverImageService,
+    private readonly configService: ConfigService,
   ) {}
 
   async process(job: Job<{ episodeId: string; userId: string }>): Promise<void> {
@@ -35,29 +46,34 @@ export class EpisodeProcessorService {
       const episode = await this.episodesService.getEpisode(userId, episodeId);
       const targetDuration = episode.targetDurationMinutes;
       await this.markEpisodeStatus(userId, episodeId, 'rewriting_queries');
-      const topics = (await this.topicsService.listTopics(userId))
+      const activeTopics = (await this.topicsService.listTopics(userId))
         .filter((t) => t.isActive)
         .sort((a, b) => a.orderIndex - b.orderIndex);
-      if (!topics.length) {
+      if (!activeTopics.length) {
         throw new Error('No active topics configured for user');
       }
-      const perSegmentTargetMinutes = Math.max(1, Math.round(targetDuration / topics.length));
+      const testMode = this.isTestModeEnabled();
+      const topics = testMode ? activeTopics.slice(0, 1) : activeTopics;
+      if (testMode && activeTopics.length > topics.length) {
+        this.logger.log(`API_TEST_MODE enabled: limiting episode ${episodeId} to ${topics.length} segment(s)`);
+      }
+      const perSegmentTargetMinutes = Math.max(1, Math.round(targetDuration / activeTopics.length));
 
       await this.markEpisodeStatus(userId, episodeId, 'retrieving_content');
       const segments: EpisodeSegment[] = [];
       const sources: EpisodeSource[] = [];
       let cumulativeStartSeconds = 0;
-      const voiceA = process.env.TTS_VOICE_A || 'abRFZIdN4pvo8ZPmGxHP';
-      const voiceB = process.env.TTS_VOICE_B || '5GZaeOOG7yqLdoTRsaa6';
+      const { voiceA, voiceB } = getDefaultVoices(this.configService);
 
       for (const [index, topic] of topics.entries()) {
         const previousQueries = await this.topicQueriesService.listByTopic(userId, topic.id);
-        const suggestedQueries = await this.llmService.generateTopicQueries(
+        const topicPlan = await this.llmService.generateTopicQueries(
           topic.originalText,
           previousQueries.map((q) => q.query),
         );
-        const freshQueries = this.selectFreshQueries(suggestedQueries, previousQueries);
-        const fallbackQueries = this.selectFreshQueries([topic.originalText], previousQueries);
+        const topicIntent = topicPlan.intent;
+        const freshQueries = selectFreshQueries(topicPlan.queries, previousQueries);
+        const fallbackQueries = selectFreshQueries([topic.originalText], previousQueries);
         const plannedQueries = (freshQueries.length ? freshQueries : fallbackQueries).slice(0, 5);
         const queriesToRun = plannedQueries.length ? plannedQueries : [topic.originalText];
 
@@ -71,21 +87,31 @@ export class EpisodeProcessorService {
             answer: perplexityResult.answer,
             citations: perplexityResult.citations || [],
             orderIndex,
+            intent: topicIntent,
           });
         }
 
         const savedQueries = await this.topicQueriesService.createMany(userId, queryResults);
-        const segmentSources = this.buildEpisodeSources(savedQueries, episodeId);
-        const segmentContent = this.buildSegmentContent(topic.originalText, savedQueries);
-        const segmentScript = await this.llmService.generateSegmentScript(
+        const segmentSources = buildEpisodeSources(savedQueries, episodeId);
+        const segmentContent = buildSegmentContent(topic.originalText, savedQueries);
+        let segmentDialogue = await this.llmService.generateSegmentScript(
           topic.originalText,
           segmentContent,
           segmentSources,
+          topicIntent,
           perSegmentTargetMinutes,
         );
-        const segmentTtsResult = await this.ttsService.synthesize(segmentScript, { voiceA, voiceB });
-        const segmentAudioUrl = segmentTtsResult.audioUrl ?? segmentTtsResult.storageKey;
-        const segmentDurationSeconds = segmentTtsResult.durationSeconds ?? this.estimateDurationSeconds(segmentScript);
+        try {
+          segmentDialogue = await this.llmService.enhanceSegmentDialogueForElevenV3(segmentDialogue);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          this.logger.warn(`Dialogue enhancement failed for topic ${topic.id}: ${message}`);
+        }
+        const segmentScriptText = renderDialogueScript(segmentDialogue);
+        const segmentTtsResult = await this.ttsService.synthesize(segmentDialogue, { voiceA, voiceB });
+        const segmentAudioUrl = segmentTtsResult.storageKey ?? segmentTtsResult.audioUrl;
+        const segmentDurationSeconds =
+          segmentTtsResult.durationSeconds ?? estimateDurationSeconds(segmentScriptText);
         const segmentStartSeconds = cumulativeStartSeconds;
         cumulativeStartSeconds += segmentDurationSeconds;
 
@@ -94,9 +120,11 @@ export class EpisodeProcessorService {
           episodeId,
           orderIndex: index,
           title: topic.originalText,
+          intent: segmentDialogue.intent || topicIntent,
           rawContent: segmentContent,
           rawSources: segmentSources,
-          script: segmentScript,
+          script: segmentScriptText,
+          dialogueScript: segmentDialogue,
           audioUrl: segmentAudioUrl,
           startTimeSeconds: segmentStartSeconds,
           durationSeconds: segmentDurationSeconds,
@@ -108,7 +136,8 @@ export class EpisodeProcessorService {
       await this.episodeSourcesService.replaceSources(episodeId, sources);
 
       await this.markEpisodeStatus(userId, episodeId, 'generating_script');
-      const fullScript = this.combineSegmentScripts(segments);
+      const fullDialogue = combineDialogueScripts(segments);
+      const fullScript = renderDialogueScript(fullDialogue);
 
       await this.markEpisodeStatus(userId, episodeId, 'generating_audio');
       const metadata = await this.llmService.generateEpisodeMetadata(fullScript, segments);
@@ -122,9 +151,9 @@ export class EpisodeProcessorService {
           return { prompt: coverPrompt } as { prompt: string; imageUrl?: string; storageKey?: string };
         });
       const audioKey = `${userId}/${episodeId}.mp3`;
-      const ttsPromise = this.ttsService.synthesize(fullScript, { voiceA, voiceB, storageKey: audioKey });
+      const ttsPromise = this.ttsService.synthesize(fullDialogue, { voiceA, voiceB, storageKey: audioKey });
       const [ttsResult, coverResult] = await Promise.all([ttsPromise, coverPromise]);
-      const audioUrl = ttsResult.audioUrl ?? ttsResult.storageKey;
+      const audioUrl = ttsResult.storageKey ?? ttsResult.audioUrl;
       const episodeDurationSeconds = ttsResult.durationSeconds ?? cumulativeStartSeconds;
 
       await this.markEpisodeStatus(userId, episodeId, 'ready', {
@@ -146,28 +175,6 @@ export class EpisodeProcessorService {
     }
   }
 
-  private selectFreshQueries(candidateQueries: string[], previousQueries: TopicQuery[]): string[] {
-    const used = new Set(
-      (previousQueries || []).map((q) => q.query.trim().toLowerCase()).filter((q) => q.length > 0),
-    );
-    const seen = new Set<string>();
-    const fresh: string[] = [];
-
-    for (const candidate of candidateQueries || []) {
-      const normalized = candidate.trim();
-      if (!normalized) {
-        continue;
-      }
-      const key = normalized.toLowerCase();
-      if (used.has(key) || seen.has(key)) {
-        continue;
-      }
-      seen.add(key);
-      fresh.push(normalized);
-    }
-    return fresh;
-  }
-
   private async markEpisodeStatus(
     userId: string,
     episodeId: string,
@@ -177,58 +184,15 @@ export class EpisodeProcessorService {
     await this.episodesService.updateEpisode(userId, episodeId, { status, ...extra });
   }
 
-  private buildEpisodeSources(queries: TopicQuery[], episodeId: string): EpisodeSource[] {
-    const seen = new Set<string>();
-    const results: EpisodeSource[] = [];
-
-    for (const query of queries || []) {
-      for (const raw of query.citations || []) {
-        const citation = (raw || '').trim();
-        if (!citation) {
-          continue;
-        }
-        const normalized = citation.toLowerCase();
-        if (seen.has(normalized)) {
-          continue;
-        }
-        seen.add(normalized);
-        results.push({
-          id: uuid(),
-          episodeId,
-          sourceTitle: citation,
-          url: citation,
-          type: 'perplexity_citation',
-        });
-      }
+  private isTestModeEnabled(): boolean {
+    const value = this.configService.get('API_TEST_MODE');
+    if (typeof value === 'boolean') {
+      return value;
     }
-
-    return results;
-  }
-
-  private buildSegmentContent(topicTitle: string, queries: TopicQuery[]): string {
-    if (!queries.length) {
-      return topicTitle;
+    if (typeof value !== 'string') {
+      return false;
     }
-    const ordered = [...queries].sort((a, b) => a.orderIndex - b.orderIndex);
-    return ordered
-      .map((query, idx) => {
-        const answer = query.answer?.trim() || 'No answer returned';
-        return `Query ${idx + 1}: ${query.query}\nFindings: ${answer}`;
-      })
-      .join('\n\n');
-  }
-
-  private combineSegmentScripts(segments: EpisodeSegment[]): string {
-    return segments
-      .sort((a, b) => a.orderIndex - b.orderIndex)
-      .map((segment) => segment.script || segment.rawContent || segment.title || '')
-      .filter((text) => text.trim().length > 0)
-      .join('\n\n');
-  }
-
-  private estimateDurationSeconds(script: string): number {
-    const words = (script || '').split(/\s+/).filter(Boolean).length;
-    const seconds = words / 2.5; // ~150 wpm
-    return Math.max(8, Math.round(seconds));
+    const normalized = value.trim().toLowerCase();
+    return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on';
   }
 }

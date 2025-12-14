@@ -53,6 +53,7 @@
 		ED150F1EB076104C7BD3D241 /* OnboardingVoiceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A7CA2CC98180B43613BA498 /* OnboardingVoiceService.swift */; };
 		F85D310421C652BDC79E120B /* AuthToken.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BB7F45006ED55441EE8E1A9 /* AuthToken.swift */; };
 		FEC0D559A22F915BB1FAFAC8 /* EpisodesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 892D63BC7941AE98C69301D2 /* EpisodesViewModel.swift */; };
+		A1FC9270250B4CB7A4DE37A7 /* BrandColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE9FD7F1F1DA43EEB9D77D27 /* BrandColors.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -115,6 +116,7 @@
 		F28F1C20034EFD05EF4BED35 /* TopicsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicsViewModel.swift; sourceTree = "<group>"; };
 		F6D26D15DB3DFE43BFB64269 /* APIConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIConfig.swift; sourceTree = "<group>"; };
 		F8898DDB7383A2DDE17A9A9F /* AppViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppViewModel.swift; sourceTree = "<group>"; };
+		EE9FD7F1F1DA43EEB9D77D27 /* BrandColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrandColors.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -225,6 +227,14 @@
 			path = App;
 			sourceTree = "<group>";
 		};
+		A068E9E8B64E4B3EA1B289DA /* Theme */ = {
+			isa = PBXGroup;
+			children = (
+				EE9FD7F1F1DA43EEB9D77D27 /* BrandColors.swift */,
+			);
+			path = Theme;
+			sourceTree = "<group>";
+		};
 		BD7F6D7A652A03F6151B9A4E /* Briefly */ = {
 			isa = PBXGroup;
 			children = (
@@ -234,6 +244,7 @@
 				748376ACE9408F9FB9784F4F /* Services */,
 				85B13898D63078E7D314C8B2 /* ViewModels */,
 				8287917784F63299FA4E9EE3 /* Views */,
+				A068E9E8B64E4B3EA1B289DA /* Theme */,
 			);
 			path = Briefly;
 			sourceTree = "<group>";
@@ -399,6 +410,7 @@
 				4BA56CBFC459C7112AA4AB1B /* OnboardingViewModel.swift in Sources */,
 				ED150F1EB076104C7BD3D241 /* OnboardingVoiceService.swift in Sources */,
 				8842DC2A60D9803C1925122C /* PlayerBarView.swift in Sources */,
+				A1FC9270250B4CB7A4DE37A7 /* BrandColors.swift in Sources */,
 				CD6AE6195ACD047A83EA036A /* SettingsView.swift in Sources */,
 				416F51D467EFD635C8C5245E /* SettingsViewModel.swift in Sources */,
 				5008F51569C988DE8AFEE653 /* SetupView.swift in Sources */,

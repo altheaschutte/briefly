@@ -17,6 +17,7 @@ export interface TopicQuery {
   answer: string;
   citations: string[];
   orderIndex: number;
+  intent?: import('../llm/llm.types').TopicIntent;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -69,9 +70,11 @@ export interface EpisodeSegment {
   episodeId: string;
   orderIndex: number;
   title?: string;
+  intent?: import('../llm/llm.types').TopicIntent;
   rawContent: string;
   rawSources: EpisodeSource[];
   script?: string;
+  dialogueScript?: import('../llm/llm.types').SegmentDialogueScript;
   audioUrl?: string;
   startTimeSeconds?: number;
   durationSeconds?: number;

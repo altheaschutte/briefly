@@ -9,6 +9,7 @@ struct BrieflyApp: App {
             AppRootView()
                 .environmentObject(appViewModel)
                 .environmentObject(appViewModel.audioPlayer)
+                .tint(.brieflyPrimary)
         }
     }
 }

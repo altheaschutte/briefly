@@ -63,7 +63,7 @@ struct HomeView: View {
                     .font(.headline)
             }
             .frame(width: 180, height: 180)
-            .background(Color.blue)
+            .background(Color.brieflyPrimary)
             .clipShape(Circle())
             .shadow(radius: 10)
         }

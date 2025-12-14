@@ -15,17 +15,25 @@ export class CoverImageService {
   ) {}
 
   buildPrompt(title?: string, segments: EpisodeSegment[] = []): string {
-    const basePrompt =
-      'Abstract editorial illustration in a modern organic style. ' +
-      'Soft layered shapes with flowing curves and gentle overlaps. ' +
-      'Muted earth-tone palette (sage green, olive, warm beige, clay, off-white). ' +
-      'Subtle paper or gouache texture, matte finish. ' +
+    const STYLE =
+      'Premium podcast cover art. Modern editorial illustration. ' +
+      'Soft matte finish, subtle paper/gouache texture, pastel tones, clean shapes. ' +
       'Minimalist, calm, contemporary. ' +
-      'No text, no people, no faces, no realistic objects. ' +
-      'No sharp edges, no high contrast. ' +
-      'Podcast cover artwork.';
-    const tagline = this.buildTagline(title, segments);
-    return `${basePrompt} ${tagline}`.trim();
+      'No text, no logos, no watermarks. Avoid photorealism. ';
+
+    const hero = this.pickHeroSegment(segments);
+    const heroText = [title, hero?.title].filter(Boolean).join(' — ');
+    const motif = this.motifFromText(heroText || title || '');
+
+    const prompt =
+      STYLE +
+      `Subject: ${motif.subject}. ` +
+      `Color palette: ${motif.palette}. ` +
+      `Composition: ${motif.composition}. ` +
+      'Keep it stylized, flat shapes, gentle gradients, subtle texture. ' +
+      'High quality, cohesive, not busy.';
+
+    return prompt.trim();
   }
 
   async generateCoverImage(
@@ -52,36 +60,6 @@ export class CoverImageService {
     return { imageUrl: upload.url, storageKey: upload.key };
   }
 
-  private buildTagline(title?: string, segments: EpisodeSegment[] = []): string {
-    const trimmedTitle = title?.trim();
-    const topicTitles = (segments || [])
-      .map((segment) => segment.title?.trim())
-      .filter((t): t is string => Boolean(t))
-      .map((t) => t || '')
-      .filter((t) => t.length > 0);
-    const uniqueTopics: string[] = [];
-    for (const topic of topicTitles) {
-      const key = topic.toLowerCase();
-      if (!uniqueTopics.some((existing) => existing.toLowerCase() === key)) {
-        uniqueTopics.push(topic);
-      }
-      if (uniqueTopics.length >= 4) {
-        break;
-      }
-    }
-
-    if (trimmedTitle && uniqueTopics.length) {
-      return `Composition inspired by "${trimmedTitle}" and themes of ${uniqueTopics.join(', ')}.`;
-    }
-    if (trimmedTitle) {
-      return `Composition inspired by "${trimmedTitle}" with gently layered themes.`;
-    }
-    if (uniqueTopics.length) {
-      return `Composition inspired by ${uniqueTopics.join(', ')} in softly layered forms.`;
-    }
-    return 'Composition inspired by layered ideas and gentle convergence.';
-  }
-
   private getClient(): OpenAI {
     if (!this.client) {
       const apiKey = this.configService.get<string>('OPENAI_API_KEY');
@@ -94,5 +72,157 @@ export class CoverImageService {
       });
     }
     return this.client;
+  }
+
+  private pickHeroSegment(segments: EpisodeSegment[]): EpisodeSegment | undefined {
+    if (!segments?.length) {
+      return undefined;
+    }
+    return segments[0];
+  }
+
+  private motifFromText(text: string) {
+    const t = (text || '').toLowerCase();
+// WEEKEND / LIFESTYLE / LEISURE
+if (t.match(/weekend|lifestyle|leisure|relax|downtime/)) {
+  return {
+    subject:
+      "a simplified car with a surfboard on the roof, or a martini glass silhouette, or kids bicycles with helmets",
+    palette:
+      "pastel sky blue, sandy beige, soft coral, off-white",
+    composition:
+      "playful poster-style layout with floating objects and generous negative space",
+  };
+}
+
+// HIKING / OUTDOORS / NATURE
+if (t.match(/hike|hiking|trail|outdoors|nature|walk|forest|mountain/)) {
+  return {
+    subject:
+      "minimal hiking boots, winding trail lines, rolling hills, or layered mountains",
+    palette:
+      "soft moss green, warm stone, muted clay, pale sky blue",
+    composition:
+      "layered landscape composition with depth and gentle vertical rhythm",
+  };
+}
+
+// LOCAL EVENTS / WHAT'S ON
+if (t.match(/local events|what's on|nearby|community|festival|market|gig/)) {
+  return {
+    subject:
+      "map pin or location arrow combined with simple walking shoes, bicycle, or venue outline",
+    palette:
+      "pastel teal, warm sand, soft charcoal, off-white",
+    composition:
+      "collage-style layout with icon layered over abstract map shapes",
+  };
+}
+
+// NEWS / CURRENT EVENTS
+if (t.match(/news|breaking|headline|update|current events|today/)) {
+  return {
+    subject:
+      "simplified world map or local map with broadcast symbols like a microphone, radio waves, or megaphone",
+    palette:
+      "cool slate blue, muted red accent, fog gray, cream",
+    composition:
+      "balanced editorial layout with central map form and radiating signal lines",
+  };
+}
+
+// JOURNALISM / MEDIA / BROADCAST
+if (t.match(/media|journalism|press|broadcast|radio|podcast/)) {
+  return {
+    subject:
+      "vintage microphone, radio dial, newspaper blocks, or camera silhouette",
+    palette:
+      "warm beige, muted ink blue, soft charcoal, off-white",
+    composition:
+      "clean poster layout with strong central object and subtle texture",
+  };
+}
+
+// TECH / AI / AUTOMATION (expanded)
+if (t.match(/ai|artificial intelligence|machine learning|automation|robot|neural|algorithm/)) {
+  return {
+    subject:
+      "robotic arm, abstract neural network nodes, flowing data lines, or modular automation shapes",
+    palette:
+      "pastel indigo, soft mint, fog gray, pale lavender",
+    composition:
+      "asymmetrical tech collage with layered geometry and connecting lines",
+  };
+}
+
+// STARTUPS / BUSINESS / PRODUCT
+if (t.match(/startup|business|product|founder|growth|strategy|marketing/)) {
+  return {
+    subject:
+      "abstract building blocks, upward paths, roadmap shapes, or stacked panels",
+    palette:
+      "warm terracotta, muted navy, soft cream, pale gold",
+    composition:
+      "structured layout with clear directional flow suggesting progress",
+  };
+}
+
+// FINANCE / MONEY (expanded)
+if (t.match(/finance|markets|stocks|investing|money|inflation|rates|economy/)) {
+  return {
+    subject:
+      "minimal charts, rising curves, coins abstracted into circles, or layered financial graphs",
+    palette:
+      "muted emerald, warm gold, slate blue, off-white",
+    composition:
+      "diagonal or upward movement with layered bands suggesting momentum",
+  };
+}
+
+// FOOD / DRINK
+if (t.match(/food|drink|recipe|cooking|dinner|restaurant|coffee|wine|cocktail/)) {
+  return {
+    subject:
+      "stylized plate, cup, wine glass, bottle, or simple ingredients arranged abstractly",
+    palette:
+      "soft terracotta, olive green, creamy white, muted blush",
+    composition:
+      "top-down or centered composition with balanced spacing like a menu illustration",
+  };
+}
+
+// HEALTH / WELLNESS / FITNESS
+if (t.match(/health|fitness|exercise|yoga|sleep|nutrition|wellness/)) {
+  return {
+    subject:
+      "calm human silhouette, stretching figure, heart line, or flowing breath shapes",
+    palette:
+      "soft sage, misty blue, warm sand, off-white",
+    composition:
+      "centered, symmetrical layout with slow flowing curves",
+  };
+}
+
+// EDUCATION / LEARNING / EXPLAINERS
+if (t.match(/learn|education|explain|how to|guide|lesson|history/)) {
+  return {
+    subject:
+      "open book, layered paper sheets, timeline bands, or abstract knowledge paths",
+    palette:
+      "pale ochre, muted teal, soft gray, cream",
+    composition:
+      "horizontal progression or layered stacks suggesting learning flow",
+  };
+}
+
+// DEFAULT FALLBACK
+return {
+  subject:
+    "organic abstract shapes with a single expressive line-art gesture overlay",
+  palette:
+    "choose a coherent pastel palette with two main colors, one accent, and off-white",
+  composition:
+    "asymmetrical layout with one dominant shape and supporting secondary forms",
+};
   }
 }

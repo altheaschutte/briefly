@@ -21,7 +21,7 @@ struct WelcomeView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(width: 120, height: 120)
-                .foregroundColor(.blue)
+                .foregroundColor(Color.brieflyPrimary)
                 .padding(.vertical, 20)
 
             Button(action: onStart) {
@@ -29,7 +29,7 @@ struct WelcomeView: View {
                     .font(.headline)
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(Color.blue)
+                    .background(Color.brieflyPrimary)
                     .foregroundColor(.white)
                     .cornerRadius(16)
             }

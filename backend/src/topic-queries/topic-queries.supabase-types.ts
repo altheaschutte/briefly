@@ -7,6 +7,7 @@ export type TopicQueryRow = {
   answer?: string | null;
   citations?: string[] | null;
   order_index: number;
+  intent?: string | null;
   created_at: string;
   updated_at: string;
 };

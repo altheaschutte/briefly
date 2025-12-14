@@ -46,7 +46,7 @@ struct ManualInputView: View {
                         .padding()
                 }
             }
-            .background(Color.blue)
+            .background(Color.brieflyPrimary)
             .foregroundColor(.white)
             .cornerRadius(12)
 

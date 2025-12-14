@@ -48,6 +48,11 @@ struct TopicsView: View {
                         newTopicText = ""
                     }
                 }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+                .background(Color.brieflySecondary)
+                .foregroundColor(Color.brieflyPrimary)
+                .cornerRadius(10)
             }
         }
         .navigationTitle("Topics")

@@ -17,8 +17,7 @@ struct FeedView: View {
                 if let latest = viewModel.latestEpisode {
                     latestCard(for: latest)
                 } else if viewModel.isLoading {
-                    ProgressView("Loading your feed…")
-                        .frame(maxWidth: .infinity, alignment: .center)
+                    latestSkeletonCard
                 } else if viewModel.errorMessage == nil {
                     emptyState
                 }
@@ -43,6 +42,7 @@ struct FeedView: View {
             .padding()
         }
         .navigationTitle("Your Library")
+        .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(for: Episode.self) { episode in
             EpisodeDetailView(episode: episode)
         }
@@ -89,7 +89,7 @@ struct FeedView: View {
                     Text("Create an episode")
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.blue)
+                        .background(Color.brieflyPrimary)
                         .foregroundColor(.white)
                         .cornerRadius(12)
                 }
@@ -116,7 +116,7 @@ struct FeedView: View {
                           systemImage: audioManager.isPlaying && audioManager.currentEpisode?.id == episode.id ? "pause.fill" : "play.fill")
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.blue)
+                        .background(Color.brieflyPrimary)
                         .foregroundColor(.white)
                         .cornerRadius(12)
                 }
@@ -125,7 +125,8 @@ struct FeedView: View {
                     Text("Details")
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color(.tertiarySystemFill))
+                        .background(Color.brieflySecondary)
+                        .foregroundColor(Color.brieflyPrimary)
                         .cornerRadius(12)
                 }
                 .buttonStyle(.plain)
@@ -133,25 +134,27 @@ struct FeedView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemBackground))
-        .cornerRadius(16)
     }
 
     private func episodeHero(_ episode: Episode) -> some View {
-        VStack(alignment: .center, spacing: 10) {
+        let heroSize = min(UIScreen.main.bounds.width - 80, 260)
+
+        return VStack(alignment: .center, spacing: 10) {
             coverImage(for: episode)
-                .frame(height: 220)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 8)
+                .frame(width: heroSize, height: heroSize)
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .shadow(color: Color.black.opacity(0.18), radius: 22, x: 0, y: 14)
 
             Text(episode.displayTitle)
                 .font(.title2.bold())
                 .multilineTextAlignment(.center)
+                .padding(.top, 6)
             Text(episode.summary)
                 .foregroundColor(.secondary)
                 .lineLimit(3)
                 .multilineTextAlignment(.center)
         }
+        .padding(.bottom, 8)
     }
 
     private func togglePlay(_ episode: Episode) {
@@ -272,8 +275,8 @@ private struct EpisodeRow: View {
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 12)
-        .background(Color.purple.opacity(0.12))
-        .foregroundColor(Color.purple)
+        .background(Color.brieflyDurationBackground)
+        .foregroundColor(Color.brieflyPrimary)
         .clipShape(Capsule())
     }
 
@@ -302,9 +305,7 @@ private func coverImage(for episode: Episode) -> some View {
             AsyncImage(url: url) { phase in
                 switch phase {
                 case .empty:
-                    ProgressView()
-                        .progressViewStyle(.circular)
-                        .tint(.purple)
+                    SkeletonBlock()
                 case .success(let image):
                     image
                         .resizable()
@@ -325,4 +326,88 @@ private var fallbackArtwork: some View {
     Image(systemName: "waveform.circle.fill")
         .font(.system(size: 32, weight: .semibold))
         .foregroundColor(Color.purple)
+}
+
+private extension FeedView {
+    var latestSkeletonCard: some View {
+        let heroSize = min(UIScreen.main.bounds.width - 80, 260)
+
+        return VStack(alignment: .center, spacing: 12) {
+            SkeletonBlock(cornerRadius: 6)
+                .frame(width: 96, height: 12)
+                .opacity(0.85)
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            SkeletonBlock(cornerRadius: 22)
+                .frame(width: heroSize, height: heroSize)
+                .shadow(color: Color.black.opacity(0.14), radius: 22, x: 0, y: 14)
+
+            VStack(spacing: 8) {
+                // Title expects to wrap to two lines.
+                SkeletonBlock(cornerRadius: 10)
+                    .frame(width: heroSize * 0.95, height: 22)
+                    .padding(.top, 6)
+                SkeletonBlock(cornerRadius: 10)
+                    .frame(width: heroSize * 0.8, height: 22)
+
+                // One subtle line for the summary intro.
+                SkeletonBlock(cornerRadius: 8)
+                    .frame(width: heroSize * 0.72, height: 16)
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.bottom, 8)
+
+            HStack(spacing: 12) {
+                SkeletonBlock(cornerRadius: 12)
+                    .frame(height: 46)
+                    .frame(maxWidth: .infinity)
+                SkeletonBlock(cornerRadius: 12)
+                    .frame(height: 46)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct SkeletonBlock: View {
+    var cornerRadius: CGFloat = 12
+    @State private var shimmerOffset: CGFloat = -1
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(Color(.systemGray5))
+            .overlay {
+                shimmer
+                    .mask(
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    )
+            }
+            .onAppear {
+                withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: false)) {
+                    shimmerOffset = 1.25
+                }
+            }
+    }
+
+    private var shimmer: some View {
+        GeometryReader { geometry in
+            let width = geometry.size.width
+            let height = geometry.size.height
+
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.0),
+                    Color.white.opacity(0.25),
+                    Color.white.opacity(0.0)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(width: width * 1.6, height: height * 1.6)
+            .rotationEffect(.degrees(16))
+            .offset(x: shimmerOffset * width)
+        }
+    }
 }

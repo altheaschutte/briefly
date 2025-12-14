@@ -70,7 +70,7 @@ struct AuthFlowView: View {
                         .padding()
                 }
             }
-            .background(Color.blue)
+            .background(Color.brieflyPrimary)
             .foregroundColor(.white)
             .cornerRadius(12)
 
@@ -110,7 +110,7 @@ struct AuthFlowView: View {
                         .padding()
                 }
             }
-            .background(Color.blue)
+            .background(Color.brieflyPrimary)
             .foregroundColor(.white)
             .cornerRadius(12)
         }

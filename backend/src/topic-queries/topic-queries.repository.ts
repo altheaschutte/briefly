@@ -9,6 +9,7 @@ export interface TopicQueryCreateInput {
   answer: string;
   citations: string[];
   orderIndex: number;
+  intent?: import('../llm/llm.types').TopicIntent;
 }
 
 export interface TopicQueriesRepository {

@@ -2,8 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
-import { EpisodeMetadata, LlmProvider, ScriptGenerationResult } from './llm.provider';
+import { EpisodeMetadata, LlmProvider } from './llm.provider';
 import { EpisodeSegment, EpisodeSource } from '../domain/types';
+import { DialogueTurn, SegmentDialogueScript, TopicIntent, TopicQueryPlan } from './llm.types';
 
 @Injectable()
 export class OpenAiLlmProvider implements LlmProvider {
@@ -19,7 +20,7 @@ export class OpenAiLlmProvider implements LlmProvider {
       this.configService.get<string>('LLM_PROVIDER_EXTRACTION_MODEL') ?? this.queryModel;
   }
 
-  async generateTopicQueries(topic: string, previousQueries: string[]): Promise<string[]> {
+  async generateTopicQueries(topic: string, previousQueries: string[]): Promise<TopicQueryPlan> {
     const client = this.getClient();
     const isoDate = new Date().toISOString().split('T')[0];
     const history = (previousQueries || []).map((q) => q.trim()).filter(Boolean).slice(-12);
@@ -27,12 +28,27 @@ export class OpenAiLlmProvider implements LlmProvider {
     const messages = [
       {
         role: 'system',
-        content: `You craft high-signal web search queries for a news research agent.
-- Suggest between 1 and 5 concise queries per topic; default to 3-5 unless the topic is extremely narrow.
-- Prioritize recency (${isoDate}) and angles that surface new developments, exclusives, or authoritative explainers.
-- Do not repeat, lightly rephrase, or overlap with any previous queries supplied; aim for fresh coverage.
-- Keep each query lean, disambiguated (entities, locations, timeframes), and ready for direct use in a search API.
-Respond as JSON with the shape {"queries": ["query one", "query two"]}.`,
+        content: `You craft high-signal web search queries for a research agent.
+
+First, infer the topic intent:
+- "single_story": user wants ONE excellent, detailed item (e.g., "a story", "an interesting story", "deep dive", "profile", "tell me one story")
+- "multi_item": user wants multiple updates/items (e.g., "latest", "roundup", "updates", "events", "top", "compare", "near me", "this weekend")
+
+Rules:
+- Output between 1 and 5 queries.
+- Default to 1 query for "single_story".
+- Use 3-5 queries only for "multi_item" topics OR if the topic contains multiple sub-areas that truly require separate queries.
+- If "single_story", write ONE query designed to return a single richly detailed result. Add modifiers like: longform, feature, narrative, oral history, investigation, biography.
+- If "multi_item", cover distinct angles and avoid overlaps.
+- Do not repeat, lightly rephrase, or overlap with any previous queries supplied.
+- Keep each query lean, disambiguated (entities, locations, timeframes), and ready for direct use.
+
+Recency guidance:
+- For news topics, prioritize recency (${isoDate}).
+- For history/evergreen topics, do NOT force recency; prioritize authoritative sources and longform quality.
+
+Respond as JSON:
+{"intent":"single_story"|"multi_item","queries":["query one","query two"]}.`,
       },
       {
         role: 'user',
@@ -52,11 +68,12 @@ ${historyBlock}`,
     if (!content) {
       throw new Error('OpenAI returned empty content for topic queries');
     }
-    const queries = this.parseList(content);
-    if (!queries.length) {
+    const plan = this.parseTopicQueryPlan(content);
+    if (!plan.queries.length) {
       throw new Error('OpenAI did not return any topic queries');
     }
-    return queries.slice(0, 5);
+    const queries = plan.intent === 'single_story' ? plan.queries.slice(0, 1) : plan.queries.slice(0, 5);
+    return { intent: plan.intent, queries };
   }
 
   async extractTopicBriefs(transcript: string): Promise<string[]> {
@@ -91,8 +108,9 @@ ${historyBlock}`,
     title: string,
     findings: string,
     sources: EpisodeSource[],
+    intent: TopicIntent,
     targetDurationMinutes?: number,
-  ): Promise<string> {
+  ): Promise<SegmentDialogueScript> {
     const client = this.getClient();
     const durationLabel = targetDurationMinutes ? `${targetDurationMinutes}-minute` : 'about 2 minute';
     const sourceList =
@@ -103,20 +121,42 @@ ${historyBlock}`,
     const messages = [
       {
         role: 'system',
-        content: `You write a concise, single-host news segment script optimized for ElevenLabs TTS.
-- Keep it ${durationLabel} at podcast pace (~150 wpm), clear, and engaging.
-- Lead with the key update, add 1-2 tight supporting details, and end with a crisp takeaway.
-- Use short sentences, clean punctuation, and blank lines for natural pauses. No markdown.
-- Spell out numbers/dates/urls; add quick pronunciation hints for tricky names.
-Return only the final segment script as plain text.`,
+        content: `You are an expert podcast segment writer. Output a TWO-HOST dialogue for ElevenLabs v3 Dialogue (multi-speaker).
+
+Hosts:
+- SPEAKER_1 (Australian male): warm, curious, grounded.
+- SPEAKER_2 (British female): sharp, witty, insightful.
+
+Non-negotiable rules:
+- Use ONLY the provided Findings. Do not invent facts, names, numbers, dates, or quotes.
+- If Findings contain multiple possible stories and intent is "single_story", choose ONE most compelling/most detailed story and ignore the rest.
+- No URLs spoken aloud.
+- Spell out numbers and dates.
+- Keep lines short and speakable. Natural conversational rhythm. No monologues: max 3 turns in a row per speaker.
+- Do NOT include speaker names or name cues inside any turn text. Rely on the speaker labels only.
+- Avoid excessive audio tags in this draft. Use at most ONE tag per 3 turns on average.
+- Tags must be auditory voice cues only, in square brackets, placed immediately before or after the words they color.
+  Allowed examples: [thoughtful], [excited], [sighs], [chuckles], [whispers], [short pause], [long pause].
+  Do NOT use non-voice stage directions (no [music], [walking], [pacing]) and do NOT wrap entire paragraphs in brackets.
+
+Intent handling:
+- "single_story": tell ONE cohesive story only. Structure: Hook → Setup → What happened (chronological) → Why it matters → Memorable close.
+- "multi_item": cover up to FOUR distinct updates max. Each update must include: one key fact + one why-it-matters line. Use quick transitions.
+
+Target length:
+- Aim for a ${durationLabel} segment at ~150 words per minute total spoken words.
+
+Output JSON only, exactly this shape:
+{"title": string, "intent": "single_story"|"multi_item", "turns":[{"speaker":"SPEAKER_1"|"SPEAKER_2","text":string}...]}`,
       },
       {
         role: 'user',
-        content: `Segment title: ${title}
-Findings to cover:
+        content: `Intent: ${intent}
+Segment title: ${title}
+Findings (must-use facts):
 ${findings}
 
-Sources to keep in mind:
+Sources (for context only):
 ${sourceList}`,
       },
     ] satisfies ChatCompletionMessageParam[];
@@ -125,13 +165,68 @@ ${sourceList}`,
       model: this.scriptModel,
       messages,
       temperature: 0.5,
-      max_tokens: 700,
+      max_tokens: 1100,
+      response_format: { type: 'json_object' },
     });
     const content = response.choices[0]?.message?.content;
     if (!content) {
       throw new Error('OpenAI returned empty content for segment script');
     }
-    return content.trim();
+    const script = this.parseDialogueScript(content, intent, title);
+    if (script.turns.length < 6) {
+      throw new Error('OpenAI returned too few dialogue turns for segment script');
+    }
+    return script;
+  }
+
+  async enhanceSegmentDialogueForElevenV3(script: SegmentDialogueScript): Promise<SegmentDialogueScript> {
+    const client = this.getClient();
+    const messages = [
+      {
+        role: 'system',
+        content: `You enhance an existing TWO-SPEAKER dialogue for ElevenLabs v3.
+
+Primary goal:
+- Improve delivery by inserting concise audio tags in square brackets.
+
+Hard rules:
+- DO NOT change, remove, or reorder any words in any turn text.
+- You may ONLY insert audio tags (auditory voice cues) and blank lines for pauses.
+- Tags must be placed immediately before or after the words they color.
+- No non-voice stage directions (no [music], [walking], etc.).
+- Do not add speaker names or name cues inside any text.
+- Keep tags sparse: typically 1 tag every 2–4 turns, unless the moment clearly benefits.
+
+Return JSON only in the exact same shape:
+{"title": string, "intent": "single_story"|"multi_item", "turns":[{"speaker":"SPEAKER_1"|"SPEAKER_2","text":string}...]}`,
+      },
+      {
+        role: 'user',
+        content: `Enhance this dialogue by adding sparse delivery tags without changing a single word. Return valid JSON.\n\n${JSON.stringify(script, null, 2)}`,
+      },
+    ] satisfies ChatCompletionMessageParam[];
+
+    const response = await client.chat.completions.create({
+      model: this.scriptModel,
+      messages,
+      temperature: 0.35,
+      max_tokens: 900,
+      response_format: { type: 'json_object' },
+    });
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error('OpenAI returned empty content for dialogue enhancement');
+    }
+
+    const enhanced = this.parseDialogueScript(content, script.intent, script.title);
+    const sameLength = enhanced.turns.length === script.turns.length;
+    const sameSpeakers =
+      sameLength && enhanced.turns.every((turn, idx) => turn.speaker === script.turns[idx]?.speaker);
+    if (!sameLength || !sameSpeakers) {
+      throw new Error('Dialogue enhancement altered speaker ordering or turn count');
+    }
+
+    return enhanced;
   }
 
   async generateEpisodeMetadata(script: string, segments: EpisodeSegment[]): Promise<EpisodeMetadata> {
@@ -194,90 +289,6 @@ SHOW NOTES RULES
     return { ...parsed, description };
   }
 
-  async generateScript(
-    segments: EpisodeSegment[],
-    targetDurationMinutes?: number,
-  ): Promise<ScriptGenerationResult> {
-    const topicsList = segments
-      .map((segment, idx) => `${idx + 1}. ${segment.title || 'Untitled topic'}`)
-      .join('\n');
-
-    const context = segments
-      .map((segment, idx) => {
-        const sources = segment.rawSources || [];
-        const sourceList =
-          sources
-            .filter((s) => Boolean(s))
-            .map((s: EpisodeSource) => `- ${s.sourceTitle || s.url || 'source'} (${s.url || 'unknown'})`)
-            .join('\n') || '- None provided';
-        return `Segment ${idx + 1}:\nOriginal topic: ${segment.title || 'Untitled'}\nAI search answer: ${
-          segment.rawContent
-        }\nSources:\n${sourceList}`;
-      })
-      .join('\n\n');
-
-    const durationLabel = targetDurationMinutes ? `${targetDurationMinutes}-minute` : 'about 20 minute';
-
-    const client = this.getClient();
-    const messages = [
-      {
-        role: 'system',
-        content: `You write a single-host narrative script optimized for ElevenLabs Text-to-Speech v3 (alpha).
-- Keep it ${durationLabel}, concise, conversational, and engaging with a clear arc (intro, body, outro).
-- Finish with a tight overall wrap-up that includes 2-3 concise topic suggestions for the next episode.
-- Follow ElevenLabs TTS best practices: short sentences, clean punctuation for pacing, blank lines for pauses, and no markdown.
-- Spell out numbers, dates, currencies, and URLs; avoid emojis or symbols that TTS might misread.
-- Add brief pronunciation hints in parentheses for tricky names; keep everything in one voice.
-- Do not include [pause]; use blank lines for pauses instead. Avoid square-bracket audio cues unless explicitly needed for tone (e.g. [excited], [whispers]).
-- Skip per-topic outros or wrap-ups; end each segment cleanly and move to the next without filler transitions.
-- Stay under 5,000 characters to fit the Eleven v3 character limit.
-- Lightly acknowledge sources inline where relevant.
-Return only the final script as plain text.`,
-      },
-      {
-        role: 'user',
-        content: `Original user topics:\n${topicsList}\n\nAI search findings to ground the script:\n${context}\n\nWrite the final single-host script for ElevenLabs TTS v3 (alpha) using the above.`,
-      },
-    ] satisfies ChatCompletionMessageParam[];
-    const prompt = messages.map((m) => `[${m.role}] ${m.content}`).join('\n\n');
-    const response = await client.chat.completions.create({
-      model: this.scriptModel,
-      messages,
-      temperature: 0.65,
-      max_tokens: 2048,
-    });
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error('OpenAI returned empty content for script generation');
-    }
-    const script = content.trim();
-
-    const allSources = this.collectSources(segments);
-    const showNotesMessages = [
-      {
-        role: 'system',
-        content:
-          'You create concise podcast show notes and episode descriptions. Respond with Markdown only: a 2-3 sentence summary paragraph, a short bullet list of key moments, and a Sources section listing the provided links with human-friendly titles. Keep it factual, do not invent citations, and stay under 400 words.',
-      },
-      {
-        role: 'user',
-        content: `Episode script:\n${script}\n\nTopics:\n${topicsList}\n\nSources:\n${allSources}`,
-      },
-    ] satisfies ChatCompletionMessageParam[];
-    const showNotesResponse = await client.chat.completions.create({
-      model: this.scriptModel,
-      messages: showNotesMessages,
-      temperature: 0.55,
-      max_tokens: 800,
-    });
-    const showNotes = showNotesResponse.choices[0]?.message?.content?.trim();
-    if (!showNotes) {
-      throw new Error('OpenAI returned empty content for show notes generation');
-    }
-
-    return { script, prompt, showNotes };
-  }
-
   private getClient(): OpenAI {
     if (!this.client) {
       const apiKey = this.configService.get<string>('OPENAI_API_KEY');
@@ -311,6 +322,138 @@ Return only the final script as plain text.`,
       return '- None provided';
     }
     return lines.join('\n');
+  }
+
+  private parseTopicIntent(raw: any, fallback: TopicIntent = 'single_story'): TopicIntent {
+    if (typeof raw === 'string') {
+      const normalized = raw.trim().toLowerCase();
+      if (normalized === 'single_story') {
+        return 'single_story';
+      }
+      if (normalized === 'multi_item') {
+        return 'multi_item';
+      }
+    }
+    return fallback;
+  }
+
+  private normalizeQueries(queries: string[]): string[] {
+    const seen = new Set<string>();
+    return (queries || [])
+      .map((topic) => topic.trim())
+      .filter((topic) => topic.length > 2)
+      .filter((topic) => {
+        const key = topic.toLowerCase();
+        if (seen.has(key)) {
+          return false;
+        }
+        seen.add(key);
+        return true;
+      });
+  }
+
+  private parseTopicQueryPlan(content: string): TopicQueryPlan {
+    const normalizedContent = content.trim();
+    const jsonCandidate = this.extractJsonBlock(normalizedContent);
+    let intent: TopicIntent = 'single_story';
+    let queries: string[] = [];
+
+    try {
+      const parsed = JSON.parse(jsonCandidate);
+      const parsedIntent = (parsed as any)?.intent;
+      intent = this.parseTopicIntent(parsedIntent, intent);
+      if (Array.isArray((parsed as any)?.queries)) {
+        queries = this.normalizeQueries((parsed as any).queries);
+      } else if (Array.isArray((parsed as any)?.topics)) {
+        queries = this.normalizeQueries((parsed as any).topics);
+      }
+    } catch {
+      // Fallback handled below
+    }
+
+    if (!queries.length) {
+      queries = this.parseList(normalizedContent);
+    }
+    intent = this.parseTopicIntent(intent, 'single_story');
+
+    return {
+      intent,
+      queries: this.normalizeQueries(queries).slice(0, 5),
+    };
+  }
+
+  private parseSpeaker(raw: any): DialogueTurn['speaker'] | null {
+    if (typeof raw !== 'string') {
+      return null;
+    }
+    const normalized = raw.trim().toUpperCase();
+    if (normalized === 'SPEAKER_1' || normalized === 'SPEAKER 1' || normalized === 'SPEAKER1') {
+      return 'SPEAKER_1';
+    }
+    if (normalized === 'SPEAKER_2' || normalized === 'SPEAKER 2' || normalized === 'SPEAKER2') {
+      return 'SPEAKER_2';
+    }
+    return null;
+  }
+
+  private parseDialogueScript(content: string, fallbackIntent: TopicIntent, fallbackTitle: string): SegmentDialogueScript {
+    const normalizedContent = content.trim();
+    const jsonCandidate = this.extractJsonBlock(normalizedContent);
+    let parsed: any;
+    try {
+      parsed = JSON.parse(jsonCandidate);
+    } catch {
+      throw new Error('OpenAI returned invalid JSON for dialogue script');
+    }
+
+    const intent = this.parseTopicIntent(parsed?.intent, fallbackIntent);
+    const title = typeof parsed?.title === 'string' && parsed.title.trim() ? parsed.title.trim() : fallbackTitle;
+    const rawTurns = Array.isArray(parsed?.turns) ? parsed.turns : [];
+
+    const turns: DialogueTurn[] = rawTurns
+      .map((turn: any) => {
+        const speaker = this.parseSpeaker(turn?.speaker);
+        const text = this.sanitizeDialogueText(turn?.text);
+        if (!speaker || !text) {
+          return null;
+        }
+        return { speaker, text };
+      })
+      .filter((turn: DialogueTurn | null): turn is DialogueTurn => Boolean(turn));
+
+    if (!turns.length) {
+      throw new Error('OpenAI did not return any dialogue turns');
+    }
+
+    const sanitizedTurns = turns.filter((turn) => turn.text.length > 0);
+    if (!sanitizedTurns.length) {
+      throw new Error('OpenAI did not return any dialogue text');
+    }
+    const speakerCounts = sanitizedTurns.reduce((acc, turn) => {
+      acc[turn.speaker] = (acc[turn.speaker] || 0) + 1;
+      return acc;
+    }, {} as Record<DialogueTurn['speaker'], number>);
+    const totalTurns = sanitizedTurns.length;
+    const dominantSpeakerCount = Math.max(...Object.values(speakerCounts), 0);
+    const speakerBalanceOk = dominantSpeakerCount / totalTurns <= 0.7;
+
+    return {
+      title,
+      intent,
+      turns: speakerBalanceOk ? sanitizedTurns : sanitizedTurns,
+    };
+  }
+
+  private sanitizeDialogueText(text: any): string {
+    if (typeof text !== 'string') {
+      return '';
+    }
+    const withoutSpeakerLabels = text
+      .replace(/\bSPEAKER[_ ]?1\b:?/gi, '')
+      .replace(/\bSPEAKER[_ ]?2\b:?/gi, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+    return withoutSpeakerLabels;
   }
 
   private parseList(content: string): string[] {

@@ -31,8 +31,10 @@ struct SetupView: View {
                 inactiveTopicsSection
             }
         }
-        .listStyle(.insetGrouped)
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
         .navigationTitle("Create")
+        .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             Task { await topicsViewModel.load() }
             Task { await creationViewModel.resumeInFlightIfNeeded() }
@@ -67,6 +69,15 @@ struct SetupView: View {
                 )
             }
         }
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                NavigationLink(value: TopicRoute.create) {
+                    Label("Add topic", systemImage: "plus")
+                        .labelStyle(.iconOnly)
+                }
+                .accessibilityLabel("Add topic")
+            }
+        }
         .safeAreaInset(edge: .bottom) {
             bottomActions
         }
@@ -92,7 +103,7 @@ struct SetupView: View {
                 .font(.headline)
             Text("Add a few topics so we can personalize the episode we generate for you.")
                 .foregroundColor(.secondary)
-            Text("Use the button below to add your first topic.")
+            Text("Use the + button above to add your first topic.")
                 .foregroundColor(.secondary)
         }
         .padding(.vertical, 12)
@@ -261,7 +272,7 @@ struct SetupView: View {
                 }
             } label: {
                 Image(systemName: isActive ? "minus.circle" : "plus.circle.fill")
-                    .foregroundStyle(isActive ? Color(.systemGray2) : Color(.systemGreen))
+                    .foregroundStyle(isActive ? Color(.systemGray2) : Color.brieflyPrimary)
                     .font(.title3)
             }
             .buttonStyle(.borderless)
@@ -269,7 +280,7 @@ struct SetupView: View {
         }
         .padding(.vertical, 8)
         .listRowInsets(EdgeInsets(top: 8, leading: 14, bottom: 8, trailing: 16))
-        .listRowBackground(Color(.secondarySystemGroupedBackground))
+        .listRowSeparator(.visible)
     }
 }
 
@@ -319,13 +330,6 @@ private extension SetupView {
     @ViewBuilder
     var bottomActions: some View {
         VStack(spacing: 12) {
-            NavigationLink(value: TopicRoute.create) {
-                Label("Add new topic", systemImage: "plus.circle")
-                    .frame(maxWidth: .infinity, alignment: .center)
-            }
-            .buttonStyle(.bordered)
-            .tint(.secondary)
-
             Button {
                 Task { await creationViewModel.generateEpisode() }
             } label: {
@@ -530,12 +534,8 @@ private struct ActiveTopicDropDelegate: DropDelegate {
 
     func performDrop(info: DropInfo) -> Bool {
         guard current != nil else { return false }
-        current = nil
         Task { await viewModel.persistActiveTopicOrder() }
-        return true
-    }
-
-    func dropExited(info: DropInfo) {
         current = nil
+        return true
     }
 }

@@ -25,7 +25,7 @@ struct TopicEditView: View {
 
             Section {
                 Toggle("Active", isOn: $topic.isActive)
-                    .tint(.blue)
+                    .tint(.brieflyPrimary)
                 if activationWouldExceedLimit {
                     Text("You already have \(viewModel.maxActiveTopics) active topics. Deactivate one before adding another.")
                         .font(.footnote)

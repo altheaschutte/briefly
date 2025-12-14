@@ -5,7 +5,7 @@ struct SettingsView: View {
     let email: String?
 
     var body: some View {
-        Form {
+        List {
             Section(header: Text("Account")) {
                 if let email {
                     Text(email)
@@ -40,7 +40,10 @@ struct SettingsView: View {
                 }
             }
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
         .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
         .onDisappear {
             viewModel.save()
         }

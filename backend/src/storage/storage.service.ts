@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl as getS3SignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuid } from 'uuid';
 import { promises as fs } from 'fs';
@@ -16,9 +16,11 @@ export class StorageService {
   private imageRegion?: string;
   private imageClient?: S3Client;
   private readonly driver: 's3' | 'local';
+  private readonly audioSignedUrlTtl: number;
 
   constructor(private readonly configService: ConfigService) {
     this.driver = (this.configService.get<string>('STORAGE_DRIVER') || 's3').toLowerCase() === 'local' ? 'local' : 's3';
+    this.audioSignedUrlTtl = Number(this.configService.get<string>('AUDIO_URL_EXPIRY_SECONDS')) || 60 * 60;
   }
 
   async uploadAudio(buffer: Buffer, key?: string): Promise<{ key: string; url: string; localPath?: string }> {
@@ -29,7 +31,7 @@ export class StorageService {
     }
 
     const { bucket, client } = this.getClient();
-    const objectKey = key ?? `audio/${uuid()}.mp3`;
+    const objectKey = this.normalizeKey(key ?? `audio/${uuid()}.mp3`);
     await client.send(
       new PutObjectCommand({
         Bucket: bucket,
@@ -46,7 +48,7 @@ export class StorageService {
         this.logger.warn(`Failed to save local audio copy for ${objectKey}: ${error instanceof Error ? error.message : error}`);
       }
     }
-    return { key: objectKey, url: this.getPublicUrl(objectKey), localPath };
+    return { key: objectKey, url: objectKey, localPath };
   }
 
   async uploadImage(buffer: Buffer, key?: string): Promise<{ key: string; url: string; localPath?: string }> {
@@ -79,16 +81,36 @@ export class StorageService {
     return { key: objectKey, url: this.getPublicUrlForBucket(bucket, region, objectKey), localPath };
   }
 
-  async getSignedUrl(key: string, expiresInSeconds = 60 * 60 * 6): Promise<string> {
+  async getSignedUrl(key: string, expiresInSeconds?: number): Promise<string> {
     if (this.driver === 'local') {
       return key.startsWith('file://') ? key : `file://${key}`;
     }
+    const ttl = expiresInSeconds ?? this.audioSignedUrlTtl;
     const { bucket, client } = this.getClient();
+    const normalizedKey = this.normalizeKey(key);
+    try {
+      await client.send(
+        new HeadObjectCommand({
+          Bucket: bucket,
+          Key: normalizedKey,
+        }),
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to access audio object ${bucket}/${normalizedKey}: ${this.describeS3Error(error)}`,
+      );
+      throw error;
+    }
     const command = new GetObjectCommand({
       Bucket: bucket,
-      Key: this.normalizeKey(key),
+      Key: normalizedKey,
     });
-    return getS3SignedUrl(client, command, { expiresIn: expiresInSeconds });
+    return getS3SignedUrl(client, command, { expiresIn: ttl });
+  }
+
+  async getEpisodeAudioSignedUrl(userId: string, episodeId: string, key?: string): Promise<string> {
+    const objectKey = this.normalizeKey(key ?? `${userId}/${episodeId}.mp3`);
+    return this.getSignedUrl(objectKey);
   }
 
   private shouldMirrorToLocal(): boolean {
@@ -100,6 +122,10 @@ export class StorageService {
   }
 
   private normalizeKey(keyOrUrl: string): string {
+    const s3Match = keyOrUrl.match(/^s3:\/\/[^/]+\/(.+)$/i);
+    if (s3Match?.[1]) {
+      return s3Match[1];
+    }
     if (!/^https?:\/\//i.test(keyOrUrl)) {
       return keyOrUrl.replace(/^file:\/\//, '').replace(/^\/+/, '');
     }
@@ -109,6 +135,18 @@ export class StorageService {
     } catch {
       return keyOrUrl;
     }
+  }
+
+  private describeS3Error(error: unknown): string {
+    const metadata = (error as any)?.$metadata;
+    const code = (error as any)?.Code || (error as any)?.code || (error as any)?.name;
+    const status = metadata?.httpStatusCode;
+    const message = error instanceof Error ? error.message : String(error);
+    const parts = [];
+    if (code) parts.push(`code=${code}`);
+    if (status) parts.push(`status=${status}`);
+    parts.push(message);
+    return parts.join(' | ');
   }
 
   private async saveLocalCopy(objectKey: string, buffer: Buffer): Promise<string> {
@@ -124,7 +162,7 @@ export class StorageService {
       return { bucket: this.bucket, region: this.region, client: this.client };
     }
 
-    const { bucket, region, accessKeyId, secretAccessKey, endpoint } = this.requireConfigBundle();
+    const { bucket, region, accessKeyId, secretAccessKey, endpoint } = this.requireAudioConfigBundle();
     this.client = new S3Client({
       region,
       endpoint: endpoint || undefined,
@@ -159,9 +197,16 @@ export class StorageService {
     return { bucket, region, client: this.imageClient };
   }
 
-  private requireConfigBundle() {
-    const bucket = this.requireConfig('S3_BUCKET_NAME');
-    const region = this.requireConfig('S3_REGION');
+  private requireAudioConfigBundle() {
+    const bucket =
+      this.configService.get<string>('AUDIO_BUCKET_NAME') ||
+      this.configService.get<string>('S3_BUCKET_NAME');
+    if (!bucket) {
+      throw new Error('Missing required env var: AUDIO_BUCKET_NAME or S3_BUCKET_NAME');
+    }
+    const region =
+      this.configService.get<string>('AUDIO_S3_REGION') ||
+      this.requireConfig('S3_REGION');
     const accessKeyId = this.requireConfig('S3_ACCESS_KEY_ID');
     const secretAccessKey = this.requireConfig('S3_SECRET_ACCESS_KEY');
     const endpoint = this.configService.get<string>('S3_ENDPOINT');
@@ -169,7 +214,7 @@ export class StorageService {
   }
 
   private requireImageConfigBundle() {
-    const base = this.requireConfigBundle();
+    const base = this.requireAudioConfigBundle();
     const imageBucket = this.configService.get<string>('S3_IMAGES_BUCKET_NAME');
     const imageRegion = this.configService.get<string>('S3_IMAGES_REGION');
     return {
@@ -191,7 +236,7 @@ export class StorageService {
     if (this.driver === 'local') {
       return key.startsWith('file://') ? key : `file://${path.resolve(key)}`;
     }
-    const { bucket, region } = this.requireConfigBundle();
+    const { bucket, region } = this.requireAudioConfigBundle();
     return this.getPublicUrlForBucket(bucket, region, key);
   }
 

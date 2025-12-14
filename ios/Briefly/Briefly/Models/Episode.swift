@@ -218,6 +218,13 @@ struct Episode: Codable, Identifiable, Hashable {
         return nil
     }
 
+    var isReady: Bool {
+        if let status {
+            return status.lowercased() == "ready"
+        }
+        return audioURL != nil
+    }
+
     static var placeholder: Episode {
         Episode(id: UUID(),
                 title: "Morning Briefly",

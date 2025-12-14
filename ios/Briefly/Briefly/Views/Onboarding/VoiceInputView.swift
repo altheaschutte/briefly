@@ -16,7 +16,7 @@ struct VoiceInputView: View {
             Button(action: toggleRecording) {
                 ZStack {
                     Circle()
-                        .fill(viewModel.isRecording ? Color.red : Color.blue)
+                        .fill(viewModel.isRecording ? Color.red : Color.brieflyPrimary)
                         .frame(width: 140, height: 140)
                         .shadow(radius: 8)
                     Image(systemName: viewModel.isRecording ? "stop.fill" : "mic.fill")
@@ -91,7 +91,7 @@ struct VoiceInputView: View {
                         .padding()
                 }
             }
-            .background(Color.blue)
+            .background(Color.brieflyPrimary)
             .foregroundColor(.white)
             .cornerRadius(12)
             .padding(.bottom)

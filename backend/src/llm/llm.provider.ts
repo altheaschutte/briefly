@@ -1,10 +1,5 @@
 import { EpisodeSegment, EpisodeSource } from '../domain/types';
-
-export interface ScriptGenerationResult {
-  script: string;
-  prompt: string;
-  showNotes: string;
-}
+import { SegmentDialogueScript, TopicQueryPlan, TopicIntent } from './llm.types';
 
 export interface EpisodeMetadata {
   title: string;
@@ -13,14 +8,15 @@ export interface EpisodeMetadata {
 }
 
 export interface LlmProvider {
-  generateTopicQueries(topic: string, previousQueries: string[]): Promise<string[]>;
+  generateTopicQueries(topic: string, previousQueries: string[]): Promise<TopicQueryPlan>;
   generateSegmentScript(
     title: string,
     findings: string,
     sources: EpisodeSource[],
+    intent: TopicIntent,
     targetDurationMinutes?: number,
-  ): Promise<string>;
+  ): Promise<SegmentDialogueScript>;
+  enhanceSegmentDialogueForElevenV3(script: SegmentDialogueScript): Promise<SegmentDialogueScript>;
   generateEpisodeMetadata(script: string, segments: EpisodeSegment[]): Promise<EpisodeMetadata>;
-  generateScript(segments: EpisodeSegment[], targetDurationMinutes?: number): Promise<ScriptGenerationResult>;
   extractTopicBriefs(transcript: string): Promise<string[]>;
 }

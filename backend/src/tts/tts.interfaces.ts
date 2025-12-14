@@ -1,3 +1,5 @@
+import { SegmentDialogueScript } from '../llm/llm.types';
+
 export interface TtsSynthesisResult {
   audioUrl: string;
   storageKey?: string;
@@ -6,7 +8,7 @@ export interface TtsSynthesisResult {
 
 export interface TtsProvider {
   synthesize(
-    script: string,
+    script: SegmentDialogueScript,
     options: { voiceA: string; voiceB: string; storageKey?: string },
   ): Promise<TtsSynthesisResult>;
 }

@@ -27,6 +27,7 @@ export class InMemoryTopicQueriesRepository implements TopicQueriesRepository {
       answer: input.answer,
       citations: [...(input.citations || [])],
       orderIndex: input.orderIndex,
+      intent: input.intent,
       createdAt: now,
       updatedAt: now,
     }));

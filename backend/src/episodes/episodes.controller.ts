@@ -30,14 +30,14 @@ export class EpisodesController {
   async listEpisodes(@Req() req: Request) {
     const userId = (req as any).user?.id as string;
     const episodes = await this.episodesService.listEpisodes(userId);
-    return Promise.all(episodes.map((episode) => this.formatEpisodeResponse(episode)));
+    return Promise.all(episodes.map((episode) => this.formatEpisodeResponse(userId, episode)));
   }
 
   @Get(':id')
   async getEpisode(@Req() req: Request, @Param('id') id: string) {
     const userId = (req as any).user?.id as string;
     const episode = await this.episodesService.getEpisode(userId, id);
-    return this.formatEpisodeResponse(episode);
+    return this.formatEpisodeResponse(userId, episode);
   }
 
   @Get(':id/sources')
@@ -51,10 +51,7 @@ export class EpisodesController {
   async getEpisodeAudio(@Req() req: Request, @Param('id') id: string) {
     const userId = (req as any).user?.id as string;
     const episode = await this.episodesService.getEpisode(userId, id);
-    if (!episode.audioUrl) {
-      return { audioUrl: null };
-    }
-    const signedUrl = await this.storageService.getSignedUrl(episode.audioUrl);
+    const signedUrl = await this.resolveAudioUrl(userId, episode);
     return { audioUrl: signedUrl };
   }
 
@@ -65,13 +62,14 @@ export class EpisodesController {
     return { success: true };
   }
 
-  private async formatEpisodeResponse(episode: Episode) {
+  private async formatEpisodeResponse(userId: string, episode: Episode) {
     const createdAt = episode.createdAt instanceof Date ? episode.createdAt.toISOString() : episode.createdAt;
     const updatedAt = episode.updatedAt instanceof Date ? episode.updatedAt.toISOString() : episode.updatedAt;
-    const audioUrl = await this.resolveAudioUrl(episode.audioUrl);
+    const audioUrl = await this.resolveAudioUrl(userId, episode);
 
     return {
       ...episode,
+      audioUrl: audioUrl ?? undefined,
       audio_url: audioUrl,
       episode_number: episode.episodeNumber ?? null,
       duration_seconds: episode.durationSeconds ?? null,
@@ -83,20 +81,35 @@ export class EpisodesController {
     };
   }
 
-  private async resolveAudioUrl(audioUrl?: string): Promise<string | null> {
-    if (!audioUrl) {
+  private async resolveAudioUrl(userId: string, episode: Episode): Promise<string | null> {
+    const audioKey = this.getAudioStorageKey(userId, episode);
+    if (!audioKey) {
       return null;
     }
-    // If it's already an absolute URL, return as-is.
-    const lower = audioUrl.toLowerCase();
-    if (lower.startsWith('http://') || lower.startsWith('https://')) {
-      return audioUrl;
+    const lower = audioKey.toLowerCase();
+    if (lower.startsWith('file://')) {
+      return audioKey;
     }
     try {
-      return await this.storageService.getSignedUrl(audioUrl);
+      return await this.storageService.getEpisodeAudioSignedUrl(userId, episode.id, audioKey);
     } catch (error) {
-      this.logger.warn(`Failed to sign audio URL ${audioUrl}: ${error}`);
-      return audioUrl;
+      this.logger.error(
+        `Failed to sign audio URL for episode ${episode.id}: ${error instanceof Error ? error.message : error}`,
+      );
+      if (lower.startsWith('http://') || lower.startsWith('https://')) {
+        return audioKey;
+      }
+      return null;
     }
+  }
+
+  private getAudioStorageKey(userId: string, episode: Episode): string | undefined {
+    if (episode.audioUrl) {
+      return episode.audioUrl;
+    }
+    if (episode.status === 'ready' && userId && episode.id) {
+      return `${userId}/${episode.id}.mp3`;
+    }
+    return undefined;
   }
 }

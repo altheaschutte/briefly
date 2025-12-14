@@ -30,7 +30,7 @@ struct TopicReviewView: View {
                             .font(.headline)
                             .inputFieldStyle()
                         Toggle("Active", isOn: $topic.isActive)
-                            .toggleStyle(SwitchToggleStyle(tint: .blue))
+                            .toggleStyle(SwitchToggleStyle(tint: .brieflyPrimary))
                         Button("Save") {
                             Task { await viewModel.updateTopic(topic) }
                         }
@@ -53,6 +53,11 @@ struct TopicReviewView: View {
                             newText = ""
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 4)
+                    .background(Color.brieflySecondary)
+                    .foregroundColor(Color.brieflyPrimary)
+                    .cornerRadius(10)
                 }
             }
             .listStyle(.insetGrouped)
@@ -62,7 +67,7 @@ struct TopicReviewView: View {
                     .frame(maxWidth: .infinity)
                     .padding()
             }
-            .background(Color.blue)
+            .background(Color.brieflyPrimary)
             .foregroundColor(.white)
             .cornerRadius(12)
             .padding(.bottom, 8)
