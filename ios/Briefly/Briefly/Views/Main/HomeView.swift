@@ -14,7 +14,7 @@ struct HomeView: View {
                     Text(episode.displayTitle)
                         .font(.title2.bold())
                     Text(episode.summary)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.brieflyTextMuted)
                     ProgressView(value: audioManager.progress)
                 }
                 .padding()
@@ -22,7 +22,7 @@ struct HomeView: View {
                 ProgressView("Loading latest episode…")
             } else if viewModel.errorMessage == nil {
                 Text("No episode yet. Generate one from onboarding.")
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.brieflyTextMuted)
             }
             Spacer()
             PlayerBarView()
@@ -50,6 +50,7 @@ struct HomeView: View {
         .onChange(of: viewModel.errorMessage) { newValue in
             handleErrorChange(newValue)
         }
+        .background(Color.brieflyBackground)
     }
 
     private var magicButton: some View {

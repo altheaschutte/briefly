@@ -27,11 +27,11 @@ struct VoiceInputView: View {
             .disabled(viewModel.isProcessingAudio)
             Text(viewModel.isRecording ? "Listening…" : "Tap and tell me what you want to hear about.")
                 .font(.subheadline)
-                .foregroundColor(.secondary)
+                .foregroundColor(.brieflyTextMuted)
             Text("Example: “I want local art events, weekend kids activities, and important AI + finance news.”")
                 .font(.footnote)
                 .multilineTextAlignment(.center)
-                .foregroundColor(.secondary)
+                .foregroundColor(.brieflyTextMuted)
                 .padding(.horizontal)
 
             if viewModel.isProcessingAudio {
@@ -39,7 +39,7 @@ struct VoiceInputView: View {
                     ProgressView()
                     Text("Processing your audio…")
                         .font(.footnote)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.brieflyTextMuted)
                 }
             }
 
@@ -53,7 +53,7 @@ struct VoiceInputView: View {
                     Text(viewModel.transcript.isEmpty ? "Your transcript will appear here as you speak." : viewModel.transcript)
                         .padding()
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color(.secondarySystemBackground))
+                        .background(Color.brieflySurface)
                         .cornerRadius(12)
                 }
             }
@@ -100,6 +100,7 @@ struct VoiceInputView: View {
             Spacer()
         }
         .padding()
+        .background(Color.brieflyBackground)
     }
 
     private func toggleRecording() {

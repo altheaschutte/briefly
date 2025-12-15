@@ -14,7 +14,7 @@ struct TopicsView: View {
                             .inputFieldStyle()
                         HStack(spacing: 8) {
                             Text("Active")
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.brieflyTextMuted)
                             Toggle("", isOn: $topic.isActive)
                                 .labelsHidden()
                                 .toggleStyle(.switch)
@@ -25,6 +25,7 @@ struct TopicsView: View {
                 .onDelete { indexSet in
                     Task { await viewModel.deleteTopic(at: indexSet) }
                 }
+                .listRowBackground(Color.brieflyBackground)
 
                 if !viewModel.topics.isEmpty {
                     Button {
@@ -36,6 +37,7 @@ struct TopicsView: View {
                     .disabled(!viewModel.hasChanges || viewModel.isLoading)
                 }
             }
+            .listRowBackground(Color.brieflyBackground)
 
             Section(header: Text("Add topic")) {
                 TextField("Topic", text: $newTopicText, axis: .vertical)
@@ -51,10 +53,14 @@ struct TopicsView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
                 .background(Color.brieflySecondary)
-                .foregroundColor(Color.brieflyPrimary)
+                .foregroundColor(.white)
                 .cornerRadius(10)
             }
         }
+        .scrollContentBackground(.hidden)
+        .listStyle(.plain)
+        .listRowBackground(Color.brieflyBackground)
+        .background(Color.brieflyBackground)
         .navigationTitle("Topics")
         .onAppear {
             Task { await viewModel.load() }
@@ -62,5 +68,6 @@ struct TopicsView: View {
         .refreshable {
             await viewModel.load()
         }
+        .background(Color.brieflyBackground)
     }
 }

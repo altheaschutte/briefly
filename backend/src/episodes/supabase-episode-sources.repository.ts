@@ -43,6 +43,7 @@ export class SupabaseEpisodeSourcesRepository implements EpisodeSourcesRepositor
     const payload: EpisodeSourceRow[] = sources.map((source) => ({
       id: source.id,
       episode_id: episodeId,
+      segment_id: source.segmentId ?? null,
       source_title: source.sourceTitle,
       url: source.url,
       type: source.type ?? null,
@@ -79,6 +80,7 @@ export class SupabaseEpisodeSourcesRepository implements EpisodeSourcesRepositor
     return {
       id: row.id,
       episodeId: row.episode_id,
+      segmentId: row.segment_id ?? undefined,
       sourceTitle: row.source_title,
       url: row.url,
       type: row.type ?? undefined,

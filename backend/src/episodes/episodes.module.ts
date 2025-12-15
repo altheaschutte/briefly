@@ -21,6 +21,10 @@ import { InMemoryEpisodeSourcesRepository } from './in-memory-episode-sources.re
 import { SupabaseEpisodeSourcesRepository } from './supabase-episode-sources.repository';
 import { TopicQueriesModule } from '../topic-queries/topic-queries.module';
 import { CoverImageService } from './cover-image.service';
+import { EpisodeSegmentsService } from './episode-segments.service';
+import { EPISODE_SEGMENTS_REPOSITORY } from './episode-segments.repository';
+import { InMemoryEpisodeSegmentsRepository } from './in-memory-episode-segments.repository';
+import { SupabaseEpisodeSegmentsRepository } from './supabase-episode-segments.repository';
 
 const episodesRepositoryProvider: Provider = {
   provide: EPISODES_REPOSITORY,
@@ -60,6 +64,25 @@ const episodeSourcesRepositoryProvider: Provider = {
   },
 };
 
+const episodeSegmentsRepositoryProvider: Provider = {
+  provide: EPISODE_SEGMENTS_REPOSITORY,
+  inject: [ConfigService, InMemoryStoreService],
+  useFactory: (configService: ConfigService, store: InMemoryStoreService) => {
+    const supabaseUrl = configService.get<string>('SUPABASE_PROJECT_URL');
+    const supabaseKey = configService.get<string>('SUPABASE_SERVICE_ROLE_KEY');
+    const storagePref = (configService.get<string>('EPISODES_STORAGE') || 'auto').toLowerCase();
+    const canUseSupabase = Boolean(supabaseUrl && supabaseKey);
+
+    if (storagePref === 'memory' || (!canUseSupabase && storagePref === 'auto')) {
+      return new InMemoryEpisodeSegmentsRepository(store);
+    }
+    if (!canUseSupabase) {
+      throw new Error('EPISODES_STORAGE is set to supabase but Supabase env vars are missing');
+    }
+    return new SupabaseEpisodeSegmentsRepository(configService);
+  },
+};
+
 @Module({
   imports: [
     ConfigModule,
@@ -76,10 +99,12 @@ const episodeSourcesRepositoryProvider: Provider = {
     EpisodesService,
     EpisodeProcessorService,
     EpisodeSourcesService,
+    EpisodeSegmentsService,
     CoverImageService,
     episodesRepositoryProvider,
     episodeSourcesRepositoryProvider,
+    episodeSegmentsRepositoryProvider,
   ],
-  exports: [EpisodesService, EpisodeProcessorService, EpisodeSourcesService],
+  exports: [EpisodesService, EpisodeProcessorService, EpisodeSourcesService, EpisodeSegmentsService],
 })
 export class EpisodesModule {}

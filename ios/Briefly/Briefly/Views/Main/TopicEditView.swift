@@ -21,6 +21,7 @@ struct TopicEditView: View {
             Section(header: Text("Topic")) {
                 TextField("Topic", text: $topic.originalText, axis: .vertical)
                     .focused($isFieldFocused)
+                    .inputFieldStyle()
             }
 
             Section {
@@ -29,7 +30,7 @@ struct TopicEditView: View {
                 if activationWouldExceedLimit {
                     Text("You already have \(viewModel.maxActiveTopics) active topics. Deactivate one before adding another.")
                         .font(.footnote)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.brieflyTextMuted)
                 }
             }
 
@@ -45,6 +46,10 @@ struct TopicEditView: View {
         }
         .navigationTitle(isNew ? "Add Topic" : "Edit Topic")
         .navigationBarTitleDisplayMode(.inline)
+        .scrollContentBackground(.hidden)
+        .listStyle(.plain)
+        .listRowBackground(Color.brieflySurface)
+        .background(Color.brieflyBackground)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") {

@@ -29,6 +29,7 @@ type EpisodesTable = {
 export type EpisodeSourceRow = {
   id: string;
   episode_id: string;
+  segment_id?: string | null;
   source_title: string;
   url: string;
   type?: string | null;
@@ -42,11 +43,33 @@ type EpisodeSourcesTable = {
   Relationships: [];
 };
 
+export type EpisodeSegmentRow = {
+  id: string;
+  episode_id: string;
+  order_index: number;
+  title?: string | null;
+  raw_content: string;
+  raw_sources?: any | null;
+  script?: string | null;
+  audio_url?: string | null;
+  start_time_seconds?: number | null;
+  duration_seconds?: number | null;
+  created_at: string;
+};
+
+type EpisodeSegmentsTable = {
+  Row: EpisodeSegmentRow;
+  Insert: EpisodeSegmentRow;
+  Update: Partial<EpisodeSegmentRow>;
+  Relationships: [];
+};
+
 export type SupabaseDatabase = {
   public: {
     Tables: {
       episodes: EpisodesTable;
       episode_sources: EpisodeSourcesTable;
+      episode_segments: EpisodeSegmentsTable;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

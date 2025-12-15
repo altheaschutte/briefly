@@ -7,11 +7,11 @@ struct InputFieldModifier: ViewModifier {
             .padding(.vertical, 10)
             .background(
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(.secondarySystemBackground))
+                    .fill(Color.brieflySurface)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
-                    .stroke(Color.gray.opacity(0.35), lineWidth: 1)
+                    .stroke(Color.brieflyBorder, lineWidth: 1)
             )
     }
 }

@@ -17,11 +17,11 @@
                         <subviews>
                             <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Briefly" textAlignment="center" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" translatesAutoresizingMaskIntoConstraints="NO" id="TitleLabel">
                                 <fontDescription key="fontDescription" type="boldSystem" pointSize="24"/>
-                                <color key="textColor" systemColor="labelColor"/>
+                                <color key="textColor" red="1" green="0.6470588235" blue="0.3882352941" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                             </label>
                         </subviews>
                         <viewLayoutGuide key="safeArea" id="LaunchSafeArea"/>
-                        <color key="backgroundColor" systemColor="systemBackgroundColor"/>
+                        <color key="backgroundColor" red="0.07450980392" green="0.1647058824" blue="0.231372549" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                         <constraints>
                             <constraint firstItem="TitleLabel" firstAttribute="centerX" secondItem="LaunchSafeArea" secondAttribute="centerX" id="CenterX"/>
                             <constraint firstItem="TitleLabel" firstAttribute="centerY" secondItem="LaunchSafeArea" secondAttribute="centerY" id="CenterY"/>

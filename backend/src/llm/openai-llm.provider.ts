@@ -398,13 +398,7 @@ SHOW NOTES RULES
 
   private parseDialogueScript(content: string, fallbackIntent: TopicIntent, fallbackTitle: string): SegmentDialogueScript {
     const normalizedContent = content.trim();
-    const jsonCandidate = this.extractJsonBlock(normalizedContent);
-    let parsed: any;
-    try {
-      parsed = JSON.parse(jsonCandidate);
-    } catch {
-      throw new Error('OpenAI returned invalid JSON for dialogue script');
-    }
+    const parsed = this.parseJsonWithFallback(normalizedContent, 'dialogue script');
 
     const intent = this.parseTopicIntent(parsed?.intent, fallbackIntent);
     const title = typeof parsed?.title === 'string' && parsed.title.trim() ? parsed.title.trim() : fallbackTitle;
@@ -520,6 +514,36 @@ SHOW NOTES RULES
       return fenced[1].trim();
     }
     return content;
+  }
+
+  private extractFirstJsonObject(content: string): string | null {
+    const firstBrace = content.indexOf('{');
+    const lastBrace = content.lastIndexOf('}');
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      return content.slice(firstBrace, lastBrace + 1).trim();
+    }
+    return null;
+  }
+
+  private parseJsonWithFallback(raw: string, contextLabel: string): any {
+    const cleaned = (raw || '').replace(/\u0000/g, '').trim();
+    const candidates: Array<string | null> = [
+      this.extractJsonBlock(cleaned),
+      this.extractFirstJsonObject(cleaned),
+    ];
+
+    for (const candidate of candidates) {
+      if (!candidate) {
+        continue;
+      }
+      try {
+        return JSON.parse(candidate);
+      } catch {
+        // try next candidate
+      }
+    }
+
+    throw new Error(`OpenAI returned invalid JSON for ${contextLabel}`);
   }
 
   private parseMetadataJson(raw: string): EpisodeMetadata {

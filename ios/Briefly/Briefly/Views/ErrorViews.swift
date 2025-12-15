@@ -91,7 +91,7 @@ struct FullScreenErrorView: View {
 
             Text(message)
                 .font(.body)
-                .foregroundColor(.secondary)
+                .foregroundColor(.brieflyTextMuted)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
 
@@ -105,6 +105,6 @@ struct FullScreenErrorView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .padding()
-        .background(Color(.systemBackground))
+        .background(Color.brieflyBackground)
     }
 }

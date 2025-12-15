@@ -14,7 +14,7 @@ struct PlayerBarView: View {
                                 .lineLimit(1)
                             Text(timeString(audioManager.currentTimeSeconds) + " / " + timeString(audioManager.durationSeconds))
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.brieflyTextMuted)
                         }
                         Spacer()
                         Button(action: togglePlay) {
@@ -29,7 +29,7 @@ struct PlayerBarView: View {
                     }))
                 }
                 .padding(12)
-                .background(Color(.secondarySystemBackground))
+                .background(Color.brieflySurface)
                 .cornerRadius(12)
                 .padding(.horizontal)
             }

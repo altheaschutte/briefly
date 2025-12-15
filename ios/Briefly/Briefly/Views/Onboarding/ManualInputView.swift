@@ -14,12 +14,12 @@ struct ManualInputView: View {
             TextEditor(text: $text)
                 .frame(minHeight: 200)
                 .padding(8)
-                .background(Color(.secondarySystemBackground))
+                .background(Color.brieflySurface)
                 .cornerRadius(12)
                 .overlay(alignment: .topLeading) {
                     if text.isEmpty {
                         Text("Tell me about the kinds of news and stories you want in your daily Briefly episode…")
-                            .foregroundColor(.secondary)
+                            .foregroundColor(.brieflyTextMuted)
                             .padding(14)
                     }
                 }
@@ -53,5 +53,6 @@ struct ManualInputView: View {
             Spacer()
         }
         .padding()
+        .background(Color.brieflyBackground)
     }
 }

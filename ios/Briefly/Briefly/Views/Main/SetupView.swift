@@ -1,5 +1,4 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 private enum TopicRoute: Hashable {
     case edit(Topic)
@@ -10,7 +9,6 @@ struct SetupView: View {
     @ObservedObject var topicsViewModel: TopicsViewModel
     @StateObject private var creationViewModel: EpisodeCreationViewModel
     @State private var bannerMessage: String?
-    @State private var draggingTopic: Topic?
     @State private var editingTopic: Topic?
 
     init(topicsViewModel: TopicsViewModel, appViewModel: AppViewModel) {
@@ -33,6 +31,8 @@ struct SetupView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        .listRowBackground(Color.brieflyBackground)
+        .background(Color.brieflyBackground)
         .navigationTitle("Create")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
@@ -95,6 +95,7 @@ struct SetupView: View {
                 }
             }
         }
+        .background(Color.brieflyBackground)
     }
 
     private var emptyState: some View {
@@ -102,9 +103,9 @@ struct SetupView: View {
             Text("Set up your Briefly")
                 .font(.headline)
             Text("Add a few topics so we can personalize the episode we generate for you.")
-                .foregroundColor(.secondary)
+                .foregroundColor(.brieflyTextMuted)
             Text("Use the + button above to add your first topic.")
-                .foregroundColor(.secondary)
+                .foregroundColor(.brieflyTextMuted)
         }
         .padding(.vertical, 12)
     }
@@ -120,7 +121,7 @@ struct SetupView: View {
                             .font(.headline)
                         Text(statusLabel(for: episode.status))
                             .font(.subheadline)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(.brieflyTextMuted)
                     }
                     Spacer(minLength: 8)
                 }
@@ -131,7 +132,7 @@ struct SetupView: View {
                         .font(.footnote)
                 } else {
                     Text(statusDescription(for: episode.status))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.brieflyTextMuted)
                         .font(.footnote)
                 }
             }
@@ -143,25 +144,20 @@ struct SetupView: View {
         Section(header: Text("Active topics")) {
             if topicsViewModel.activeTopics.isEmpty {
                 Text("No active topics yet.")
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.brieflyTextMuted)
             } else {
                 ForEach(topicsViewModel.activeTopics) { topic in
                     topicRow(topic: topic, isActive: true)
-                        .onDrag {
-                            draggingTopic = topic
-                            return NSItemProvider(object: NSString(string: topicDragIdentifier(for: topic)))
+                        .draggable(topicDragIdentifier(for: topic))
+                        .dropDestination(for: String.self) { items, _ in
+                            guard let sourceID = items.first else { return false }
+                            return handleActiveTopicDrop(sourceID: sourceID, target: topic)
                         }
-                        .onDrop(
-                            of: [UTType.text],
-                            delegate: ActiveTopicDropDelegate(
-                                target: topic,
-                                current: $draggingTopic,
-                                viewModel: topicsViewModel
-                            )
-                        )
                 }
             }
         }
+        .textCase(nil)
+        .listRowBackground(Color.brieflyBackground)
     }
 
     private var inactiveTopicsSection: some View {
@@ -169,20 +165,22 @@ struct SetupView: View {
                 footer: inactiveFooter) {
             if topicsViewModel.inactiveTopics.isEmpty {
                 Text("No inactive topics.")
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.brieflyTextMuted)
             } else {
                 ForEach(topicsViewModel.inactiveTopics) { topic in
                     topicRow(topic: topic, isActive: false)
                 }
             }
         }
+        .textCase(nil)
+        .listRowBackground(Color.brieflyBackground)
     }
 
     private var inactiveFooter: some View {
         Group {
             if !topicsViewModel.canAddActiveTopic && !topicsViewModel.inactiveTopics.isEmpty {
                 Text("You can have up to \(topicsViewModel.maxActiveTopics) active topics.")
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.brieflyTextMuted)
             }
         }
     }
@@ -243,6 +241,19 @@ struct SetupView: View {
         }
     }
 
+    private func handleActiveTopicDrop(sourceID: String, target: Topic) -> Bool {
+        guard sourceID != topicDragIdentifier(for: target) else { return false }
+        guard let fromIndex = topicsViewModel.activeTopics.firstIndex(where: { topicDragIdentifier(for: $0) == sourceID }),
+              let toIndex = topicsViewModel.activeTopics.firstIndex(of: target) else { return false }
+
+        let destination = toIndex > fromIndex ? toIndex + 1 : toIndex
+        withAnimation {
+            topicsViewModel.reorderActiveTopicsInMemory(from: IndexSet(integer: fromIndex), to: destination)
+        }
+        Task { await topicsViewModel.persistActiveTopicOrder() }
+        return true
+    }
+
     private func topicDragIdentifier(for topic: Topic) -> String {
         topic.id?.uuidString ?? topic.originalText
     }
@@ -272,15 +283,17 @@ struct SetupView: View {
                 }
             } label: {
                 Image(systemName: isActive ? "minus.circle" : "plus.circle.fill")
-                    .foregroundStyle(isActive ? Color(.systemGray2) : Color.brieflyPrimary)
+                    .foregroundStyle(isActive ? Color.brieflyAccentSoft : Color.brieflyPrimary)
                     .font(.title3)
             }
             .buttonStyle(.borderless)
             .disabled(!isActive && !topicsViewModel.canAddActiveTopic)
         }
+        .contentShape(Rectangle())
         .padding(.vertical, 8)
         .listRowInsets(EdgeInsets(top: 8, leading: 14, bottom: 8, trailing: 16))
         .listRowSeparator(.visible)
+        .listRowBackground(Color.brieflyBackground)
     }
 }
 
@@ -334,15 +347,21 @@ private extension SetupView {
                 Task { await creationViewModel.generateEpisode() }
             } label: {
                 generateEpisodeLabel
-                    .frame(maxWidth: .infinity, alignment: .center)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.brieflyPrimary)
+                    .foregroundColor(.white)
+                    .tint(.white)
+                    .cornerRadius(12)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.plain)
             .disabled(creationViewModel.hasActiveGeneration)
+            .opacity(creationViewModel.hasActiveGeneration ? 0.85 : 1)
 
             if creationViewModel.hasActiveGeneration {
                 Text("Finish the current episode before starting another.")
                     .font(.footnote)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.brieflyTextMuted)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
@@ -352,7 +371,7 @@ private extension SetupView {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(.ultraThinMaterial)
+        .background(Color.brieflySurface.opacity(0.94))
         .shadow(color: Color.black.opacity(0.08), radius: 8, y: -2)
     }
 
@@ -505,37 +524,8 @@ private struct GripDots: View {
                 }
             }
         }
-        .foregroundColor(.secondary)
+        .foregroundColor(.brieflyTextMuted)
         .frame(width: (dotSize * 2) + spacing, alignment: .leading)
         .accessibilityHidden(true)
-    }
-}
-
-@MainActor
-private struct ActiveTopicDropDelegate: DropDelegate {
-    let target: Topic
-    @Binding var current: Topic?
-    let viewModel: TopicsViewModel
-
-    func dropEntered(info: DropInfo) {
-        guard let current, current != target else { return }
-        guard let fromIndex = viewModel.activeTopics.firstIndex(of: current),
-              let toIndex = viewModel.activeTopics.firstIndex(of: target) else { return }
-
-        let destination = toIndex > fromIndex ? toIndex + 1 : toIndex
-        withAnimation {
-            viewModel.reorderActiveTopicsInMemory(from: IndexSet(integer: fromIndex), to: destination)
-        }
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        guard current != nil else { return false }
-        Task { await viewModel.persistActiveTopicOrder() }
-        current = nil
-        return true
     }
 }

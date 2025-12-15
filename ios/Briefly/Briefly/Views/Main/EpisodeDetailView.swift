@@ -11,7 +11,7 @@ struct EpisodeDetailView: View {
                     .font(.title.bold())
                 if let date = episode.displayDate {
                     Text(date.formatted(date: .abbreviated, time: .shortened))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.brieflyTextMuted)
                 }
                 Text(episode.summary)
                     .foregroundColor(.primary)
@@ -25,7 +25,7 @@ struct EpisodeDetailView: View {
                                 .foregroundColor(.primary)
                         }
                         .padding()
-                        .background(Color(.secondarySystemBackground))
+                        .background(Color.brieflySurface)
                         .cornerRadius(10)
                     }
                 }
@@ -34,6 +34,7 @@ struct EpisodeDetailView: View {
             }
             .padding()
         }
+        .background(Color.brieflyBackground)
         .navigationTitle("Episode")
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -56,11 +57,11 @@ struct EpisodeDetailView: View {
                         .padding()
                 }
                 Spacer()
-                Text(timeString(audioManager.currentTimeSeconds))
+                Text(timeString(displayedCurrentTime))
                     .font(.footnote)
                 Text("/")
-                    .foregroundColor(.secondary)
-                Text(timeString(audioManager.durationSeconds))
+                    .foregroundColor(.brieflyTextMuted)
+                Text(timeString(displayedDuration))
                     .font(.footnote)
             }
             Slider(value: Binding(get: {
@@ -71,8 +72,19 @@ struct EpisodeDetailView: View {
         }
     }
 
-    private func timeString(_ seconds: Double) -> String {
-        guard seconds.isFinite else { return "--:--" }
+    private var displayedCurrentTime: Double {
+        audioManager.currentEpisode?.id == episode.id ? audioManager.currentTimeSeconds : 0
+    }
+
+    private var displayedDuration: Double? {
+        if audioManager.currentEpisode?.id == episode.id, audioManager.durationSeconds > 0 {
+            return audioManager.durationSeconds
+        }
+        return episode.durationDisplaySeconds
+    }
+
+    private func timeString(_ seconds: Double?) -> String {
+        guard let seconds, seconds.isFinite else { return "--:--" }
         let minutes = Int(seconds) / 60
         let secs = Int(seconds) % 60
         return String(format: "%02d:%02d", minutes, secs)

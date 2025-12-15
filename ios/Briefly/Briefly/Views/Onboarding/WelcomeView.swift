@@ -11,9 +11,13 @@ struct WelcomeView: View {
                 Text("Welcome to Briefly — your personal, AI-generated podcast.")
                     .font(.title.bold())
                 Text("Tell me what you’re interested in listening to.")
+                    .foregroundColor(.brieflyTextMuted)
                 Text("I’ll extract up to 5 topics from your conversation.")
+                    .foregroundColor(.brieflyTextMuted)
                 Text("When you're happy, you can generate your first episode.")
+                    .foregroundColor(.brieflyTextMuted)
                 Text("New episodes will be generated daily for your commute.")
+                    .foregroundColor(.brieflyTextMuted)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -38,5 +42,6 @@ struct WelcomeView: View {
             Spacer()
         }
         .padding()
+        .background(Color.brieflyBackground)
     }
 }

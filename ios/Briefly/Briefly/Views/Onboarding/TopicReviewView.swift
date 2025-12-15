@@ -11,7 +11,7 @@ struct TopicReviewView: View {
                 .font(.title3.bold())
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text("Edit, remove, or add topics before we generate your first episode.")
-                .foregroundColor(.secondary)
+                .foregroundColor(.brieflyTextMuted)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             if viewModel.isPollingTopics {
@@ -41,6 +41,7 @@ struct TopicReviewView: View {
                 .onDelete { indexSet in
                     viewModel.deleteTopic(at: indexSet)
                 }
+                .listRowBackground(Color.brieflyBackground)
 
                 Section(header: Text("Add topic")) {
                     TextField("Topic", text: $newText, axis: .vertical)
@@ -56,11 +57,15 @@ struct TopicReviewView: View {
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 4)
                     .background(Color.brieflySecondary)
-                    .foregroundColor(Color.brieflyPrimary)
+                    .foregroundColor(.white)
                     .cornerRadius(10)
                 }
+                .listRowBackground(Color.brieflyBackground)
             }
-            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .listStyle(.plain)
+            .listRowBackground(Color.brieflyBackground)
+            .background(Color.brieflyBackground)
 
             Button(action: onConfirm) {
                 Text("Confirm Topics")
@@ -73,6 +78,7 @@ struct TopicReviewView: View {
             .padding(.bottom, 8)
         }
         .padding()
+        .background(Color.brieflyBackground)
         .onAppear {
             if viewModel.topics.isEmpty {
                 Task { await viewModel.fetchTopicsWithPolling() }

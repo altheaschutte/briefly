@@ -27,6 +27,7 @@ export function selectFreshQueries(candidateQueries: string[], previousQueries: 
 export function buildEpisodeSources(
   queries: Array<TopicQuery | { citations: string[]; topicId: string; episodeId: string }>,
   episodeId: string,
+  segmentId?: string,
 ): EpisodeSource[] {
   const seen = new Set<string>();
   const results: EpisodeSource[] = [];
@@ -45,6 +46,7 @@ export function buildEpisodeSources(
       results.push({
         id: uuid(),
         episodeId,
+        segmentId,
         sourceTitle: citation,
         url: citation,
         type: 'perplexity_citation',

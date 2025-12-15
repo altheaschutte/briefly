@@ -47,5 +47,6 @@ struct MainTabView: View {
                 selection = .feed
             }
         }
+        .background(Color.brieflyBackground)
     }
 }

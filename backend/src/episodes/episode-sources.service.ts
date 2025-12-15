@@ -11,24 +11,30 @@ export class EpisodeSourcesService {
 
   async replaceSources(episodeId: string, sources: EpisodeSource[]): Promise<EpisodeSource[]> {
     const seen = new Set<string>();
-    const normalized = sources
-      .filter((source) => Boolean(source.url))
-      .map((source) => {
-        const url = source.url.trim();
-        const key = url.toLowerCase();
-        if (seen.has(key)) {
-          return null;
-        }
-        seen.add(key);
-        return {
-          ...source,
-          id: source.id ?? uuid(),
-          episodeId: episodeId,
-          sourceTitle: source.sourceTitle?.trim() || url,
-          url,
-        };
-      })
-      .filter((source): source is EpisodeSource => Boolean(source));
+    const normalized: EpisodeSource[] = [];
+
+    for (const source of sources || []) {
+      if (!source?.url) {
+        continue;
+      }
+      const url = source.url.trim();
+      if (!url) {
+        continue;
+      }
+      const key = `${source.segmentId || 'episode'}::${url.toLowerCase()}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      normalized.push({
+        ...source,
+        id: source.id ?? uuid(),
+        episodeId,
+        segmentId: source.segmentId,
+        sourceTitle: source.sourceTitle?.trim() || url,
+        url,
+      });
+    }
 
     return this.repository.replaceForEpisode(episodeId, normalized);
   }

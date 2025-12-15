@@ -45,4 +45,13 @@
 │
 └─ README.md             # (this file)
 
-¿
+## Brand & UI Theme
+
+- Dark mode only: the entire experience sits on a deep midnight background.
+- Palette:
+  - `#132a3b` — primary background
+  - `#1f3a4e` — card and surface panels
+  - `#ffa563` — brightest accent for primary CTAs and highlights (always white text)
+  - `#2a7997`, `#37a8ae`, `#93c8c2` — secondary teals for secondary buttons, chips, duration labels, and glow accents (also white text on any button treatment)
+- Foreground: use near-white text for headings and lighter body copy, with muted text on surfaces for readability.
+- Imagery: cover art and illustration prompts lean on pastel takes of these colors blended with complementary hues for cohesion without being repetitive.

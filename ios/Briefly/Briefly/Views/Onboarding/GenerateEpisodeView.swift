@@ -12,7 +12,7 @@ struct GenerateEpisodeView: View {
                 .font(.title3.bold())
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text("New episodes will be generated daily for your commute.")
-                .foregroundColor(.secondary)
+                .foregroundColor(.brieflyTextMuted)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             if let error = viewModel.errorMessage {
@@ -37,6 +37,7 @@ struct GenerateEpisodeView: View {
             Spacer()
         }
         .padding()
+        .background(Color.brieflyBackground)
         .onChange(of: didGenerate) { _, newValue in
             if newValue { onDone() }
         }

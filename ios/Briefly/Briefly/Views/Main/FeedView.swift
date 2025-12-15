@@ -41,6 +41,7 @@ struct FeedView: View {
             }
             .padding()
         }
+        .background(Color.brieflyBackground)
         .navigationTitle("Your Library")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(for: Episode.self) { episode in
@@ -82,7 +83,7 @@ struct FeedView: View {
             Text("No episodes yet")
                 .font(.headline)
             Text("You haven't generated any Briefly episodes. Create one to see it appear here.")
-                .foregroundColor(.secondary)
+                .foregroundColor(.brieflyTextMuted)
 
             if let onCreateEpisode {
                 Button(action: onCreateEpisode) {
@@ -98,7 +99,7 @@ struct FeedView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding()
-        .background(Color(.secondarySystemBackground))
+        .background(Color.brieflySurface)
         .cornerRadius(12)
     }
 
@@ -106,7 +107,7 @@ struct FeedView: View {
         VStack(alignment: .center, spacing: 12) {
             Text("Latest episode")
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundColor(.brieflyTextMuted)
                 .frame(maxWidth: .infinity)
             episodeHero(episode)
 
@@ -126,7 +127,7 @@ struct FeedView: View {
                         .frame(maxWidth: .infinity)
                         .padding()
                         .background(Color.brieflySecondary)
-                        .foregroundColor(Color.brieflyPrimary)
+                        .foregroundColor(.white)
                         .cornerRadius(12)
                 }
                 .buttonStyle(.plain)
@@ -150,7 +151,7 @@ struct FeedView: View {
                 .multilineTextAlignment(.center)
                 .padding(.top, 6)
             Text(episode.summary)
-                .foregroundColor(.secondary)
+                .foregroundColor(.brieflyTextMuted)
                 .lineLimit(3)
                 .multilineTextAlignment(.center)
         }
@@ -234,14 +235,14 @@ private struct EpisodeRow: View {
                     Text(dateLabel(episode.displayDate))
                         .font(.caption)
                         .fontWeight(.semibold)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.brieflyTextMuted)
                     Text(episode.displayTitle)
                         .font(.callout.weight(.semibold))
                         .foregroundColor(.primary)
                         .lineLimit(2)
                     Text(episode.subtitle)
                         .font(.footnote)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.brieflyTextMuted)
                         .lineLimit(2)
                 }
                 Spacer(minLength: 8)
@@ -260,9 +261,9 @@ private struct EpisodeRow: View {
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .overlay(
                 RoundedRectangle(cornerRadius: 14)
-                    .stroke(Color.black.opacity(0.05), lineWidth: 1)
+                    .stroke(Color.brieflyBorder, lineWidth: 1)
             )
-            .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
+            .shadow(color: Color.black.opacity(0.24), radius: 8, x: 0, y: 4)
     }
 
     private var durationPill: some View {
@@ -276,7 +277,7 @@ private struct EpisodeRow: View {
         .padding(.vertical, 6)
         .padding(.horizontal, 12)
         .background(Color.brieflyDurationBackground)
-        .foregroundColor(Color.brieflyPrimary)
+        .foregroundColor(Color.brieflyBackground)
         .clipShape(Capsule())
     }
 
@@ -299,7 +300,7 @@ private struct EpisodeRow: View {
 // Shared cover image renderer so list and hero use the same artwork.
 private func coverImage(for episode: Episode) -> some View {
     ZStack {
-        Color(.secondarySystemBackground)
+        Color.brieflySurface
 
         if let url = episode.coverImageURL {
             AsyncImage(url: url) { phase in
@@ -325,7 +326,7 @@ private func coverImage(for episode: Episode) -> some View {
 private var fallbackArtwork: some View {
     Image(systemName: "waveform.circle.fill")
         .font(.system(size: 32, weight: .semibold))
-        .foregroundColor(Color.purple)
+        .foregroundColor(Color.brieflySecondary)
 }
 
 private extension FeedView {
@@ -377,7 +378,7 @@ private struct SkeletonBlock: View {
 
     var body: some View {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .fill(Color(.systemGray5))
+            .fill(Color.white.opacity(0.08))
             .overlay {
                 shimmer
                     .mask(

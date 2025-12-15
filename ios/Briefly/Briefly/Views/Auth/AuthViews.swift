@@ -39,6 +39,7 @@ struct AuthFlowView: View {
             }
             .padding()
             .navigationTitle("Account")
+            .background(Color.brieflyBackground)
         }
     }
 
@@ -77,7 +78,7 @@ struct AuthFlowView: View {
             Button(action: { mode = .forgot }) {
                 Text("Forgot password?")
                     .font(.footnote)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.brieflyTextMuted)
             }
         }
     }
@@ -122,7 +123,7 @@ struct AuthFlowView: View {
                 .font(.headline)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text("Enter your email and we'll send reset instructions. (Stub UI)")
-                .foregroundColor(.secondary)
+                .foregroundColor(.brieflyTextMuted)
                 .frame(maxWidth: .infinity, alignment: .leading)
             TextField("Email", text: $viewModel.email)
                 .textInputAutocapitalization(.never)
@@ -132,14 +133,15 @@ struct AuthFlowView: View {
             Button("Send reset link") { }
                 .frame(maxWidth: .infinity)
                 .padding()
-                .background(Color(.secondarySystemBackground))
+                .background(Color.brieflySecondary)
+                .foregroundColor(.white)
                 .cornerRadius(12)
 
             Button("Back to login") {
                 mode = .login
             }
             .font(.footnote)
-            .foregroundColor(.secondary)
+            .foregroundColor(.brieflyTextMuted)
         }
     }
 }

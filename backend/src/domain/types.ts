@@ -83,6 +83,7 @@ export interface EpisodeSegment {
 export interface EpisodeSource {
   id: string;
   episodeId: string;
+  segmentId?: string;
   sourceTitle: string;
   url: string;
   type?: string;

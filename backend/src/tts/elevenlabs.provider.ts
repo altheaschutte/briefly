@@ -49,7 +49,10 @@ export class ElevenLabsProvider implements TtsProvider {
     }
     // Default to Eleven Multilingual v2 per requested tuning
     this.modelId = this.configService.get<string>('ELEVENLABS_MODEL_ID') ?? 'eleven_multilingual_v2';
-    this.dialogueModelId = this.configService.get<string>('ELEVENLABS_DIALOGUE_MODEL_ID') ?? this.modelId;
+    this.dialogueModelId =
+      this.configService.get<string>('ELEVENLABS_DIALOGUE_MODEL_ID') ??
+      this.configService.get<string>('ELEVENLABS_MODEL_ID') ??
+      'eleven_v3';
   }
 
   async synthesize(
@@ -105,7 +108,6 @@ export class ElevenLabsProvider implements TtsProvider {
       .map((turn) => ({
         text: turn.text?.trim(),
         voice_id: voiceMeta[turn.speaker]?.id,
-        voice_name: voiceMeta[turn.speaker]?.name,
       }))
       .filter((turn) => Boolean(turn.text && turn.voice_id));
 
@@ -120,7 +122,7 @@ export class ElevenLabsProvider implements TtsProvider {
   }
 
   private async streamDialogue(payload: any, apiKey: string): Promise<Buffer> {
-    const response = await axios.post<ArrayBuffer>(`${this.baseUrl}/v1/dialogue/stream`, payload, {
+    const response = await axios.post<ArrayBuffer>(`${this.baseUrl}/v1/text-to-dialogue/stream`, payload, {
       headers: {
         'xi-api-key': apiKey,
         Accept: 'audio/mpeg',
@@ -179,7 +181,7 @@ export class ElevenLabsProvider implements TtsProvider {
 
     return {
       primary: {
-        endpoint: `${this.baseUrl}/v1/dialogue/stream`,
+        endpoint: `${this.baseUrl}/v1/text-to-dialogue/stream`,
         body: dialogueBody,
       },
       fallback: {

@@ -125,7 +125,8 @@ async function run() {
         });
       }
 
-      const segmentSources = buildEpisodeSources(queryResults, previewEpisodeId);
+      const segmentId = uuid();
+      const segmentSources = buildEpisodeSources(queryResults, previewEpisodeId, segmentId);
       const segmentContent = buildSegmentContent(topic.originalText, queryResults);
       let segmentDialogue = await llmService.generateSegmentScript(
         topic.originalText,
@@ -153,7 +154,7 @@ async function run() {
       }
 
       segments.push({
-        id: uuid(),
+        id: segmentId,
         episodeId: previewEpisodeId,
         orderIndex: index,
         title: topic.originalText,

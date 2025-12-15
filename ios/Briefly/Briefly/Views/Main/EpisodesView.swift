@@ -35,6 +35,7 @@ struct EpisodesView: View {
             await viewModel.load()
         }
         .listStyle(.plain)
+        .scrollContentBackground(.hidden)
         .overlay(alignment: .top) { bannerView }
         .overlay {
             if let message = viewModel.errorMessage, viewModel.episodes.isEmpty {
@@ -54,6 +55,7 @@ struct EpisodesView: View {
         .onChange(of: viewModel.errorMessage) { newValue in
             handleErrorChange(newValue)
         }
+        .background(Color.brieflyBackground)
     }
 }
 
@@ -67,14 +69,14 @@ private struct EpisodeRow: View {
                     Text(dateLabel(episode.displayDate))
                         .font(.caption)
                         .fontWeight(.semibold)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.brieflyTextMuted)
                     Text(episode.displayTitle)
                         .font(.callout.weight(.semibold))
                         .foregroundColor(.primary)
                         .lineLimit(2)
                     Text(episode.subtitle)
                         .font(.footnote)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.brieflyTextMuted)
                         .lineLimit(2)
                 }
                 Spacer(minLength: 8)
@@ -89,7 +91,7 @@ private struct EpisodeRow: View {
     private var artwork: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 14)
-                .fill(Color(.secondarySystemBackground))
+                .fill(Color.brieflySurface)
             if let url = episode.coverImageURL {
                 AsyncImage(url: url) { phase in
                     switch phase {
@@ -114,15 +116,15 @@ private struct EpisodeRow: View {
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .overlay(
             RoundedRectangle(cornerRadius: 14)
-                .stroke(Color.black.opacity(0.05), lineWidth: 1)
+                .stroke(Color.brieflyBorder, lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
+        .shadow(color: Color.black.opacity(0.24), radius: 8, x: 0, y: 4)
     }
 
     private var fallbackArtwork: some View {
         Image(systemName: "waveform.circle.fill")
             .font(.system(size: 28, weight: .semibold))
-            .foregroundColor(Color.purple)
+            .foregroundColor(Color.brieflySecondary)
     }
 
     private var durationPill: some View {
@@ -135,8 +137,8 @@ private struct EpisodeRow: View {
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 12)
-        .background(Color.purple.opacity(0.12))
-        .foregroundColor(Color.purple)
+        .background(Color.brieflyDurationBackground)
+        .foregroundColor(Color.brieflyBackground)
         .clipShape(Capsule())
     }
 

@@ -7,8 +7,7 @@ import { EpisodesService } from './episodes.service';
 import { LlmService } from '../llm/llm.service';
 import { PerplexityService } from '../perplexity/perplexity.service';
 import { TtsService } from '../tts/tts.service';
-import { Episode, EpisodeSegment, EpisodeSource } from '../domain/types';
-import { InMemoryStoreService } from '../common/in-memory-store.service';
+import { Episode, EpisodeSegment } from '../domain/types';
 import { EpisodeSourcesService } from './episode-sources.service';
 import { TopicQueriesService } from '../topic-queries/topic-queries.service';
 import { TopicQueryCreateInput } from '../topic-queries/topic-queries.repository';
@@ -22,6 +21,7 @@ import {
   renderDialogueScript,
   selectFreshQueries,
 } from './episode-script.utils';
+import { EpisodeSegmentsService } from './episode-segments.service';
 
 @Injectable()
 export class EpisodeProcessorService {
@@ -34,8 +34,8 @@ export class EpisodeProcessorService {
     private readonly topicQueriesService: TopicQueriesService,
     private readonly perplexityService: PerplexityService,
     private readonly ttsService: TtsService,
+    private readonly episodeSegmentsService: EpisodeSegmentsService,
     private readonly episodeSourcesService: EpisodeSourcesService,
-    private readonly store: InMemoryStoreService,
     private readonly coverImageService: CoverImageService,
     private readonly configService: ConfigService,
   ) {}
@@ -61,7 +61,6 @@ export class EpisodeProcessorService {
 
       await this.markEpisodeStatus(userId, episodeId, 'retrieving_content');
       const segments: EpisodeSegment[] = [];
-      const sources: EpisodeSource[] = [];
       let cumulativeStartSeconds = 0;
       const { voiceA, voiceB } = getDefaultVoices(this.configService);
 
@@ -92,7 +91,8 @@ export class EpisodeProcessorService {
         }
 
         const savedQueries = await this.topicQueriesService.createMany(userId, queryResults);
-        const segmentSources = buildEpisodeSources(savedQueries, episodeId);
+        const segmentId = uuid();
+        const segmentSources = buildEpisodeSources(savedQueries, episodeId, segmentId);
         const segmentContent = buildSegmentContent(topic.originalText, savedQueries);
         let segmentDialogue = await this.llmService.generateSegmentScript(
           topic.originalText,
@@ -116,7 +116,7 @@ export class EpisodeProcessorService {
         cumulativeStartSeconds += segmentDurationSeconds;
 
         segments.push({
-          id: uuid(),
+          id: segmentId,
           episodeId,
           orderIndex: index,
           title: topic.originalText,
@@ -129,19 +129,20 @@ export class EpisodeProcessorService {
           startTimeSeconds: segmentStartSeconds,
           durationSeconds: segmentDurationSeconds,
         });
-        sources.push(...segmentSources);
       }
 
-      this.store.setSegments(episodeId, segments);
-      await this.episodeSourcesService.replaceSources(episodeId, sources);
+      const persistedSegments =
+        await this.episodeSegmentsService.replaceSegments(episodeId, segments);
+      const normalizedSources = persistedSegments.flatMap((segment) => segment.rawSources || []);
+      await this.episodeSourcesService.replaceSources(episodeId, normalizedSources);
 
       await this.markEpisodeStatus(userId, episodeId, 'generating_script');
-      const fullDialogue = combineDialogueScripts(segments);
+      const fullDialogue = combineDialogueScripts(persistedSegments);
       const fullScript = renderDialogueScript(fullDialogue);
 
       await this.markEpisodeStatus(userId, episodeId, 'generating_audio');
-      const metadata = await this.llmService.generateEpisodeMetadata(fullScript, segments);
-      const coverPrompt = this.coverImageService.buildPrompt(metadata.title, segments);
+      const metadata = await this.llmService.generateEpisodeMetadata(fullScript, persistedSegments);
+      const coverPrompt = this.coverImageService.buildPrompt(metadata.title, persistedSegments);
       const coverPromise = this.coverImageService
         .generateCoverImage(userId, episodeId, coverPrompt)
         .then((result) => ({ ...result, prompt: coverPrompt }))
