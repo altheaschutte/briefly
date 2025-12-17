@@ -12,7 +12,7 @@ extension Color {
     static let brieflyAccentSoft = Color(hex: 0x93C8C2)
 
     // UI helpers
-    static let brieflyDurationBackground = Color(hex: 0x93C8C2)
+    static let brieflyDurationBackground = Color(hex: 0x2A7997, alpha: 0.3)
     static let brieflyTextMuted = Color.white.opacity(0.78)
     static let brieflyBorder = Color.white.opacity(0.12)
 }

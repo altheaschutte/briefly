@@ -17,20 +17,28 @@ final class AudioPlayerManager: NSObject, ObservableObject {
         configureSession()
     }
 
-    func play(episode: Episode) {
+    func play(episode: Episode, from startTime: Double? = nil) {
         guard let url = episode.audioURL else { return }
-        // Stop observing the previous player before swapping in a new instance.
-        removeTimeObserverIfNeeded()
-        player?.pause()
+        let startSeconds = max(startTime ?? 0, 0)
 
-        currentEpisode = episode
-        let newPlayer = AVPlayer(url: url)
-        player = newPlayer
-        addTimeObserver()
-        newPlayer.play()
-        newPlayer.rate = Float(playbackSpeed)
-        isPlaying = true
-        durationSeconds = episode.durationSeconds ?? newPlayer.currentItem?.asset.duration.seconds ?? 0
+        // Stop observing the previous player before swapping in a new instance.
+        let needsNewPlayer = currentEpisode?.id != episode.id || player == nil
+        if needsNewPlayer {
+            removeTimeObserverIfNeeded()
+            player?.pause()
+
+            currentEpisode = episode
+            let newPlayer = AVPlayer(url: url)
+            player = newPlayer
+            addTimeObserver()
+            durationSeconds = episode.durationSeconds ?? newPlayer.currentItem?.asset.duration.seconds ?? 0
+            progress = 0
+            currentTimeSeconds = 0
+        } else {
+            currentEpisode = episode
+        }
+
+        seek(toSeconds: startSeconds, autoPlay: true)
     }
 
     func pause() {
@@ -52,12 +60,31 @@ final class AudioPlayerManager: NSObject, ObservableObject {
     }
 
     func seek(to progress: Double) {
-        guard let duration = player?.currentItem?.duration.seconds, duration.isFinite else { return }
-        let seconds = duration * progress
-        let time = CMTime(seconds: seconds, preferredTimescale: 600)
-        player?.seek(to: time) { [weak self] _ in
-            self?.currentTimeSeconds = seconds
-            self?.progress = progress
+        guard let duration = player?.currentItem?.duration.seconds, duration.isFinite, duration > 0 else { return }
+        let clampedProgress = max(0, min(progress, 1))
+        let seconds = duration * clampedProgress
+        seek(toSeconds: seconds, autoPlay: nil)
+    }
+
+    func seek(toSeconds seconds: Double, autoPlay: Bool? = nil) {
+        guard let player else { return }
+        let duration = player.currentItem?.duration.seconds
+        let validDuration = (duration?.isFinite == true && (duration ?? 0) > 0) ? duration : nil
+        let clampedSeconds = max(0, min(seconds, validDuration ?? seconds))
+        let time = CMTime(seconds: clampedSeconds, preferredTimescale: 600)
+        player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+            guard let self else { return }
+            self.currentTimeSeconds = clampedSeconds
+            if let durationSeconds = validDuration {
+                self.durationSeconds = durationSeconds
+                self.progress = durationSeconds > 0 ? clampedSeconds / durationSeconds : 0
+            }
+            let shouldPlay = autoPlay ?? self.isPlaying
+            if shouldPlay {
+                player.play()
+                player.rate = Float(self.playbackSpeed)
+                self.isPlaying = true
+            }
         }
     }
 

@@ -13,6 +13,8 @@ struct Episode: Codable, Identifiable, Hashable {
     var updatedAt: Date?
     var publishedAt: Date?
     var topics: [Topic]?
+    var segments: [EpisodeSegment]?
+    var sources: [EpisodeSource]?
     var status: String?
     var showNotes: String?
     var transcript: String?
@@ -37,6 +39,8 @@ struct Episode: Codable, Identifiable, Hashable {
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case topics
+        case segments
+        case sources
         case status
         case showNotesCamel = "showNotes"
         case showNotesSnake = "show_notes"
@@ -61,6 +65,8 @@ struct Episode: Codable, Identifiable, Hashable {
          updatedAt: Date? = nil,
          publishedAt: Date? = nil,
          topics: [Topic]? = nil,
+         segments: [EpisodeSegment]? = nil,
+         sources: [EpisodeSource]? = nil,
          status: String? = nil,
          showNotes: String? = nil,
          transcript: String? = nil,
@@ -79,6 +85,8 @@ struct Episode: Codable, Identifiable, Hashable {
         self.updatedAt = updatedAt
         self.publishedAt = publishedAt
         self.topics = topics
+        self.segments = segments
+        self.sources = sources
         self.status = status
         self.showNotes = showNotes
         self.transcript = transcript
@@ -100,6 +108,8 @@ struct Episode: Codable, Identifiable, Hashable {
         }
 
         topics = try? container.decodeIfPresent([Topic].self, forKey: .topics)
+        segments = try? container.decodeIfPresent([EpisodeSegment].self, forKey: .segments)
+        sources = try? container.decodeIfPresent([EpisodeSource].self, forKey: .sources)
         status = try? container.decodeIfPresent(String.self, forKey: .status)
 
         if let number = (try? container.decodeIfPresent(Int.self, forKey: .episodeNumberSnake)) ??
@@ -187,6 +197,8 @@ struct Episode: Codable, Identifiable, Hashable {
         try container.encodeIfPresent(updatedAt, forKey: .updatedAt)
         try container.encodeIfPresent(publishedAt, forKey: .publishedAt)
         try container.encodeIfPresent(topics, forKey: .topics)
+        try container.encodeIfPresent(segments, forKey: .segments)
+        try container.encodeIfPresent(sources, forKey: .sources)
         try container.encodeIfPresent(status, forKey: .status)
         try container.encodeIfPresent(showNotes, forKey: .showNotesSnake)
         try container.encodeIfPresent(transcript, forKey: .transcript)

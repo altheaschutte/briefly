@@ -21,7 +21,7 @@ export class EpisodeSourcesService {
       if (!url) {
         continue;
       }
-      const key = `${source.segmentId || 'episode'}::${url.toLowerCase()}`;
+      const key = `${source.segmentId || 'episode'}::${this.normalizeUrlForKey(url)}`;
       if (seen.has(key)) {
         continue;
       }
@@ -41,5 +41,16 @@ export class EpisodeSourcesService {
 
   listSources(episodeId: string): Promise<EpisodeSource[]> {
     return this.repository.listForEpisode(episodeId);
+  }
+
+  private normalizeUrlForKey(url: string): string {
+    try {
+      const parsed = new URL(url);
+      parsed.hash = '';
+      const value = parsed.toString();
+      return value.endsWith('/') ? value.slice(0, -1).toLowerCase() : value.toLowerCase();
+    } catch {
+      return url.trim().toLowerCase();
+    }
   }
 }

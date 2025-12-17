@@ -27,11 +27,12 @@ struct BrieflyApp: App {
         UITableView.appearance().backgroundColor = background
         UITableViewCell.appearance().backgroundColor = background
         UITableViewHeaderFooterView.appearance().tintColor = .clear
-        UITableViewHeaderFooterView.appearance().backgroundColor = .clear
+        // UITableViewHeaderFooterView.appearance().backgroundColor = background
 
         // SwiftUI Lists/Forms use UICollectionView under the hood on modern iOS; mirror the appearance there.
         UICollectionView.appearance().backgroundColor = background
         UICollectionViewCell.appearance().backgroundColor = background
+        UICollectionReusableView.appearance().backgroundColor = background
         #endif
     }
 }

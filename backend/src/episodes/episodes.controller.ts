@@ -5,7 +5,8 @@ import { EpisodesService } from './episodes.service';
 import { EPISODES_QUEUE_TOKEN } from '../queue/queue.constants';
 import { StorageService } from '../storage/storage.service';
 import { EpisodeSourcesService } from './episode-sources.service';
-import { Episode } from '../domain/types';
+import { Episode, EpisodeSegment, EpisodeSource } from '../domain/types';
+import { EpisodeSegmentsService } from './episode-segments.service';
 
 @Controller('episodes')
 export class EpisodesController {
@@ -15,6 +16,7 @@ export class EpisodesController {
     private readonly episodesService: EpisodesService,
     private readonly storageService: StorageService,
     private readonly episodeSourcesService: EpisodeSourcesService,
+    private readonly episodeSegmentsService: EpisodeSegmentsService,
     @Inject(EPISODES_QUEUE_TOKEN) private readonly episodesQueue: Queue,
   ) {}
 
@@ -30,14 +32,16 @@ export class EpisodesController {
   async listEpisodes(@Req() req: Request) {
     const userId = (req as any).user?.id as string;
     const episodes = await this.episodesService.listEpisodes(userId);
-    return Promise.all(episodes.map((episode) => this.formatEpisodeResponse(userId, episode)));
+    return Promise.all(
+      episodes.map((episode) => this.formatEpisodeResponse(userId, episode, { includeSegments: false })),
+    );
   }
 
   @Get(':id')
   async getEpisode(@Req() req: Request, @Param('id') id: string) {
     const userId = (req as any).user?.id as string;
     const episode = await this.episodesService.getEpisode(userId, id);
-    return this.formatEpisodeResponse(userId, episode);
+    return this.formatEpisodeResponse(userId, episode, { includeSegments: true, includeSources: true });
   }
 
   @Get(':id/sources')
@@ -62,10 +66,16 @@ export class EpisodesController {
     return { success: true };
   }
 
-  private async formatEpisodeResponse(userId: string, episode: Episode) {
+  private async formatEpisodeResponse(
+    userId: string,
+    episode: Episode,
+    options?: { includeSegments?: boolean; includeSources?: boolean },
+  ) {
     const createdAt = episode.createdAt instanceof Date ? episode.createdAt.toISOString() : episode.createdAt;
     const updatedAt = episode.updatedAt instanceof Date ? episode.updatedAt.toISOString() : episode.updatedAt;
     const audioUrl = await this.resolveAudioUrl(userId, episode);
+    const segments = options?.includeSegments ? await this.episodeSegmentsService.listSegments(episode.id) : undefined;
+    const sources = options?.includeSources ? await this.episodeSourcesService.listSources(episode.id) : undefined;
 
     return {
       ...episode,
@@ -78,6 +88,34 @@ export class EpisodesController {
       updated_at: updatedAt ?? null,
       cover_image_url: episode.coverImageUrl ?? null,
       cover_prompt: episode.coverPrompt ?? null,
+      segments: segments?.map((segment) => this.formatSegmentResponse(segment)),
+      sources: sources?.map((source) => this.formatSourceResponse(source)),
+    };
+  }
+
+  private formatSegmentResponse(segment: EpisodeSegment) {
+    const sources = (segment.rawSources || []).map((source) => this.formatSourceResponse(source));
+    return {
+      ...segment,
+      order_index: segment.orderIndex ?? null,
+      raw_content: segment.rawContent,
+      rawSources: sources,
+      raw_sources: sources,
+      sources,
+      script: segment.script ?? null,
+      audio_url: segment.audioUrl ?? null,
+      start_time_seconds: segment.startTimeSeconds ?? null,
+      duration_seconds: segment.durationSeconds ?? null,
+    };
+  }
+
+  private formatSourceResponse(source: EpisodeSource) {
+    return {
+      ...source,
+      episode_id: source.episodeId ?? null,
+      segment_id: source.segmentId ?? null,
+      source_title: source.sourceTitle,
+      url: source.url,
     };
   }
 

@@ -47,6 +47,6 @@ struct MainTabView: View {
                 selection = .feed
             }
         }
-        .background(Color.brieflyBackground)
+        .scrollContentBackground(.hidden)
     }
 }

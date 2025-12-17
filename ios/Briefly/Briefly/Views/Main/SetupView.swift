@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 private enum TopicRoute: Hashable {
     case edit(Topic)
@@ -10,6 +11,7 @@ struct SetupView: View {
     @StateObject private var creationViewModel: EpisodeCreationViewModel
     @State private var bannerMessage: String?
     @State private var editingTopic: Topic?
+    @State private var draggingTopic: Topic?
 
     init(topicsViewModel: TopicsViewModel, appViewModel: AppViewModel) {
         _topicsViewModel = ObservedObject(wrappedValue: topicsViewModel)
@@ -18,7 +20,8 @@ struct SetupView: View {
 
     var body: some View {
         List {
-            if let episode = creationViewModel.inProgressEpisode {
+            if let episode = creationViewModel.inProgressEpisode,
+               creationViewModel.hasActiveGeneration == false {
                 creationStatusSection(episode: episode)
             }
 
@@ -111,58 +114,38 @@ struct SetupView: View {
     }
 
     private func creationStatusSection(episode: Episode) -> some View {
-        Section(header: Text(statusHeader(for: episode))) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .center, spacing: 12) {
-                    statusIcon(for: episode)
-                        .frame(width: 24, height: 24)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(episode.displayTitle.isEmpty ? "Personalized episode" : episode.displayTitle)
-                            .font(.headline)
-                        Text(statusLabel(for: episode.status))
-                            .font(.subheadline)
-                            .foregroundColor(.brieflyTextMuted)
-                    }
-                    Spacer(minLength: 8)
-                }
-
-                if isFailed(status: episode.status), let error = episode.errorMessage {
-                    Text(error)
-                        .foregroundColor(.red)
-                        .font(.footnote)
-                } else {
-                    Text(statusDescription(for: episode.status))
-                        .foregroundColor(.brieflyTextMuted)
-                        .font(.footnote)
-                }
-            }
-            .padding(.vertical, 6)
+        Section(header: setupPaddedHeader(statusHeader(for: episode))) {
+            statusCardContent(for: episode)
         }
+        .listRowBackground(Color.brieflyBackground)
     }
 
-    private var activeTopicsSection: some View {
-        Section(header: Text("Active topics")) {
-            if topicsViewModel.activeTopics.isEmpty {
+   private var activeTopicsSection: some View {
+    Section {
+        if topicsViewModel.activeTopics.isEmpty {
                 Text("No active topics yet.")
                     .foregroundColor(.brieflyTextMuted)
             } else {
                 ForEach(topicsViewModel.activeTopics) { topic in
                     topicRow(topic: topic, isActive: true)
-                        .draggable(topicDragIdentifier(for: topic))
-                        .dropDestination(for: String.self) { items, _ in
-                            guard let sourceID = items.first else { return false }
-                            return handleActiveTopicDrop(sourceID: sourceID, target: topic)
-                        }
+                        .onDrop(
+                            of: [UTType.plainText],
+                            delegate: ActiveTopicDropDelegate(
+                                target: topic,
+                                current: $draggingTopic,
+                                viewModel: topicsViewModel
+                            )
+                        )
                 }
             }
+        } header: {
+            setupPaddedHeader("Active topics")
         }
-        .textCase(nil)
-        .listRowBackground(Color.brieflyBackground)
-    }
+    .textCase(nil)
+}
 
     private var inactiveTopicsSection: some View {
-        Section(header: Text("Inactive topics"),
-                footer: inactiveFooter) {
+        Section {
             if topicsViewModel.inactiveTopics.isEmpty {
                 Text("No inactive topics.")
                     .foregroundColor(.brieflyTextMuted)
@@ -171,6 +154,10 @@ struct SetupView: View {
                     topicRow(topic: topic, isActive: false)
                 }
             }
+        } header: {
+            setupPaddedHeader("Inactive topics")
+        } footer: {
+            inactiveFooter
         }
         .textCase(nil)
         .listRowBackground(Color.brieflyBackground)
@@ -185,6 +172,30 @@ struct SetupView: View {
         }
     }
 
+    private func statusCardContent(for episode: Episode) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 12) {
+                statusIcon(for: episode)
+                    .frame(width: 24, height: 24)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(statusTitle(for: episode))
+                        .font(.headline)
+                    Text(statusDescription(for: episode.status))
+                        .font(.subheadline)
+                        .foregroundColor(.brieflyTextMuted)
+                }
+                Spacer(minLength: 8)
+            }
+
+            if isFailed(status: episode.status), let error = episode.errorMessage {
+                Text(error)
+                    .foregroundColor(.red)
+                    .font(.footnote)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
     private func statusHeader(for episode: Episode) -> String {
         if isFailed(status: episode.status) {
             return "Episode failed"
@@ -195,9 +206,17 @@ struct SetupView: View {
         return "Episode in progress"
     }
 
-    private func statusLabel(for status: String?) -> String {
-        guard let status else { return "Queued" }
-        return status.replacingOccurrences(of: "_", with: " ").capitalized
+    private func statusTitle(for episode: Episode) -> String {
+        if let status = episode.status?.lowercased(),
+           status == "ready" || status == "failed" {
+            let title = episode.displayTitle
+            return title.isEmpty ? "Personalized episode" : title
+        }
+
+        if let number = episode.episodeNumber, number > 0 {
+            return "Generating episode \(number)"
+        }
+        return "Generating episode"
     }
 
     private func statusDescription(for status: String?) -> String {
@@ -241,27 +260,21 @@ struct SetupView: View {
         }
     }
 
-    private func handleActiveTopicDrop(sourceID: String, target: Topic) -> Bool {
-        guard sourceID != topicDragIdentifier(for: target) else { return false }
-        guard let fromIndex = topicsViewModel.activeTopics.firstIndex(where: { topicDragIdentifier(for: $0) == sourceID }),
-              let toIndex = topicsViewModel.activeTopics.firstIndex(of: target) else { return false }
-
-        let destination = toIndex > fromIndex ? toIndex + 1 : toIndex
-        withAnimation {
-            topicsViewModel.reorderActiveTopicsInMemory(from: IndexSet(integer: fromIndex), to: destination)
-        }
-        Task { await topicsViewModel.persistActiveTopicOrder() }
-        return true
-    }
-
     private func topicDragIdentifier(for topic: Topic) -> String {
         topic.id?.uuidString ?? topic.originalText
     }
 
     private func topicRow(topic: Topic, isActive: Bool) -> some View {
         HStack(alignment: .center, spacing: 16) {
-            GripDots()
-                .padding(.trailing, 4)
+            if isActive {
+                GripDots()
+                    .padding(.trailing, 4)
+                    .contentShape(Rectangle())
+                    .onDrag {
+                        draggingTopic = topic
+                        return NSItemProvider(object: NSString(string: topicDragIdentifier(for: topic)))
+                    }
+            }
             Button {
                 editingTopic = topic
             } label: {
@@ -293,7 +306,7 @@ struct SetupView: View {
         .padding(.vertical, 8)
         .listRowInsets(EdgeInsets(top: 8, leading: 14, bottom: 8, trailing: 16))
         .listRowSeparator(.visible)
-        .listRowBackground(Color.brieflyBackground)
+        .listRowBackground(Color.brieflySurface)
     }
 }
 
@@ -343,26 +356,10 @@ private extension SetupView {
     @ViewBuilder
     var bottomActions: some View {
         VStack(spacing: 12) {
-            Button {
-                Task { await creationViewModel.generateEpisode() }
-            } label: {
-                generateEpisodeLabel
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.brieflyPrimary)
-                    .foregroundColor(.white)
-                    .tint(.white)
-                    .cornerRadius(12)
-            }
-            .buttonStyle(.plain)
-            .disabled(creationViewModel.hasActiveGeneration)
-            .opacity(creationViewModel.hasActiveGeneration ? 0.85 : 1)
-
             if creationViewModel.hasActiveGeneration {
-                Text("Finish the current episode before starting another.")
-                    .font(.footnote)
-                    .foregroundColor(.brieflyTextMuted)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                generationStatusBottomCard
+            } else {
+                generateEpisodeButton
             }
 
             if let error = creationViewModel.errorMessage {
@@ -371,22 +368,58 @@ private extension SetupView {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(Color.brieflySurface.opacity(0.94))
+        .background(Color.brieflyBackground)
         .shadow(color: Color.black.opacity(0.08), radius: 8, y: -2)
     }
 
-    @ViewBuilder
-    var generateEpisodeLabel: some View {
-        if creationViewModel.hasActiveGeneration {
-            HStack(spacing: 10) {
-                ProgressView()
-                Text("Creating episode...")
-                    .font(.headline)
-            }
-        } else {
+    private var generateEpisodeButton: some View {
+        Button {
+            Task { await creationViewModel.generateEpisode() }
+        } label: {
             Label("Generate episode", systemImage: "sparkles")
                 .font(.headline)
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.brieflyPrimary)
+                .foregroundColor(.white)
+                .tint(.white)
+                .cornerRadius(12)
         }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var generationStatusBottomCard: some View {
+        if let episode = creationViewModel.inProgressEpisode {
+            generationStatusCard(episode: episode)
+        } else {
+            generationStatusPlaceholder
+        }
+    }
+
+    private func generationStatusCard(episode: Episode) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(statusHeader(for: episode))
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(.brieflyTextMuted)
+            statusCardContent(for: episode)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(Color.brieflySurface)
+        .cornerRadius(12)
+    }
+
+    private var generationStatusPlaceholder: some View {
+        HStack(spacing: 10) {
+            ProgressView()
+            Text("Creating episode...")
+                .font(.headline)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(Color.brieflySurface)
+        .cornerRadius(12)
     }
 }
 
@@ -527,5 +560,74 @@ private struct GripDots: View {
         .foregroundColor(.brieflyTextMuted)
         .frame(width: (dotSize * 2) + spacing, alignment: .leading)
         .accessibilityHidden(true)
+    }
+}
+
+private struct SetupSectionHeader: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.subheadline.weight(.semibold))
+            .foregroundColor(.brieflyTextMuted)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 8)
+    }
+}
+
+private func setupPaddedHeader(_ title: String) -> some View {
+    ZStack {
+        Color.brieflyBackground
+        SetupSectionHeader(title: title)
+            .padding(.horizontal)
+            .padding(.vertical, 6)
+    }
+    .listRowInsets(EdgeInsets())
+}
+
+private struct ActiveTopicDropDelegate: DropDelegate {
+    let target: Topic
+    @Binding var current: Topic?
+    let viewModel: TopicsViewModel
+
+    func validateDrop(info: DropInfo) -> Bool {
+        info.hasItemsConforming(to: [UTType.plainText])
+    }
+
+    func dropEntered(info: DropInfo) {
+        guard let current else { return }
+        guard !isSame(current, as: target) else { return }
+        guard let fromIndex = index(for: current),
+              let toIndex = index(for: target) else { return }
+
+        let destination = toIndex > fromIndex ? toIndex + 1 : toIndex
+        withAnimation {
+            viewModel.reorderActiveTopicsInMemory(from: IndexSet(integer: fromIndex), to: destination)
+            if let updatedCurrent = viewModel.activeTopics.first(where: { isSame($0, as: current) }) {
+                self.current = updatedCurrent
+            }
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard current != nil else { return false }
+        Task { await viewModel.persistActiveTopicOrder() }
+        current = nil
+        return true
+    }
+
+    private func index(for topic: Topic) -> Int? {
+        viewModel.activeTopics.firstIndex { isSame($0, as: topic) }
+    }
+
+    private func isSame(_ lhs: Topic, as rhs: Topic) -> Bool {
+        if let l = lhs.id, let r = rhs.id {
+            return l == r
+        }
+        return lhs.originalText == rhs.originalText
     }
 }

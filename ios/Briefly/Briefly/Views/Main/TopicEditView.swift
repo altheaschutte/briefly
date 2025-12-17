@@ -17,38 +17,41 @@ struct TopicEditView: View {
     }
 
     var body: some View {
-        Form {
-            Section(header: Text("Topic")) {
-                TextField("Topic", text: $topic.originalText, axis: .vertical)
-                    .focused($isFieldFocused)
-                    .inputFieldStyle()
+        List {
+            Section {
+                topicField
             }
+            .listRowBackground(Color.brieflySurface)
 
             Section {
                 Toggle("Active", isOn: $topic.isActive)
                     .tint(.brieflyPrimary)
+
                 if activationWouldExceedLimit {
                     Text("You already have \(viewModel.maxActiveTopics) active topics. Deactivate one before adding another.")
                         .font(.footnote)
                         .foregroundColor(.brieflyTextMuted)
                 }
             }
+            .listRowBackground(Color.brieflySurface)
 
             if !isNew {
                 Section {
                     Button(role: .destructive) {
                         Task { await deleteTopic() }
                     } label: {
-                        Label("Delete topic", systemImage: "trash")
+                        Text("Delete topic")
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
+                .listRowBackground(Color.brieflySurface)
             }
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .listRowBackground(Color.brieflyBackground)
         .navigationTitle(isNew ? "Add Topic" : "Edit Topic")
         .navigationBarTitleDisplayMode(.inline)
-        .scrollContentBackground(.hidden)
-        .listStyle(.plain)
-        .listRowBackground(Color.brieflySurface)
         .background(Color.brieflyBackground)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
@@ -78,6 +81,19 @@ struct TopicEditView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(alertMessage ?? "")
+        }
+    }
+
+    private var topicField: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Topic")
+                .font(.footnote.weight(.semibold))
+                .foregroundColor(.brieflyTextMuted)
+
+            TextField("Topic", text: $topic.originalText, axis: .vertical)
+                .frame(minHeight: topicFieldMinHeight, alignment: .topLeading)
+                .focused($isFieldFocused)
+                .inputFieldStyle()
         }
     }
 
@@ -114,5 +130,11 @@ struct TopicEditView: View {
             return
         }
         dismiss()
+    }
+}
+
+private extension TopicEditView {
+    var topicFieldMinHeight: CGFloat {
+        UIFont.preferredFont(forTextStyle: .body).lineHeight * 5
     }
 }

@@ -6,7 +6,7 @@ struct TopicsView: View {
 
     var body: some View {
         List {
-            Section(header: Text("Your topics")) {
+            Section {
                 ForEach($viewModel.topics) { $topic in
                     VStack(alignment: .leading, spacing: 8) {
                         TextField("Topic", text: $topic.originalText, axis: .vertical)
@@ -36,10 +36,12 @@ struct TopicsView: View {
                     }
                     .disabled(!viewModel.hasChanges || viewModel.isLoading)
                 }
+            } header: {
+                topicsHeader("Your topics")
             }
             .listRowBackground(Color.brieflyBackground)
 
-            Section(header: Text("Add topic")) {
+            Section {
                 TextField("Topic", text: $newTopicText, axis: .vertical)
                     .inputFieldStyle()
                     .padding(.vertical, 6)
@@ -55,6 +57,8 @@ struct TopicsView: View {
                 .background(Color.brieflySecondary)
                 .foregroundColor(.white)
                 .cornerRadius(10)
+            } header: {
+                topicsHeader("Add topic")
             }
         }
         .scrollContentBackground(.hidden)
@@ -70,4 +74,26 @@ struct TopicsView: View {
         }
         .background(Color.brieflyBackground)
     }
+}
+
+private struct TopicsSectionHeader: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.subheadline.weight(.semibold))
+            .foregroundColor(.brieflyTextMuted)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 8)
+    }
+}
+
+private func topicsHeader(_ title: String) -> some View {
+    ZStack {
+        Color.brieflyBackground
+        TopicsSectionHeader(title: title)
+            .padding(.horizontal)
+            .padding(.vertical, 6)
+    }
+    .listRowInsets(EdgeInsets())
 }

@@ -1,6 +1,7 @@
 import { v4 as uuid } from 'uuid';
 import { EpisodeSegment, EpisodeSource, TopicQuery } from '../domain/types';
 import { SegmentDialogueScript, Speaker } from '../llm/llm.types';
+import { PerplexityCitation } from '../perplexity/perplexity.service';
 
 export function selectFreshQueries(candidateQueries: string[], previousQueries: TopicQuery[]): string[] {
   const used = new Set(
@@ -25,36 +26,80 @@ export function selectFreshQueries(candidateQueries: string[], previousQueries: 
 }
 
 export function buildEpisodeSources(
-  queries: Array<TopicQuery | { citations: string[]; topicId: string; episodeId: string }>,
+  queries: Array<
+    TopicQuery | { citations: Array<string | PerplexityCitation>; citationMetadata?: PerplexityCitation[] }
+  >,
   episodeId: string,
   segmentId?: string,
 ): EpisodeSource[] {
   const seen = new Set<string>();
   const results: EpisodeSource[] = [];
 
-  for (const query of queries || []) {
-    for (const raw of query.citations || []) {
-      const citation = (raw || '').trim();
-      if (!citation) {
-        continue;
-      }
-      const normalized = citation.toLowerCase();
-      if (seen.has(normalized)) {
-        continue;
-      }
-      seen.add(normalized);
+  (queries || []).forEach((query) => {
+    const citationMetadata = (query as any)?.citationMetadata as PerplexityCitation[] | undefined;
+    const cited = Array.isArray(query.citations) ? query.citations : [];
+    const candidates: Array<string | PerplexityCitation> = [
+      ...(citationMetadata || []),
+      ...cited,
+    ];
+
+    for (const candidate of candidates) {
+      const normalized = normalizeCitation(candidate);
+      if (!normalized) continue;
+
+      const dedupeKey = normalizeUrlForKey(normalized.url);
+      if (seen.has(dedupeKey)) continue;
+
+      seen.add(dedupeKey);
       results.push({
         id: uuid(),
         episodeId,
         segmentId,
-        sourceTitle: citation,
-        url: citation,
+        sourceTitle: normalized.title || deriveSourceTitle(normalized.url),
+        url: normalized.url,
         type: 'perplexity_citation',
       });
     }
-  }
+  });
 
   return results;
+}
+
+function normalizeCitation(input: string | PerplexityCitation): { url: string; title?: string } | null {
+  if (typeof input === 'string') {
+    const url = input.trim();
+    if (!url) {
+      return null;
+    }
+    return { url, title: deriveSourceTitle(url) };
+  }
+
+  const url = (input.url || '').trim();
+  if (!url) {
+    return null;
+  }
+  const title = (input.title || input.source || '').trim();
+  return { url, title: title || undefined };
+}
+
+function deriveSourceTitle(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+}
+
+function normalizeUrlForKey(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.hash = '';
+    const normalized = parsed.toString();
+    return normalized.endsWith('/') ? normalized.slice(0, -1).toLowerCase() : normalized.toLowerCase();
+  } catch {
+    return url.trim().toLowerCase();
+  }
 }
 
 export function buildSegmentContent(

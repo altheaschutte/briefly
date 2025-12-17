@@ -85,6 +85,7 @@ export class EpisodeProcessorService {
             query: queryText,
             answer: perplexityResult.answer,
             citations: perplexityResult.citations || [],
+            citationMetadata: perplexityResult.citationMetadata,
             orderIndex,
             intent: topicIntent,
           });
@@ -92,7 +93,7 @@ export class EpisodeProcessorService {
 
         const savedQueries = await this.topicQueriesService.createMany(userId, queryResults);
         const segmentId = uuid();
-        const segmentSources = buildEpisodeSources(savedQueries, episodeId, segmentId);
+        const segmentSources = buildEpisodeSources(queryResults, episodeId, segmentId);
         const segmentContent = buildSegmentContent(topic.originalText, savedQueries);
         let segmentDialogue = await this.llmService.generateSegmentScript(
           topic.originalText,
@@ -107,6 +108,7 @@ export class EpisodeProcessorService {
           const message = error instanceof Error ? error.message : String(error);
           this.logger.warn(`Dialogue enhancement failed for topic ${topic.id}: ${message}`);
         }
+        const segmentTitle = segmentDialogue.title?.trim() || topic.originalText;
         const segmentScriptText = renderDialogueScript(segmentDialogue);
         const segmentTtsResult = await this.ttsService.synthesize(segmentDialogue, { voiceA, voiceB });
         const segmentAudioUrl = segmentTtsResult.storageKey ?? segmentTtsResult.audioUrl;
@@ -119,7 +121,7 @@ export class EpisodeProcessorService {
           id: segmentId,
           episodeId,
           orderIndex: index,
-          title: topic.originalText,
+          title: segmentTitle,
           intent: segmentDialogue.intent || topicIntent,
           rawContent: segmentContent,
           rawSources: segmentSources,

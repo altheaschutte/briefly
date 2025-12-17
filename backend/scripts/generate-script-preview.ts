@@ -120,6 +120,7 @@ async function run() {
           query: queryText,
           answer: perplexityResult.answer,
           citations: perplexityResult.citations || [],
+          citationMetadata: perplexityResult.citationMetadata,
           orderIndex,
           intent: topicIntent,
         });

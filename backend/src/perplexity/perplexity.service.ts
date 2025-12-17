@@ -5,6 +5,13 @@ import { ConfigService } from '@nestjs/config';
 export interface PerplexityResult {
   answer: string;
   citations: string[];
+  citationMetadata: PerplexityCitation[];
+}
+
+export interface PerplexityCitation {
+  url: string;
+  title?: string;
+  source?: string;
 }
 
 @Injectable()
@@ -37,8 +44,9 @@ export class PerplexityService {
 
     const choice = response.data?.choices?.[0];
     const answer: string = choice?.message?.content ?? '';
-    const citations: string[] = response.data?.citations ?? [];
-    return { answer, citations };
+    const citationMetadata = this.parseCitations(response.data?.citations);
+    const citations: string[] = citationMetadata.map((citation) => citation.url);
+    return { answer, citations, citationMetadata };
   }
 
   private requireEnv(key: string): string {
@@ -47,5 +55,83 @@ export class PerplexityService {
       throw new Error(`Missing required env var: ${key}`);
     }
     return value;
+  }
+
+  private parseCitations(raw: unknown): PerplexityCitation[] {
+    if (!Array.isArray(raw)) {
+      return [];
+    }
+
+    const parsed: PerplexityCitation[] = [];
+
+    for (const item of raw) {
+      if (!item) continue;
+
+      if (typeof item === 'string') {
+        const url = item.trim();
+        if (url) {
+          parsed.push({ url, title: this.humanizeUrl(url) });
+        }
+        continue;
+      }
+
+      if (typeof item === 'object') {
+        const citation = this.normalizeCitationObject(item as Record<string, unknown>);
+        if (citation) {
+          parsed.push(citation);
+        }
+      }
+    }
+
+    return parsed;
+  }
+
+  private normalizeCitationObject(candidate: Record<string, unknown>): PerplexityCitation | null {
+    const url =
+      this.safeString(candidate['url']) ||
+      this.safeString(candidate['link']) ||
+      this.safeString(candidate['href']) ||
+      this.safeString(candidate['source']) ||
+      this.safeString(candidate['citation']);
+
+    if (!url) {
+      return null;
+    }
+
+    const title =
+      this.safeString(candidate['title']) ||
+      this.safeString(candidate['text']) ||
+      this.safeString(candidate['label']) ||
+      this.safeString(candidate['name']) ||
+      this.safeString(candidate['description']) ||
+      this.safeString(candidate['snippet']) ||
+      this.safeString((candidate['metadata'] as Record<string, unknown> | undefined)?.['title']);
+
+    const source =
+      this.safeString(candidate['source']) ||
+      this.safeString((candidate['metadata'] as Record<string, unknown> | undefined)?.['source']);
+
+    return {
+      url,
+      title: title || this.humanizeUrl(url),
+      source: source || undefined,
+    };
+  }
+
+  private safeString(value: unknown): string | null {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed.length ? trimmed : null;
+    }
+    return null;
+  }
+
+  private humanizeUrl(raw: string): string {
+    try {
+      const parsed = new URL(raw);
+      return parsed.hostname.replace(/^www\./, '');
+    } catch {
+      return raw;
+    }
   }
 }

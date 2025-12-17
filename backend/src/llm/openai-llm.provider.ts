@@ -132,12 +132,19 @@ Non-negotiable rules:
 - If Findings contain multiple possible stories and intent is "single_story", choose ONE most compelling/most detailed story and ignore the rest.
 - No URLs spoken aloud.
 - Spell out numbers and dates.
+- Create a fresh segment title for this script (see rules below).
 - Keep lines short and speakable. Natural conversational rhythm. No monologues: max 3 turns in a row per speaker.
 - Do NOT include speaker names or name cues inside any turn text. Rely on the speaker labels only.
 - Avoid excessive audio tags in this draft. Use at most ONE tag per 3 turns on average.
 - Tags must be auditory voice cues only, in square brackets, placed immediately before or after the words they color.
   Allowed examples: [thoughtful], [excited], [sighs], [chuckles], [whispers], [short pause], [long pause].
   Do NOT use non-voice stage directions (no [music], [walking], [pacing]) and do NOT wrap entire paragraphs in brackets.
+
+Segment title rules:
+- 4–10 words, descriptive, and specific to this segment.
+- Must include at least one concrete detail from the Findings (entity, place, event, fact, or number spelled out).
+- Do NOT simply repeat the provided topic prompt verbatim.
+- No quotes or trailing punctuation.
 
 Intent handling:
 - "single_story": tell ONE cohesive story only. Structure: Hook → Setup → What happened (chronological) → Why it matters → Memorable close.
@@ -152,7 +159,7 @@ Output JSON only, exactly this shape:
       {
         role: 'user',
         content: `Intent: ${intent}
-Segment title: ${title}
+Topic prompt (context only): ${title}
 Findings (must-use facts):
 ${findings}
 
@@ -263,7 +270,7 @@ SHOW NOTES RULES
 - Output in Markdown format.
 - Begin with a 2–3 sentence summary that incorporates the unique details highlighted in the title/description.
 - Follow with a short bullet list of key moments from the episode.
-- End with a Sources section listing all provided URLs using clean, human-readable link titles.
+- Do NOT include a Sources section or any URLs; sources are stored and rendered separately.
 - Keep the entire notes section under 400 words.`,
       },
       {
@@ -282,11 +289,12 @@ SHOW NOTES RULES
       throw new Error('OpenAI returned empty content for metadata generation');
     }
     const parsed = this.parseMetadata(content);
-    if (!parsed.title || !parsed.showNotes) {
+    const sanitizedShowNotes = this.removeSourcesFromShowNotes(parsed.showNotes);
+    if (!parsed.title || !sanitizedShowNotes) {
       throw new Error('OpenAI metadata response missing title or show notes');
     }
-    const description = parsed.description?.trim() || this.deriveDescriptionFromShowNotes(parsed.showNotes);
-    return { ...parsed, description };
+    const description = parsed.description?.trim() || this.deriveDescriptionFromShowNotes(sanitizedShowNotes);
+    return { ...parsed, description, showNotes: sanitizedShowNotes };
   }
 
   private getClient(): OpenAI {
@@ -628,5 +636,29 @@ SHOW NOTES RULES
       return `${firstSentence.slice(0, 137)}...`;
     }
     return firstSentence;
+  }
+
+  private removeSourcesFromShowNotes(showNotes: string): string {
+    if (typeof showNotes !== 'string') {
+      return '';
+    }
+
+    const lines = showNotes.split('\n');
+    const headingIndex = lines.findIndex((line) =>
+      /^\s{0,3}(?:#{1,6}\s*)?sources\b[:]?/i.test(line.trim()),
+    );
+    const truncated = headingIndex >= 0 ? lines.slice(0, headingIndex) : lines;
+
+    // Drop trailing blank lines that may precede a removed Sources section.
+    while (truncated.length && truncated[truncated.length - 1].trim() === '') {
+      truncated.pop();
+    }
+
+    const withoutSources = truncated.join('\n');
+    const withoutLinks = withoutSources
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/gi, '$1') // strip markdown links
+      .replace(/https?:\/\/\S+/gi, ''); // strip bare URLs
+
+    return withoutLinks.replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
   }
 }

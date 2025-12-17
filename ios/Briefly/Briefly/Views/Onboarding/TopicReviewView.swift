@@ -43,7 +43,7 @@ struct TopicReviewView: View {
                 }
                 .listRowBackground(Color.brieflyBackground)
 
-                Section(header: Text("Add topic")) {
+                Section {
                     TextField("Topic", text: $newText, axis: .vertical)
                         .inputFieldStyle()
                         .padding(8)
@@ -59,6 +59,8 @@ struct TopicReviewView: View {
                     .background(Color.brieflySecondary)
                     .foregroundColor(.white)
                     .cornerRadius(10)
+                } header: {
+                    topicReviewHeader("Add topic")
                 }
                 .listRowBackground(Color.brieflyBackground)
             }
@@ -85,4 +87,26 @@ struct TopicReviewView: View {
             }
         }
     }
+}
+
+private struct TopicReviewSectionHeader: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.subheadline.weight(.semibold))
+            .foregroundColor(.brieflyTextMuted)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 8)
+    }
+}
+
+private func topicReviewHeader(_ title: String) -> some View {
+    ZStack {
+        Color.brieflyBackground
+        TopicReviewSectionHeader(title: title)
+            .padding(.horizontal)
+            .padding(.vertical, 6)
+    }
+    .listRowInsets(EdgeInsets())
 }

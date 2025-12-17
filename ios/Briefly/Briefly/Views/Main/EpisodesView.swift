@@ -93,20 +93,15 @@ private struct EpisodeRow: View {
             RoundedRectangle(cornerRadius: 14)
                 .fill(Color.brieflySurface)
             if let url = episode.coverImageURL {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
-                        fallbackArtwork.opacity(0.25)
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 72, height: 72)
-                    case .failure:
-                        fallbackArtwork
-                    @unknown default:
-                        fallbackArtwork
-                    }
+                CachedAsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 72, height: 72)
+                } placeholder: {
+                    fallbackArtwork.opacity(0.25)
+                } failure: {
+                    fallbackArtwork
                 }
             } else {
                 fallbackArtwork
@@ -129,16 +124,16 @@ private struct EpisodeRow: View {
 
     private var durationPill: some View {
         let label = durationLabel(episode.durationDisplaySeconds)
-        return HStack(spacing: 6) {
+        return HStack(spacing: 4) {
             Image(systemName: "play.fill")
-                .font(.caption)
+                .font(.caption2.weight(.semibold))
             Text(label)
-                .font(.callout.weight(.semibold))
+                .font(.caption.weight(.semibold))
         }
-        .padding(.vertical, 6)
-        .padding(.horizontal, 12)
+        .padding(.vertical, 4)
+        .padding(.horizontal, 8)
         .background(Color.brieflyDurationBackground)
-        .foregroundColor(Color.brieflyBackground)
+        .foregroundColor(Color.brieflyAccentSoft)
         .clipShape(Capsule())
     }
 

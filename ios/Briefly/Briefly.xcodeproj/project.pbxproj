@@ -41,6 +41,7 @@
 		B4A6CD724F7EA88C0B340DDC /* VoiceInputView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F0C06F2976BB42860B4EF54 /* VoiceInputView.swift */; };
 		B7CD03ED803E99C76BBCDBCC /* Topic.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6095C2EB9ACE239067B452D /* Topic.swift */; };
 		B84891A8FC68B35EA37B4575 /* TopicReviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65BDF3EB0A8F11C9FF78B5E0 /* TopicReviewView.swift */; };
+		C0D4B3A2E1F8594710A2BC3D /* EpisodeSegment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A8B9C0D1E2F3A4B5C6D7E8F /* EpisodeSegment.swift */; };
 		BB855A405CD7522F462F363A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = EC6F34A1860CA563B92912E2 /* Assets.xcassets */; };
 		C056A99C21CA9351688C77A5 /* InputFieldStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A827B57A862545569E98F69C /* InputFieldStyle.swift */; };
 		C9E4D1AB6DC6C7E14D849FB1 /* BrieflyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C697EDB91910DC03AF9E9860 /* BrieflyApp.swift */; };
@@ -48,6 +49,7 @@
 		CD6AE6195ACD047A83EA036A /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3D204818BC694A2B6E6C9D2 /* SettingsView.swift */; };
 		D0B25200F283FA5FE773466A /* TestHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61FCDBC9F778F4AA77A85336 /* TestHelpers.swift */; };
 		D91F3DBBDAF0D78CCC85BE96 /* TopicEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14A5B9BD3287AACD7A479D84 /* TopicEditView.swift */; };
+		DB15C4E5A6F7081B2C3D4E5F /* EpisodeSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F8E7D6C5B4A392817160F0E /* EpisodeSource.swift */; };
 		DC7944637485E6D32E958DAC /* APIConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6D26D15DB3DFE43BFB64269 /* APIConfig.swift */; };
 		E7E275A4E80B9F72F844044B /* OnboardingFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 676B66B377B920BF160E0D2F /* OnboardingFlowView.swift */; };
 		ED150F1EB076104C7BD3D241 /* OnboardingVoiceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A7CA2CC98180B43613BA498 /* OnboardingVoiceService.swift */; };
@@ -109,6 +111,8 @@
 		DCF6AD3E2828E25B853D7FD4 /* EpisodeDecodingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpisodeDecodingTests.swift; sourceTree = "<group>"; };
 		E0EC0638F8C0FDBAED803B24 /* TopicService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicService.swift; sourceTree = "<group>"; };
 		E4B6857EF04F1B97C1D9B3AD /* APIClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClientTests.swift; sourceTree = "<group>"; };
+		7A8B9C0D1E2F3A4B5C6D7E8F /* EpisodeSegment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpisodeSegment.swift; sourceTree = "<group>"; };
+		9F8E7D6C5B4A392817160F0E /* EpisodeSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpisodeSource.swift; sourceTree = "<group>"; };
 		EC6F34A1860CA563B92912E2 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		ED3DAF0FA98E0CF88DA3502F /* AuthViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViews.swift; sourceTree = "<group>"; };
 		EDAB0D498A4D03DBA8AE695B /* EpisodeViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpisodeViewModelTests.swift; sourceTree = "<group>"; };
@@ -273,6 +277,8 @@
 			children = (
 				F6D26D15DB3DFE43BFB64269 /* APIConfig.swift */,
 				8BB7F45006ED55441EE8E1A9 /* AuthToken.swift */,
+				7A8B9C0D1E2F3A4B5C6D7E8F /* EpisodeSegment.swift */,
+				9F8E7D6C5B4A392817160F0E /* EpisodeSource.swift */,
 				F156A32765D68B445B13DE3F /* Episode.swift */,
 				C6095C2EB9ACE239067B452D /* Topic.swift */,
 				C336B4CAEBF8C30DA651B3FD /* UserProfile.swift */,
@@ -394,6 +400,8 @@
 				C9E4D1AB6DC6C7E14D849FB1 /* BrieflyApp.swift in Sources */,
 				06012190CD6F34F4F179D561 /* Episode.swift in Sources */,
 				8761567003F4306B13EAA37F /* EpisodeDetailView.swift in Sources */,
+				C0D4B3A2E1F8594710A2BC3D /* EpisodeSegment.swift in Sources */,
+				DB15C4E5A6F7081B2C3D4E5F /* EpisodeSource.swift in Sources */,
 				13844AE02B0720C114D8636C /* EpisodeService.swift in Sources */,
 				3BC94A369825448B5530CFC7 /* EpisodesView.swift in Sources */,
 				FEC0D559A22F915BB1FAFAC8 /* EpisodesViewModel.swift in Sources */,
