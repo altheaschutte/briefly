@@ -4,6 +4,9 @@ node_modules
 # Builds
 dist
 
+# Temporary files
+tmp
+
 # Environment and local config
 .env
 .env.local
