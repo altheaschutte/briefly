@@ -1,0 +1,67 @@
+---
+import '../styles/global.css';
+import { siteDescription, siteTitle, siteUrl } from '../config/site';
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const { title = siteTitle, description = siteDescription } = Astro.props as Props;
+const ogImage = `${siteUrl}/briefly-logo.png`;
+const year = new Date().getFullYear();
+---
+
+<!doctype html>
+<html lang="en" class="bg-[var(--brand-bg)] text-[var(--brand-text)]">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" href="/briefly-logo.png" />
+    <link rel="apple-touch-icon" href="/briefly-logo.png" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={siteUrl} />
+    <meta property="og:image" content={ogImage} />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+
+    <!-- // TODO: Analytics script -->
+  </head>
+  <body class="min-h-screen bg-[var(--brand-bg)] text-[var(--brand-text)] font-sans antialiased">
+    <header class="sticky top-0 z-50 border-b border-[rgba(147,200,194,0.22)] bg-[rgba(17,44,62,0.9)] backdrop-blur">
+      <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+        <a href="/" class="inline-flex items-center gap-3 text-lg font-semibold tracking-tight text-white">
+          <img src="/briefly-logo.png" alt="Briefly logo" class="h-10 w-auto" />
+          <span class="leading-none">Briefly</span>
+        </a>
+        <nav class="flex items-center gap-4 text-sm font-medium text-[var(--brand-muted)]">
+          <a href="/#how-it-works" class="rounded-full px-3 py-2 transition hover:bg-[#1f3a4e] hover:text-white">How it works</a>
+          <a href="/support" class="rounded-full px-3 py-2 transition hover:bg-[#1f3a4e] hover:text-white">Support</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <slot />
+    </main>
+
+    <footer class="border-t border-[rgba(147,200,194,0.22)]">
+      <div class="mx-auto flex max-w-6xl flex-col gap-4 px-6 py-10 text-sm text-[var(--brand-muted)] sm:flex-row sm:items-center sm:justify-between">
+        <p>&copy; {year} Briefly.</p>
+        <div class="flex flex-wrap gap-4">
+          <a href="/support" class="hover:text-[var(--brand-accent)]">Support</a>
+          <a href="#" class="hover:text-[var(--brand-accent)]">Terms</a>
+          <a href="#" class="hover:text-[var(--brand-accent)]">Privacy</a>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

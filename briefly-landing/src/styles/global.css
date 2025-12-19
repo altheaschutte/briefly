@@ -1,0 +1,59 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  --brand-bg: #112c3e;
+  --brand-bg-deep: #0b2233;
+  --brand-overlay: rgba(17, 44, 62, 0.7);
+  --brand-overlay-strong: rgba(17, 44, 62, 0.82);
+  --brand-surface: #1f3a4e;
+  --brand-accent: #ffa563;
+  --brand-teal-strong: #2a7997;
+  --brand-teal: #37a8ae;
+  --brand-teal-soft: #93c8c2;
+  --brand-text: #f3f8ff;
+  --brand-muted: #b7c9d9;
+  --brand-border: #2c4e64;
+}
+
+body {
+  background-color: var(--brand-bg);
+  background:
+    radial-gradient(1200px at 15% 10%, color-mix(in srgb, var(--brand-teal) 22%, transparent), transparent),
+    radial-gradient(900px at 80% 0%, color-mix(in srgb, var(--brand-accent) 18%, transparent), transparent),
+    var(--brand-bg);
+  color: var(--brand-text);
+}
+
+::selection {
+  background-color: color-mix(in srgb, var(--brand-accent) 40%, transparent);
+  color: var(--brand-bg-deep);
+}
+
+@layer utilities {
+  @keyframes heroFadeOut {
+    to {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+  }
+
+  @keyframes phoneSlideIn {
+    from {
+      opacity: 0;
+      transform: translateY(28px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .hero-fade-out {
+    animation: heroFadeOut 0.8s ease forwards;
+  }
+
+  .phone-slide-in {
+    animation: phoneSlideIn 0.9s ease forwards;
+  }
+}

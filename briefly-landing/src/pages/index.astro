@@ -1,0 +1,17 @@
+---
+import CTASection from '../components/CTASection.astro';
+import Features from '../components/Features.astro';
+import Hero from '../components/Hero.astro';
+import HowItWorks from '../components/HowItWorks.astro';
+import Layout from '../components/Layout.astro';
+import Metrics from '../components/Metrics.astro';
+import { defaultMetrics, siteDescription, siteTitle } from '../config/site';
+---
+
+<Layout title={siteTitle} description={siteDescription}>
+  <Hero />
+  <Features />
+  <Metrics metrics={defaultMetrics} />
+  <HowItWorks />
+  <CTASection />
+</Layout>
