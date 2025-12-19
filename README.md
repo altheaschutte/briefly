@@ -2,6 +2,7 @@
 
 ## High-Level Architecture
 - iOS app (`ios/Briefly/`) in Swift/SwiftUI with a CarPlay audio extension.
+- Marketing website (`briefly-landing/`) built with Astro + Tailwind CSS.
 - Backend NestJS API (`backend/`) with a BullMQ worker for episode generation.
 - Supabase for Auth + Postgres (row-level security), Redis for queues, and S3-compatible storage for audio and covers.
 - AI services are pluggable: LLMs (OpenAI/Anthropic/Gemini), TTS vendors (e.g. ElevenLabs), search/retrieval via Perplexity.
@@ -13,11 +14,13 @@
 - Auth: Supabase JWTs enforced by a global guard (`Authorization: Bearer <token>`); JWKS or HS secret supported.
 - AI: LLM abstraction with interchangeable providers; onboarding transcription uses OpenAI (`gpt-4o-transcribe` by default). TTS providers are swappable.
 - Mobile: Swift/SwiftUI client + CarPlay extension; communicates with the NestJS API using Supabase auth tokens.
+- Landing: Astro 5 + Tailwind CSS 4 (Vite) in `briefly-landing/`; scripts: `npm run dev`, `npm run build`, `npm run preview`.
 
 ## Repository Structure
 ```text
 .
 ├─ backend/              # NestJS API + BullMQ worker + Supabase migrations
+├─ briefly-landing/      # Marketing site (Astro + Tailwind)
 ├─ ios/Briefly/          # Xcode workspace (Swift/SwiftUI app + CarPlay extension)
 ├─ branding/             # Visual assets
 ├─ supabase/             # Additional database migrations (project-level)
