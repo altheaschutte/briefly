@@ -129,7 +129,7 @@ struct SetupView: View {
                 ForEach(topicsViewModel.activeTopics) { topic in
                     topicRow(topic: topic, isActive: true)
                         .onDrop(
-                            of: [UTType.plainText],
+                            of: [UTType.text],
                             delegate: ActiveTopicDropDelegate(
                                 target: topic,
                                 current: $draggingTopic,
@@ -591,7 +591,7 @@ private struct ActiveTopicDropDelegate: DropDelegate {
     let viewModel: TopicsViewModel
 
     func validateDrop(info: DropInfo) -> Bool {
-        info.hasItemsConforming(to: [UTType.plainText])
+        info.hasItemsConforming(to: [UTType.text])
     }
 
     func dropEntered(info: DropInfo) {
