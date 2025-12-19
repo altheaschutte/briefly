@@ -16,6 +16,22 @@
 - Mobile: Swift/SwiftUI client + CarPlay extension; communicates with the NestJS API using Supabase auth tokens.
 - Landing: Astro 5 + Tailwind CSS 4 (Vite) in `briefly-landing/`; scripts: `npm run dev`, `npm run build`, `npm run preview`.
 
+## Current App Features
+- Auth + session: email/password sign-in with Supabase, token persistence, and automatic logout on 401s.
+- Onboarding: live voice capture streaming to `/onboarding/stream` (SSE transcripts + topic extraction) with manual entry fallback and a “generate my first episode” step.
+- Topics: create/edit/delete topics, activate/deactivate with a 5-topic cap, drag-and-drop reordering for active topics, and persistence back to the API.
+- Episode generation: trigger episode jobs, poll status through the pipeline, resume in-flight jobs on app launch, and surface failures.
+- Episode library: recency-grouped lists (Today/This Week/Earlier), delete episodes, and detail views with cover art, summary/show notes, topics, segments, and source links.
+- Playback: global audio player with play/pause/resume, segment-level seeking, progress tracking, and configurable speed plus player bar.
+- Settings: playback preferences (speed, auto-play latest, resume last) and logout; dark-theme styling applied across views.
+- Web + backend: Astro marketing site, NestJS API + BullMQ worker, Supabase schema with RLS, and S3-backed audio with signed URL fetching when missing from payloads.
+
+## TODO Features
+- Wire Episode detail secondary actions (transcript view, bookmark/queue, share, “talk to producer”, overflow) to real flows/endpoints.
+- Add voice selection in Settings (UI placeholder exists) and surface multiple TTS voices when available.
+- Build notification settings/UX once backend support is ready (currently a placeholder section).
+- Add the analytics snippet to `briefly-landing` once tracking is decided.
+
 ## Repository Structure
 ```text
 .
