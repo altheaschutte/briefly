@@ -11,6 +11,7 @@ const ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
 const TOKEN_KEY = "briefly:auth";
 const EMAIL_KEY = "briefly:email";
+const REFRESH_SKEW_SECONDS = 60;
 
 export function loadStoredAuth(): { token: AuthToken | null; email: string | null } {
   if (typeof window === "undefined") {
@@ -39,6 +40,12 @@ export function clearAuthStorage() {
   window.localStorage.removeItem(EMAIL_KEY);
 }
 
+export function shouldRefreshToken(token?: AuthToken | null, bufferSeconds = REFRESH_SKEW_SECONDS) {
+  if (!token?.expires_at) return false;
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  return token.expires_at - bufferSeconds <= nowSeconds;
+}
+
 export async function login(email: string, password: string): Promise<AuthToken> {
   if (!ANON_KEY) {
     throw new Error("Missing NEXT_PUBLIC_SUPABASE_ANON_KEY");
@@ -56,6 +63,29 @@ export async function login(email: string, password: string): Promise<AuthToken>
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text || `Login failed: ${res.status}`);
+  }
+
+  const data = (await res.json()) as AuthToken;
+  return data;
+}
+
+export async function refreshSession(refreshToken: string): Promise<AuthToken> {
+  if (!ANON_KEY) {
+    throw new Error("Missing NEXT_PUBLIC_SUPABASE_ANON_KEY");
+  }
+  const res = await fetch(`${AUTH_BASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: ANON_KEY,
+      Authorization: `Bearer ${ANON_KEY}`
+    },
+    body: JSON.stringify({ refresh_token: refreshToken })
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Refresh failed: ${res.status}`);
   }
 
   const data = (await res.json()) as AuthToken;

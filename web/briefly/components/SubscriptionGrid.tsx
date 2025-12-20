@@ -39,7 +39,7 @@ export default function SubscriptionGrid({ compact = false }: { compact?: boolea
             ))}
           </div>
 
-          <button className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-accent px-4 py-3 text-sm font-semibold text-ink shadow-accent transition hover:-translate-y-0.5 hover:brightness-105">
+          <button className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-accent px-4 py-3 text-sm font-semibold text-ink transition hover:-translate-y-0.5 hover:brightness-105">
             {tier.cta}
           </button>
           {tier.note && <p className="mt-3 text-xs text-muted">{tier.note}</p>}

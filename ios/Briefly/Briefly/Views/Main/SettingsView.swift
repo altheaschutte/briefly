@@ -7,6 +7,18 @@ struct SettingsView: View {
     var body: some View {
         List {
             Section {
+                PlanSummaryView(entitlements: viewModel.entitlements)
+                Picker("Target duration", selection: $viewModel.targetDurationMinutes) {
+                    ForEach(viewModel.durationOptions, id: \.self) { minutes in
+                        Text("\(minutes) minutes").tag(minutes)
+                    }
+                }
+            } header: {
+                settingsHeader("Plan & limits")
+            }
+            .listRowBackground(Color.brieflySurface)
+
+            Section {
                 if let email {
                     Text(email)
                 } else {
@@ -58,10 +70,51 @@ struct SettingsView: View {
         .listRowBackground(Color.brieflyBackground)
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            await viewModel.refreshEntitlements()
+        }
         .onDisappear {
             viewModel.save()
         }
         .background(Color.brieflyBackground)
+    }
+}
+
+private struct PlanSummaryView: View {
+    let entitlements: Entitlements?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(planTitle)
+                .font(.headline)
+            Text(usageLine)
+                .foregroundColor(.brieflyTextMuted)
+            Text(limitsLine)
+                .foregroundColor(.brieflyTextMuted)
+            Text("Subscriptions can't be purchased in the app. Manage your plan on the web.")
+                .font(.footnote)
+                .foregroundColor(.brieflyTextMuted)
+        }
+        .padding(.vertical, 6)
+    }
+
+    private var planTitle: String {
+        guard let entitlements else { return "Free plan" }
+        return entitlements.tier.capitalized + " plan"
+    }
+
+    private var usageLine: String {
+        guard let entitlements else { return "Usage resets monthly. You have 15 free minutes." }
+        let used = entitlements.usedMinutes
+        if let limit = entitlements.limitMinutes {
+            return "\(used) of \(limit) minutes used this period"
+        }
+        return "\(used) minutes used this period"
+    }
+
+    private var limitsLine: String {
+        guard let entitlements else { return "Max 5 active topics" }
+        return "Max \(entitlements.limits.maxActiveTopics) active topics"
     }
 }
 

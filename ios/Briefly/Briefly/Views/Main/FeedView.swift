@@ -41,6 +41,7 @@ struct FeedView: View {
             }
             .padding()
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color.brieflyBackground)
         .navigationTitle("Your Library")
         .navigationBarTitleDisplayMode(.inline)

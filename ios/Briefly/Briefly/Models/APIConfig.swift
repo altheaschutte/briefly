@@ -14,4 +14,20 @@ enum APIConfig {
         }
         return ""
     }()
+
+    static let webAppURL: URL = {
+        if let env = ProcessInfo.processInfo.environment["APP_WEB_URL"],
+           let url = URL(string: env) {
+            return url
+        }
+        if let plistValue = Bundle.main.object(forInfoDictionaryKey: "APP_WEB_URL") as? String,
+           let url = URL(string: plistValue) {
+            return url
+        }
+        return URL(string: "https://brieflypodcast.app")!
+    }()
+
+    static var manageAccountURL: URL {
+        webAppURL.appendingPathComponent("account")
+    }
 }

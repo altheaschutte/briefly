@@ -42,7 +42,11 @@ export class TopicsService {
       : topic.isActive
         ? Math.max(activeCount - 1, 0)
         : activeCount;
-    this.assertActiveTopicLimit(nextActiveCount, limit);
+
+    const isIncreasingActiveCount = nextActiveCount > activeCount;
+    if (isIncreasingActiveCount) {
+      this.assertActiveTopicLimit(nextActiveCount, limit);
+    }
 
     const updated = await this.repository.update(userId, topicId, {
       originalText: updates.originalText ?? topic.originalText,

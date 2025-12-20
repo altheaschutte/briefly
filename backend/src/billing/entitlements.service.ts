@@ -1,8 +1,9 @@
 import { ForbiddenException, Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { BillingService } from './billing.service';
 import { EpisodesService } from '../episodes/episodes.service';
 import { BILLING_REPOSITORY, BillingRepository } from './billing.repository';
-import { BillingTier, Entitlements, SubscriptionStatus } from './billing.types';
+import { Entitlements, SubscriptionStatus } from './billing.types';
 import { TIER_LIMITS } from './billing.constants';
 
 @Injectable()
@@ -12,6 +13,7 @@ export class EntitlementsService {
 
   constructor(
     @Inject(BILLING_REPOSITORY) private readonly repository: BillingRepository,
+    private readonly billingService: BillingService,
     private readonly episodesService: EpisodesService,
     private readonly configService: ConfigService,
   ) {
@@ -23,12 +25,25 @@ export class EntitlementsService {
   }
 
   async getEntitlements(userId: string): Promise<Entitlements> {
-    const subscription = await this.repository.getSubscription(userId);
-    const isActive = subscription && this.isSubscriptionActive(subscription.status);
-    const tier = isActive ? subscription.tier : 'free';
-    const status: SubscriptionStatus = isActive ? subscription.status : 'none';
-
-    const { periodStart, periodEnd } = this.resolvePeriod(subscription);
+    let liveSubscription: Awaited<ReturnType<BillingService['getLiveSubscriptionForUser']>> | null = null;
+    try {
+      liveSubscription = await this.billingService.getLiveSubscriptionForUser(userId);
+    } catch (error) {
+      this.logger.warn(
+        `Falling back to default entitlements for user ${userId}: ${error instanceof Error ? error.message : error}`,
+      );
+    }
+    const status: SubscriptionStatus = liveSubscription?.status ?? 'none';
+    const isActive = this.isSubscriptionActive(status);
+    const tier = isActive && liveSubscription?.tier ? liveSubscription.tier : 'free';
+    const { periodStart, periodEnd } = this.resolvePeriod({
+      currentPeriodStart: liveSubscription?.subscription.current_period_start
+        ? new Date(liveSubscription.subscription.current_period_start * 1000)
+        : undefined,
+      currentPeriodEnd: liveSubscription?.subscription.current_period_end
+        ? new Date(liveSubscription.subscription.current_period_end * 1000)
+        : undefined,
+    });
     const usagePeriod =
       (await this.repository.getUsagePeriod(userId, periodStart, periodEnd)) ||
       (await this.repository.ensureUsagePeriod(userId, periodStart, periodEnd));
@@ -48,7 +63,7 @@ export class EntitlementsService {
       secondsUsed,
       secondsLimit,
       secondsRemaining,
-      cancelAtPeriodEnd: Boolean(subscription?.cancelAtPeriodEnd),
+      cancelAtPeriodEnd: Boolean(liveSubscription?.subscription.cancel_at_period_end ?? false),
     };
   }
 
@@ -96,7 +111,8 @@ export class EntitlementsService {
 
   private isSubscriptionActive(status: SubscriptionStatus | undefined): boolean {
     if (!status) return false;
-    return status === 'active' || status === 'trialing' || status === 'incomplete' || status === 'past_due';
+    // Treat incomplete subscriptions as inactive so users without a finished purchase stay on the free tier
+    return status === 'active' || status === 'trialing' || status === 'past_due';
   }
 
   private resolvePeriod(subscription?: { currentPeriodStart?: Date | null; currentPeriodEnd?: Date | null }): {

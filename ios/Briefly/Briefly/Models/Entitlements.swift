@@ -32,4 +32,9 @@ struct Entitlements: Codable {
         guard let secondsRemaining else { return nil }
         return Int(max(0, secondsRemaining) / 60)
     }
+
+    var isGenerationUsageExhausted: Bool {
+        guard let secondsRemaining else { return false }
+        return secondsRemaining <= 0
+    }
 }

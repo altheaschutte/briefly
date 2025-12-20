@@ -14,7 +14,8 @@ struct OnboardingFlowView: View {
             voiceService: OnboardingVoiceService(
                 streamURL: APIConfig.baseURL.appendingPathComponent("onboarding/stream"),
                 tokenProvider: { appViewModel.authManager.currentToken?.accessToken }
-            )
+            ),
+            entitlementsService: appViewModel.entitlementsService
         ))
     }
 
@@ -63,9 +64,13 @@ struct OnboardingFlowView: View {
             }
         }
         .onAppear {
-            guard !hasStartedRecording else { return }
+            guard !hasStartedRecording else {
+                Task { await onboardingViewModel.refreshEntitlements() }
+                return
+            }
             hasStartedRecording = true
             onboardingViewModel.startVoiceCapture()
+            Task { await onboardingViewModel.refreshEntitlements() }
         }
         .onDisappear {
             onboardingViewModel.stopVoiceCapture()

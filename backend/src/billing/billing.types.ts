@@ -42,3 +42,12 @@ export interface UsagePeriod {
   secondsUsed: number;
   updatedAt: Date;
 }
+
+export interface BillingTierInfo {
+  tier: BillingTier;
+  limits: TierLimits;
+  priceId?: string;
+  description?: string;
+  priceAmount?: number | null;
+  priceCurrency?: string | null;
+}

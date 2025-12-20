@@ -2,6 +2,7 @@ import SwiftUI
 
 struct GenerateEpisodeView: View {
     @ObservedObject var viewModel: OnboardingViewModel
+    @Environment(\.openURL) private var openURL
     @State private var isGenerating = false
     @State private var didGenerate = false
     let onDone: () -> Void
@@ -25,7 +26,7 @@ struct GenerateEpisodeView: View {
                         .frame(maxWidth: .infinity)
                         .padding()
                 } else {
-                    Text(didGenerate ? "Episode ready — go to Home" : "Generate My First Episode")
+                    Text(buttonTitle)
                         .frame(maxWidth: .infinity)
                         .padding()
                 }
@@ -44,6 +45,10 @@ struct GenerateEpisodeView: View {
     }
 
     private func generate() {
+        if viewModel.reachedUsageLimit {
+            openURL(APIConfig.manageAccountURL)
+            return
+        }
         Task {
             isGenerating = true
             let episode = await viewModel.generateFirstEpisode()
@@ -52,5 +57,12 @@ struct GenerateEpisodeView: View {
                 didGenerate = true
             }
         }
+    }
+
+    private var buttonTitle: String {
+        if didGenerate {
+            return "Episode ready — go to Home"
+        }
+        return viewModel.reachedUsageLimit ? "Manage account" : "Generate My First Episode"
     }
 }

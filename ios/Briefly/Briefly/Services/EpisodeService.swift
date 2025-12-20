@@ -4,7 +4,7 @@ protocol EpisodeProviding {
     func fetchLatestEpisode() async throws -> Episode?
     func fetchEpisodes() async throws -> [Episode]
     func generateEpisode() async throws -> Episode?
-    func requestEpisodeGeneration() async throws -> EpisodeCreation
+    func requestEpisodeGeneration(targetDurationMinutes: Int?) async throws -> EpisodeCreation
     func fetchEpisode(id: UUID) async throws -> Episode
     func deleteEpisode(id: UUID) async throws
 }
@@ -43,7 +43,7 @@ final class EpisodeService: EpisodeProviding {
     }
 
     func generateEpisode() async throws -> Episode? {
-        let creation = try await requestEpisodeGeneration()
+        let creation = try await requestEpisodeGeneration(targetDurationMinutes: nil)
 
         if let created: Episode? = try? await fetchEpisode(id: creation.episodeId) {
             return created
@@ -53,8 +53,12 @@ final class EpisodeService: EpisodeProviding {
         return episodes.first(where: { $0.id == creation.episodeId }) ?? episodes.first
     }
 
-    func requestEpisodeGeneration() async throws -> EpisodeCreation {
-        let endpoint = APIEndpoint(path: "/episodes", method: .post)
+    func requestEpisodeGeneration(targetDurationMinutes: Int? = nil) async throws -> EpisodeCreation {
+        var endpoint = APIEndpoint(path: "/episodes", method: .post)
+        if let targetDurationMinutes {
+            struct Body: Encodable { let duration: Int }
+            endpoint.body = AnyEncodable(Body(duration: targetDurationMinutes))
+        }
         let creation: EpisodeCreationResponse = try await apiClient.request(endpoint)
         guard let episodeId = creation.episodeId else {
             throw APIError.invalidResponse

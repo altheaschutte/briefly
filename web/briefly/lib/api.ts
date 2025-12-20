@@ -1,9 +1,16 @@
-import { AuthToken, Episode, Topic, Entitlements } from "./types";
+import { Episode, Topic, Entitlements, BillingTier, BillingTierInfo } from "./types";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ||
-  process.env.NEXT_PUBLIC_BRIEFLY_API_BASE_URL ||
   "http://127.0.0.1:3344";
+
+type UnauthorizedHandler = () => void;
+
+let unauthorizedHandler: UnauthorizedHandler | null = null;
+
+export function setUnauthorizedHandler(handler: UnauthorizedHandler | null) {
+  unauthorizedHandler = handler;
+}
 
 type HTTPMethod = "GET" | "POST" | "PATCH" | "DELETE";
 
@@ -24,7 +31,11 @@ async function apiRequest<T>(
   });
 
   if (res.status === 401) {
-    throw new Error("unauthorized");
+    const message = await res.text();
+    if (unauthorizedHandler) unauthorizedHandler();
+    const err = new Error(message || "unauthorized");
+    (err as any).code = "unauthorized";
+    throw err;
   }
 
   if (!res.ok) {
@@ -134,6 +145,14 @@ export async function requestEpisodeGeneration(token: string): Promise<{ episode
 
 export async function fetchEntitlements(token: string): Promise<Entitlements> {
   return apiRequest<Entitlements>("/me/entitlements", "GET", token);
+}
+
+export async function fetchBillingTiers(token: string): Promise<BillingTierInfo[]> {
+  return apiRequest<BillingTierInfo[]>("/billing/tiers", "GET", token);
+}
+
+export async function createStripeCheckoutSession(token: string, tier: BillingTier): Promise<{ url: string | null }> {
+  return apiRequest<{ url: string | null }>("/billing/checkout-session", "POST", token, { tier });
 }
 
 export async function createStripePortalSession(token: string): Promise<{ url: string }> {

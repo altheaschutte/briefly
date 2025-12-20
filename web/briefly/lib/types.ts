@@ -4,6 +4,10 @@ export type AuthToken = {
   expires_at?: number;
 };
 
+export type BillingTier = "free" | "starter" | "pro" | "power";
+
+export type SubscriptionStatus = "none" | "active" | "trialing" | "past_due" | "canceled" | "incomplete";
+
 export type Topic = {
   id: string;
   originalText: string;
@@ -52,8 +56,32 @@ export type Episode = {
 };
 
 export type Entitlements = {
+  tier: BillingTier;
+  status: SubscriptionStatus;
   limits: {
+    minutesPerMonth: number | null;
     maxActiveTopics: number;
+    maxEpisodeMinutes: number;
+    scheduleEnabled: boolean;
   };
-  tier: string;
+  periodStart?: string;
+  periodEnd?: string;
+  secondsUsed: number;
+  secondsLimit?: number;
+  secondsRemaining?: number;
+  cancelAtPeriodEnd?: boolean;
+};
+
+export type BillingTierInfo = {
+  tier: BillingTier;
+  limits: {
+    minutesPerMonth: number | null;
+    maxActiveTopics: number;
+    maxEpisodeMinutes: number;
+    scheduleEnabled: boolean;
+  };
+  description?: string | null;
+  priceAmount?: number | null;
+  priceCurrency?: string | null;
+  priceId?: string | null;
 };

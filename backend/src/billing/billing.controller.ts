@@ -23,6 +23,11 @@ export class BillingController {
     return this.billingService.createPortalSession(userId);
   }
 
+  @Get('tiers')
+  async listTiers() {
+    return this.billingService.getTiers();
+  }
+
   @Post('webhook')
   async handleWebhook(@Req() req: Request) {
     const signature = req.headers['stripe-signature'] as string;

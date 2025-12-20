@@ -80,31 +80,37 @@ struct FullScreenErrorView: View {
     var action: (() -> Void)?
 
     var body: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 44, weight: .bold))
-                .foregroundColor(.orange)
+        ZStack {
+            Color.brieflyBackground
+                .ignoresSafeArea()
 
-            Text(title)
-                .font(.title3.bold())
-                .multilineTextAlignment(.center)
+            VStack(spacing: 16) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 44, weight: .bold))
+                    .foregroundColor(.orange)
 
-            Text(message)
-                .font(.body)
-                .foregroundColor(.brieflyTextMuted)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
+                Text(title)
+                    .font(.title3.bold())
+                    .multilineTextAlignment(.center)
 
-            if let action {
-                Button(actionTitle) {
-                    action()
+                Text(message)
+                    .font(.body)
+                    .foregroundColor(.brieflyTextMuted)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+
+                if let action {
+                    Button(actionTitle) {
+                        action()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .padding(.top, 8)
                 }
-                .buttonStyle(.borderedProminent)
-                .padding(.top, 8)
             }
+            .padding(.horizontal, 28)
+            .padding(.vertical, 32)
+            .frame(maxWidth: 480)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        .padding()
-        .background(Color.brieflyBackground)
     }
 }

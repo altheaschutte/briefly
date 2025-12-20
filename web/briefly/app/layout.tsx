@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Space_Grotesk, Manrope } from "next/font/google";
 import Navigation from "@/components/Navigation";
@@ -18,7 +18,20 @@ const body = Manrope({
 export const metadata: Metadata = {
   title: "Briefly Web App",
   description:
-    "Sign in with your Briefly account to access library, create/topics, settings, and Stripe-powered billing on the web."
+    "Sign in with your Briefly account to access library, create/topics, settings, and Stripe-powered billing on the web.",
+  icons: {
+    icon: [
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon.ico" }
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }]
+  },
+  manifest: "/site.webmanifest"
+};
+
+export const viewport: Viewport = {
+  themeColor: "#ffffff"
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -28,7 +41,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AuthProvider>
           <div className="flex min-h-screen flex-col">
             <Navigation />
-            <main className="flex-1 pb-20 pt-8 md:pt-12">{children}</main>
+            <main className="flex-1 pb-20 pt-8 md:pt-12 flex flex-col items-center justify-center">{children}</main>
             <Footer />
           </div>
         </AuthProvider>

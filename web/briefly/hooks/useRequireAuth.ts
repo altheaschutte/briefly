@@ -11,7 +11,7 @@ export function useRequireAuth() {
   useEffect(() => {
     if (!isReady) return;
     if (!token) {
-      router.replace("/");
+      router.replace("/login");
     }
   }, [isReady, token, router]);
 

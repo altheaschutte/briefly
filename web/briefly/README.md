@@ -12,7 +12,7 @@ Next.js + Tailwind build of the Briefly iOS experience for the web. Focused on t
 
 ## Structure
 
-- `app/` — App Router pages for login (`/`), library (`/home`), create (`/create`), settings (`/settings`), account/billing (`/account`), and support.
+- `app/` — App Router pages for login (`/`), library (`/home`), create (`/create`), settings (`/settings`), subscription management (`/subscription`), and support.
 - `components/` — navigation, episode queue, topics board, subscription grid, footer.
 - `lib/` — API client, auth helpers, and shared types.
 - `context/` — Auth context used across pages.

@@ -19,15 +19,22 @@ final class OnboardingViewModel: ObservableObject {
     @Published var topics: [Topic] = []
     @Published var errorMessage: String?
     @Published var currentStep: OnboardingStep = .voice
+    @Published var entitlements: Entitlements?
+    @Published var reachedUsageLimit: Bool = false
     private var cancellables = Set<AnyCancellable>()
     private let topicService: TopicProviding
     private let episodeService: EpisodeProviding
     private let voiceService: OnboardingVoiceService
+    private let entitlementsService: EntitlementsProviding?
 
-    init(topicService: TopicProviding, episodeService: EpisodeProviding, voiceService: OnboardingVoiceService) {
+    init(topicService: TopicProviding,
+         episodeService: EpisodeProviding,
+         voiceService: OnboardingVoiceService,
+         entitlementsService: EntitlementsProviding? = nil) {
         self.topicService = topicService
         self.episodeService = episodeService
         self.voiceService = voiceService
+        self.entitlementsService = entitlementsService
         bindVoice()
     }
 
@@ -119,11 +126,33 @@ final class OnboardingViewModel: ObservableObject {
 
     func generateFirstEpisode() async -> Episode? {
         errorMessage = nil
+        updateUsageLimitFlag(with: entitlements)
         do {
-            return try await episodeService.generateEpisode()
+            let episode = try await episodeService.generateEpisode()
+            reachedUsageLimit = false
+            return episode
+        } catch let apiError as APIError {
+            if case .statusCode(let code) = apiError, code == 403 {
+                errorMessage = "You've hit your plan limit. Manage your subscription on the web."
+                reachedUsageLimit = true
+            } else {
+                errorMessage = apiError.localizedDescription
+            }
+            return nil
         } catch {
             errorMessage = error.localizedDescription
             return nil
+        }
+    }
+
+    func refreshEntitlements() async {
+        guard let entitlementsService else { return }
+        do {
+            let fetched = try await entitlementsService.fetchEntitlements()
+            entitlements = fetched
+            updateUsageLimitFlag(with: fetched)
+        } catch {
+            // Ignore failures; we fall back to existing state.
         }
     }
 
@@ -154,5 +183,10 @@ final class OnboardingViewModel: ObservableObject {
                 Task { await self?.fetchTopicsWithPolling() }
             }
             .store(in: &cancellables)
+    }
+
+    private func updateUsageLimitFlag(with entitlements: Entitlements?) {
+        guard let entitlements else { return }
+        reachedUsageLimit = entitlements.isGenerationUsageExhausted
     }
 }

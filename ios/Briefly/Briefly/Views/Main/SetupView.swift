@@ -9,9 +9,11 @@ private enum TopicRoute: Hashable {
 struct SetupView: View {
     @ObservedObject var topicsViewModel: TopicsViewModel
     @StateObject private var creationViewModel: EpisodeCreationViewModel
+    @Environment(\.openURL) private var openURL
     @State private var bannerMessage: String?
     @State private var editingTopic: Topic?
     @State private var draggingTopic: Topic?
+    @State private var showActiveLimitAlert: Bool = false
 
     init(topicsViewModel: TopicsViewModel, appViewModel: AppViewModel) {
         _topicsViewModel = ObservedObject(wrappedValue: topicsViewModel)
@@ -25,13 +27,6 @@ struct SetupView: View {
 
     var body: some View {
         List {
-            Section {
-                PlanSummaryView(entitlements: topicsViewModel.entitlements ?? creationViewModel.entitlements)
-            } header: {
-                setupPaddedHeader("Plan & limits")
-            }
-            .listRowBackground(Color.brieflyBackground)
-
             if let episode = creationViewModel.inProgressEpisode,
                creationViewModel.hasActiveGeneration == false {
                 creationStatusSection(episode: episode)
@@ -51,14 +46,18 @@ struct SetupView: View {
         .navigationTitle("Create")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
-            Task { await topicsViewModel.load() }
+            Task { @MainActor in
+                await topicsViewModel.load()
+                creationViewModel.updateLimitState(with: topicsViewModel.entitlements)
+            }
             Task { await creationViewModel.resumeInFlightIfNeeded() }
-            Task { await creationViewModel.refreshEntitlements() }
         }
         .refreshable {
             await topicsViewModel.load()
+            await MainActor.run {
+                creationViewModel.updateLimitState(with: topicsViewModel.entitlements)
+            }
             await creationViewModel.refreshCurrentEpisode()
-            await creationViewModel.refreshEntitlements()
         }
         .sheet(item: $editingTopic) { topic in
             NavigationStack {
@@ -70,6 +69,9 @@ struct SetupView: View {
         }
         .onChange(of: creationViewModel.errorMessage) { message in
             handleErrorChange(message)
+        }
+        .onChange(of: topicsViewModel.entitlements) { entitlements in
+            creationViewModel.updateLimitState(with: entitlements)
         }
         .navigationDestination(for: TopicRoute.self) { route in
             switch route {
@@ -113,6 +115,11 @@ struct SetupView: View {
             }
         }
         .background(Color.brieflyBackground)
+        .alert("Active topic limit reached", isPresented: $showActiveLimitAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("You can have up to \(topicsViewModel.maxActiveTopics) active topics on your plan.")
+        }
     }
 
     private var emptyState: some View {
@@ -279,6 +286,7 @@ struct SetupView: View {
     }
 
     private func topicRow(topic: Topic, isActive: Bool) -> some View {
+        let isInactiveAtLimit = !isActive && !topicsViewModel.canAddActiveTopic
         HStack(alignment: .center, spacing: 16) {
             if isActive {
                 GripDots()
@@ -301,20 +309,24 @@ struct SetupView: View {
             .buttonStyle(.plain)
             Spacer(minLength: 10)
             Button {
-                Task {
-                    if isActive {
-                        await topicsViewModel.deactivateTopic(topic)
-                    } else {
-                        await topicsViewModel.activateTopic(topic)
-                    }
+                if isActive {
+                    Task { await topicsViewModel.deactivateTopic(topic) }
+                } else if topicsViewModel.canAddActiveTopic {
+                    Task { await topicsViewModel.activateTopic(topic) }
+                } else {
+                    showActiveLimitAlert = true
                 }
             } label: {
                 Image(systemName: isActive ? "minus.circle" : "plus.circle.fill")
-                    .foregroundStyle(isActive ? Color.brieflyAccentSoft : Color.brieflyPrimary)
+                    .foregroundStyle(
+                        isActive
+                        ? Color.brieflyAccentSoft
+                        : (isInactiveAtLimit ? Color.brieflyTextMuted : Color.brieflyPrimary)
+                    )
                     .font(.title3)
             }
             .buttonStyle(.borderless)
-            .disabled(!isActive && !topicsViewModel.canAddActiveTopic)
+            .opacity(isInactiveAtLimit ? 0.5 : 1)
         }
         .contentShape(Rectangle())
         .padding(.vertical, 8)
@@ -388,9 +400,13 @@ private extension SetupView {
 
     private var generateEpisodeButton: some View {
         Button {
-            Task { await creationViewModel.generateEpisode() }
+            if shouldShowManageAccount {
+                openURL(APIConfig.manageAccountURL)
+            } else {
+                Task { await creationViewModel.generateEpisode() }
+            }
         } label: {
-            Label("Generate episode", systemImage: "sparkles")
+            Label(generateButtonTitle, systemImage: generateButtonIcon)
                 .font(.headline)
                 .frame(maxWidth: .infinity)
                 .padding()
@@ -400,6 +416,18 @@ private extension SetupView {
                 .cornerRadius(12)
         }
         .buttonStyle(.plain)
+    }
+
+    private var generateButtonTitle: String {
+        shouldShowManageAccount ? "Manage account" : "Generate episode"
+    }
+
+    private var generateButtonIcon: String {
+        shouldShowManageAccount ? "person.crop.circle" : "sparkles"
+    }
+
+    private var shouldShowManageAccount: Bool {
+        (topicsViewModel.entitlements?.isGenerationUsageExhausted ?? false) || creationViewModel.isAtGenerationLimit
     }
 
     @ViewBuilder
@@ -442,10 +470,11 @@ final class EpisodeCreationViewModel: ObservableObject {
     @Published var inProgressEpisode: Episode?
     @Published var errorMessage: String?
     @Published var isGenerating: Bool = false
-    @Published var entitlements: Entitlements?
+    @Published var isAtGenerationLimit: Bool = false
 
     private let episodeService: EpisodeProviding
     private let entitlementsService: EntitlementsProviding?
+    private let targetPreference = TargetDurationPreference()
     private var pollTask: Task<Void, Never>?
     private let pollInterval: UInt64 = 2_000_000_000
 
@@ -470,11 +499,13 @@ final class EpisodeCreationViewModel: ObservableObject {
     func generateEpisode() async {
         guard hasActiveGeneration == false else { return }
         errorMessage = nil
+        isAtGenerationLimit = false
         isGenerating = true
         pollTask?.cancel()
 
         do {
-            let creation = try await episodeService.requestEpisodeGeneration()
+            let duration = await preferredTargetDuration()
+            let creation = try await episodeService.requestEpisodeGeneration(targetDurationMinutes: duration)
             let episode = try await episodeService.fetchEpisode(id: creation.episodeId)
             inProgressEpisode = episode
             beginPolling(for: creation.episodeId)
@@ -482,6 +513,7 @@ final class EpisodeCreationViewModel: ObservableObject {
             switch apiError {
             case .statusCode(let code) where code == 403:
                 errorMessage = "You've hit your plan limit. Manage your subscription on the web."
+                isAtGenerationLimit = true
             default:
                 errorMessage = apiError.localizedDescription
             }
@@ -525,6 +557,22 @@ final class EpisodeCreationViewModel: ObservableObject {
         }
     }
 
+    private func preferredTargetDuration() async -> Int {
+        let stored = targetPreference.value
+        guard let entitlementsService else { return stored }
+        do {
+            let entitlements = try await entitlementsService.fetchEntitlements()
+            return min(stored, entitlements.limits.maxEpisodeMinutes)
+        } catch {
+            return stored
+        }
+    }
+
+    func updateLimitState(with entitlements: Entitlements?) {
+        guard let entitlements else { return }
+        isAtGenerationLimit = entitlements.isGenerationUsageExhausted
+    }
+
     private func beginPolling(for episodeId: UUID) {
         pollTask?.cancel()
         let service = episodeService
@@ -557,15 +605,6 @@ final class EpisodeCreationViewModel: ObservableObject {
         }
     }
 
-    func refreshEntitlements() async {
-        guard let entitlementsService else { return }
-        do {
-            entitlements = try await entitlementsService.fetchEntitlements()
-        } catch {
-            // Keep silent; UI falls back to defaults.
-        }
-    }
-
     nonisolated private static func isTerminal(_ status: String?) -> Bool {
         guard let status else { return false }
         switch status.lowercased() {
@@ -595,44 +634,6 @@ private struct GripDots: View {
         .foregroundColor(.brieflyTextMuted)
         .frame(width: (dotSize * 2) + spacing, alignment: .leading)
         .accessibilityHidden(true)
-    }
-}
-
-private struct PlanSummaryView: View {
-    let entitlements: Entitlements?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(planTitle)
-                .font(.headline)
-            Text(usageLine)
-                .foregroundColor(.brieflyTextMuted)
-            Text(limitsLine)
-                .foregroundColor(.brieflyTextMuted)
-            Text("Subscriptions can't be purchased in the app. Manage your plan on the web.")
-                .font(.footnote)
-                .foregroundColor(.brieflyTextMuted)
-        }
-        .padding(.vertical, 6)
-    }
-
-    private var planTitle: String {
-        guard let entitlements else { return "Free plan" }
-        return entitlements.tier.capitalized + " plan"
-    }
-
-    private var usageLine: String {
-        guard let entitlements else { return "Usage resets monthly. You have 20 free minutes." }
-        let used = entitlements.usedMinutes
-        if let limit = entitlements.limitMinutes {
-            return "\(used) of \(limit) minutes used this period"
-        }
-        return "\(used) minutes used this period"
-    }
-
-    private var limitsLine: String {
-        guard let entitlements else { return "Max 1 active topic • Up to 5-minute episodes" }
-        return "Max \(entitlements.limits.maxActiveTopics) active topics • Up to \(entitlements.limits.maxEpisodeMinutes)-minute episodes"
     }
 }
 
