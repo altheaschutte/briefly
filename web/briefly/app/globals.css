@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  background-color: #132a3b;
+}
+
+body {
+  @apply bg-midnight text-muted antialiased font-body;
+  background-color: #0f1d2c;
+  min-height: 100vh;
+}
+
+.glass-panel {
+  @apply rounded-2xl;
+}
+
+.card-accent {
+  @apply rounded-2xl;
+}
+
+.pill {
+  @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide text-tealSoft;
+}
+
+.feature-grid {
+  @apply grid gap-6 md:grid-cols-2 xl:grid-cols-3;
+}
+
+.section-heading {
+  @apply text-3xl font-semibold text-white md:text-4xl;
+}
+
+.section-subtitle {
+  @apply text-base text-muted;
+}

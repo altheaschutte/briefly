@@ -13,6 +13,7 @@ import { TopicQueriesService } from '../topic-queries/topic-queries.service';
 import { TopicQueryCreateInput } from '../topic-queries/topic-queries.repository';
 import { CoverImageService } from './cover-image.service';
 import { getDefaultVoices } from '../tts/voice-config';
+import { EntitlementsService } from '../billing/entitlements.service';
 import {
   buildEpisodeSources,
   buildSegmentContent,
@@ -38,6 +39,7 @@ export class EpisodeProcessorService {
     private readonly episodeSourcesService: EpisodeSourcesService,
     private readonly coverImageService: CoverImageService,
     private readonly configService: ConfigService,
+    private readonly entitlementsService: EntitlementsService,
   ) {}
 
   async process(job: Job<{ episodeId: string; userId: string }>): Promise<void> {
@@ -170,6 +172,13 @@ export class EpisodeProcessorService {
         coverImageUrl: coverResult.imageUrl,
         coverPrompt: coverResult.prompt,
       });
+      try {
+        await this.entitlementsService.recordEpisodeUsage(userId, episodeId, episodeDurationSeconds);
+      } catch (error) {
+        this.logger.error(
+          `Failed to record usage for episode ${episodeId}: ${error instanceof Error ? error.message : error}`,
+        );
+      }
     } catch (error: any) {
       const axiosData = error?.response?.data ? ` | data=${JSON.stringify(error.response.data)}` : '';
       this.logger.error(`Failed to process episode ${episodeId}: ${error?.message || error}${axiosData}`);

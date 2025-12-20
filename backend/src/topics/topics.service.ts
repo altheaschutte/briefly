@@ -1,20 +1,24 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Topic } from '../domain/types';
 import { TOPICS_REPOSITORY, TopicListFilter, TopicsRepository } from './topics.repository';
+import { EntitlementsService } from '../billing/entitlements.service';
 
 @Injectable()
 export class TopicsService {
-  private readonly maxActiveTopics = 5;
-
-  constructor(@Inject(TOPICS_REPOSITORY) private readonly repository: TopicsRepository) {}
+  constructor(
+    @Inject(TOPICS_REPOSITORY) private readonly repository: TopicsRepository,
+    private readonly entitlementsService: EntitlementsService,
+  ) {}
 
   listTopics(userId: string, filter?: TopicListFilter): Promise<Topic[]> {
     return this.repository.listByUser(userId, filter);
   }
 
   async createTopic(userId: string, originalText: string): Promise<Topic> {
+    const limit = await this.getActiveTopicLimit(userId);
+    const activeCount = await this.countActiveTopics(userId);
+    this.assertActiveTopicLimit(activeCount + 1, limit);
     const topic = await this.repository.create(userId, originalText);
-    await this.enforceActiveTopicLimit(userId);
     return topic;
   }
 
@@ -27,6 +31,19 @@ export class TopicsService {
     if (!topic) {
       throw new NotFoundException('Topic not found');
     }
+
+    const limit = await this.getActiveTopicLimit(userId);
+    const activeCount = await this.countActiveTopics(userId);
+    const willBeActive = updates.isActive ?? topic.isActive;
+    const nextActiveCount = willBeActive
+      ? topic.isActive
+        ? activeCount
+        : activeCount + 1
+      : topic.isActive
+        ? Math.max(activeCount - 1, 0)
+        : activeCount;
+    this.assertActiveTopicLimit(nextActiveCount, limit);
+
     const updated = await this.repository.update(userId, topicId, {
       originalText: updates.originalText ?? topic.originalText,
       isActive: updates.isActive ?? topic.isActive,
@@ -34,9 +51,6 @@ export class TopicsService {
     });
     if (!updated) {
       throw new NotFoundException('Topic not found');
-    }
-    if (updated.isActive) {
-      await this.enforceActiveTopicLimit(userId);
     }
     return updated;
   }
@@ -53,23 +67,19 @@ export class TopicsService {
     return updated;
   }
 
-  /**
-   * Ensure only the most recent maxActiveTopics remain active.
-   */
-  private async enforceActiveTopicLimit(userId: string): Promise<void> {
+  private async getActiveTopicLimit(userId: string): Promise<number> {
+    const entitlements = await this.entitlementsService.getEntitlements(userId);
+    return entitlements.limits.maxActiveTopics;
+  }
+
+  private async countActiveTopics(userId: string): Promise<number> {
     const topics = await this.repository.listByUser(userId);
-    const activeTopics = topics.filter((t) => t.isActive);
-    if (activeTopics.length <= this.maxActiveTopics) {
-      return;
-    }
+    return topics.filter((t) => t.isActive).length;
+  }
 
-    const sortedByRecency = [...activeTopics].sort(
-      (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
-    );
-    const toDeactivate = sortedByRecency.slice(this.maxActiveTopics);
-
-    for (const topic of toDeactivate) {
-      await this.repository.update(userId, topic.id, { isActive: false });
+  private assertActiveTopicLimit(nextActiveCount: number, limit: number) {
+    if (nextActiveCount > limit) {
+      throw new BadRequestException(`Your plan allows up to ${limit} active topics.`);
     }
   }
 }

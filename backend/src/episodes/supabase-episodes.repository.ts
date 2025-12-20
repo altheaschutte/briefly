@@ -50,6 +50,7 @@ export class SupabaseEpisodesRepository implements EpisodesRepository {
       error_message: null,
       created_at: now,
       updated_at: now,
+      usage_recorded_at: null,
     };
 
     const { data, error } = await this.client.from('episodes').insert(payload).select().maybeSingle();
@@ -124,6 +125,8 @@ export class SupabaseEpisodesRepository implements EpisodesRepository {
     if (updates.targetDurationMinutes !== undefined)
       payload.target_duration_minutes = updates.targetDurationMinutes;
     if (updates.durationSeconds !== undefined) payload.duration_seconds = updates.durationSeconds ?? null;
+    if (updates.usageRecordedAt !== undefined)
+      payload.usage_recorded_at = updates.usageRecordedAt?.toISOString() ?? null;
 
     const { data, error } = await this.client
       .from('episodes')
@@ -182,6 +185,7 @@ export class SupabaseEpisodesRepository implements EpisodesRepository {
       showNotes: row.show_notes ?? undefined,
       description: row.description ?? undefined,
       errorMessage: row.error_message ?? undefined,
+      usageRecordedAt: row.usage_recorded_at ? new Date(row.usage_recorded_at) : undefined,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
     };

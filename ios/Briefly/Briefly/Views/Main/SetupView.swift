@@ -15,11 +15,23 @@ struct SetupView: View {
 
     init(topicsViewModel: TopicsViewModel, appViewModel: AppViewModel) {
         _topicsViewModel = ObservedObject(wrappedValue: topicsViewModel)
-        _creationViewModel = StateObject(wrappedValue: EpisodeCreationViewModel(episodeService: appViewModel.episodeService))
+        _creationViewModel = StateObject(
+            wrappedValue: EpisodeCreationViewModel(
+                episodeService: appViewModel.episodeService,
+                entitlementsService: appViewModel.entitlementsService
+            )
+        )
     }
 
     var body: some View {
         List {
+            Section {
+                PlanSummaryView(entitlements: topicsViewModel.entitlements ?? creationViewModel.entitlements)
+            } header: {
+                setupPaddedHeader("Plan & limits")
+            }
+            .listRowBackground(Color.brieflyBackground)
+
             if let episode = creationViewModel.inProgressEpisode,
                creationViewModel.hasActiveGeneration == false {
                 creationStatusSection(episode: episode)
@@ -41,10 +53,12 @@ struct SetupView: View {
         .onAppear {
             Task { await topicsViewModel.load() }
             Task { await creationViewModel.resumeInFlightIfNeeded() }
+            Task { await creationViewModel.refreshEntitlements() }
         }
         .refreshable {
             await topicsViewModel.load()
             await creationViewModel.refreshCurrentEpisode()
+            await creationViewModel.refreshEntitlements()
         }
         .sheet(item: $editingTopic) { topic in
             NavigationStack {
@@ -428,13 +442,16 @@ final class EpisodeCreationViewModel: ObservableObject {
     @Published var inProgressEpisode: Episode?
     @Published var errorMessage: String?
     @Published var isGenerating: Bool = false
+    @Published var entitlements: Entitlements?
 
     private let episodeService: EpisodeProviding
+    private let entitlementsService: EntitlementsProviding?
     private var pollTask: Task<Void, Never>?
     private let pollInterval: UInt64 = 2_000_000_000
 
-    init(episodeService: EpisodeProviding) {
+    init(episodeService: EpisodeProviding, entitlementsService: EntitlementsProviding? = nil) {
         self.episodeService = episodeService
+        self.entitlementsService = entitlementsService
     }
 
     deinit {
@@ -461,6 +478,15 @@ final class EpisodeCreationViewModel: ObservableObject {
             let episode = try await episodeService.fetchEpisode(id: creation.episodeId)
             inProgressEpisode = episode
             beginPolling(for: creation.episodeId)
+        } catch let apiError as APIError {
+            switch apiError {
+            case .statusCode(let code) where code == 403:
+                errorMessage = "You've hit your plan limit. Manage your subscription on the web."
+            default:
+                errorMessage = apiError.localizedDescription
+            }
+            isGenerating = false
+            inProgressEpisode = nil
         } catch {
             errorMessage = error.localizedDescription
             isGenerating = false
@@ -531,6 +557,15 @@ final class EpisodeCreationViewModel: ObservableObject {
         }
     }
 
+    func refreshEntitlements() async {
+        guard let entitlementsService else { return }
+        do {
+            entitlements = try await entitlementsService.fetchEntitlements()
+        } catch {
+            // Keep silent; UI falls back to defaults.
+        }
+    }
+
     nonisolated private static func isTerminal(_ status: String?) -> Bool {
         guard let status else { return false }
         switch status.lowercased() {
@@ -560,6 +595,44 @@ private struct GripDots: View {
         .foregroundColor(.brieflyTextMuted)
         .frame(width: (dotSize * 2) + spacing, alignment: .leading)
         .accessibilityHidden(true)
+    }
+}
+
+private struct PlanSummaryView: View {
+    let entitlements: Entitlements?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(planTitle)
+                .font(.headline)
+            Text(usageLine)
+                .foregroundColor(.brieflyTextMuted)
+            Text(limitsLine)
+                .foregroundColor(.brieflyTextMuted)
+            Text("Subscriptions can't be purchased in the app. Manage your plan on the web.")
+                .font(.footnote)
+                .foregroundColor(.brieflyTextMuted)
+        }
+        .padding(.vertical, 6)
+    }
+
+    private var planTitle: String {
+        guard let entitlements else { return "Free plan" }
+        return entitlements.tier.capitalized + " plan"
+    }
+
+    private var usageLine: String {
+        guard let entitlements else { return "Usage resets monthly. You have 20 free minutes." }
+        let used = entitlements.usedMinutes
+        if let limit = entitlements.limitMinutes {
+            return "\(used) of \(limit) minutes used this period"
+        }
+        return "\(used) minutes used this period"
+    }
+
+    private var limitsLine: String {
+        guard let entitlements else { return "Max 1 active topic • Up to 5-minute episodes" }
+        return "Max \(entitlements.limits.maxActiveTopics) active topics • Up to \(entitlements.limits.maxEpisodeMinutes)-minute episodes"
     }
 }
 

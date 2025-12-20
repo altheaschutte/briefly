@@ -7,10 +7,12 @@ final class TopicsViewModel: ObservableObject {
     }
     @Published var errorMessage: String?
     @Published var isLoading: Bool = false
+    @Published var entitlements: Entitlements?
     @Published private(set) var hasChanges: Bool = false
-    let maxActiveTopics: Int = 5
+    private let defaultMaxActiveTopics: Int = 5
 
     private let topicService: TopicProviding
+    private let entitlementsService: EntitlementsProviding?
     private var originalTopics: [Topic] = []
 
     var activeTopics: [Topic] {
@@ -25,8 +27,13 @@ final class TopicsViewModel: ObservableObject {
         activeTopics.count < maxActiveTopics
     }
 
-    init(topicService: TopicProviding) {
+    var maxActiveTopics: Int {
+        entitlements?.limits.maxActiveTopics ?? defaultMaxActiveTopics
+    }
+
+    init(topicService: TopicProviding, entitlementsService: EntitlementsProviding? = nil) {
         self.topicService = topicService
+        self.entitlementsService = entitlementsService
     }
 
     func load() async {
@@ -34,6 +41,7 @@ final class TopicsViewModel: ObservableObject {
         errorMessage = nil
         defer { isLoading = false }
         do {
+            await refreshEntitlements()
             let fetched = try await topicService.fetchTopics()
             let sorted = fetched.sorted { $0.orderIndex < $1.orderIndex }
             originalTopics = sorted
@@ -197,6 +205,15 @@ final class TopicsViewModel: ObservableObject {
 
     private func updateHasChanges() {
         hasChanges = !changedTopics().isEmpty
+    }
+
+    func refreshEntitlements() async {
+        guard let entitlementsService else { return }
+        do {
+            entitlements = try await entitlementsService.fetchEntitlements()
+        } catch {
+            // Ignore failures to avoid blocking UI; limits fall back to defaults.
+        }
     }
 
     private func updateBaseline(with topic: Topic) {

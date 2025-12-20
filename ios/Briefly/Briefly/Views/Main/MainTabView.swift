@@ -14,7 +14,12 @@ struct MainTabView: View {
     init(appViewModel: AppViewModel) {
         self.appViewModel = appViewModel
         _feedViewModel = StateObject(wrappedValue: EpisodesViewModel(episodeService: appViewModel.episodeService))
-        _topicsViewModel = StateObject(wrappedValue: TopicsViewModel(topicService: appViewModel.topicService))
+        _topicsViewModel = StateObject(
+            wrappedValue: TopicsViewModel(
+                topicService: appViewModel.topicService,
+                entitlementsService: appViewModel.entitlementsService
+            )
+        )
         _settingsViewModel = StateObject(wrappedValue: SettingsViewModel(appViewModel: appViewModel,
                                                                          audioManager: appViewModel.audioPlayer))
         _selection = State(initialValue: .feed)

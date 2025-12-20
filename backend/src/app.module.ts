@@ -10,6 +10,7 @@ import { PerplexityModule } from './perplexity/perplexity.module';
 import { StorageModule } from './storage/storage.module';
 import { CommonModule } from './common/common.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
+import { BillingModule } from './billing/billing.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { OnboardingModule } from './onboarding/onboarding.module';
     PerplexityModule,
     StorageModule,
     OnboardingModule,
+    BillingModule,
   ],
 })
 export class AppModule {}

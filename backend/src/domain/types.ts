@@ -33,6 +33,7 @@ export interface OnboardingTranscript {
   errorMessage?: string;
   createdAt: Date;
   updatedAt: Date;
+  usageRecordedAt?: Date;
 }
 
 export type EpisodeStatus =
@@ -63,6 +64,7 @@ export interface Episode {
   errorMessage?: string;
   createdAt: Date;
   updatedAt: Date;
+  usageRecordedAt?: Date;
 }
 
 export interface EpisodeSegment {

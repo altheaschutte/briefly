@@ -7,6 +7,7 @@ import { StorageService } from '../storage/storage.service';
 import { EpisodeSourcesService } from './episode-sources.service';
 import { Episode, EpisodeSegment, EpisodeSource } from '../domain/types';
 import { EpisodeSegmentsService } from './episode-segments.service';
+import { EntitlementsService } from '../billing/entitlements.service';
 
 @Controller('episodes')
 export class EpisodesController {
@@ -17,14 +18,17 @@ export class EpisodesController {
     private readonly storageService: StorageService,
     private readonly episodeSourcesService: EpisodeSourcesService,
     private readonly episodeSegmentsService: EpisodeSegmentsService,
+    private readonly entitlementsService: EntitlementsService,
     @Inject(EPISODES_QUEUE_TOKEN) private readonly episodesQueue: Queue,
   ) {}
 
   @Post()
   async createEpisode(@Req() req: Request, @Body('duration') duration?: number) {
     const userId = (req as any).user?.id as string;
-    const episode = await this.episodesService.createEpisode(userId, duration);
-    await this.episodesQueue.add('generate', { episodeId: episode.id, userId, duration });
+    const targetDuration = duration ?? this.entitlementsService.getDefaultDurationMinutes();
+    await this.entitlementsService.ensureCanCreateEpisode(userId, targetDuration);
+    const episode = await this.episodesService.createEpisode(userId, targetDuration);
+    await this.episodesQueue.add('generate', { episodeId: episode.id, userId, duration: targetDuration });
     return { episodeId: episode.id, status: episode.status };
   }
 

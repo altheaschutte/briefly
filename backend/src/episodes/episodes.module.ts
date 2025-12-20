@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { EpisodesService } from './episodes.service';
 import { EpisodesController } from './episodes.controller';
@@ -25,6 +25,7 @@ import { EpisodeSegmentsService } from './episode-segments.service';
 import { EPISODE_SEGMENTS_REPOSITORY } from './episode-segments.repository';
 import { InMemoryEpisodeSegmentsRepository } from './in-memory-episode-segments.repository';
 import { SupabaseEpisodeSegmentsRepository } from './supabase-episode-segments.repository';
+import { BillingModule } from '../billing/billing.module';
 
 const episodesRepositoryProvider: Provider = {
   provide: EPISODES_REPOSITORY,
@@ -87,12 +88,13 @@ const episodeSegmentsRepositoryProvider: Provider = {
   imports: [
     ConfigModule,
     QueueModule,
-    TopicsModule,
+    forwardRef(() => TopicsModule),
     TopicQueriesModule,
     LlmModule,
     PerplexityModule,
     TtsModule,
     StorageModule,
+    forwardRef(() => BillingModule),
   ],
   controllers: [EpisodesController],
   providers: [

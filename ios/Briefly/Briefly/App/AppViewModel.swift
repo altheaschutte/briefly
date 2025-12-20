@@ -13,6 +13,7 @@ final class AppViewModel: ObservableObject {
     let authManager: AuthManager
     let topicService: TopicService
     let episodeService: EpisodeService
+    let entitlementsService: EntitlementsService
     let audioPlayer = AudioPlayerManager()
 
     private let keychain = KeychainStore()
@@ -30,6 +31,7 @@ final class AppViewModel: ObservableObject {
 
         self.authManager = authManager
         self.apiClient = apiClient
+        self.entitlementsService = EntitlementsService(apiClient: apiClient)
         self.topicService = TopicService(apiClient: apiClient)
         self.episodeService = EpisodeService(apiClient: apiClient)
 

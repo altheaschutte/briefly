@@ -17,6 +17,7 @@ export type EpisodeRow = {
   error_message?: string | null;
   created_at: string;
   updated_at: string;
+  usage_recorded_at?: string | null;
 };
 
 type EpisodesTable = {

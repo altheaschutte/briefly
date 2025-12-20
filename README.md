@@ -3,6 +3,7 @@
 ## High-Level Architecture
 - iOS app (`ios/Briefly/`) in Swift/SwiftUI with a CarPlay audio extension.
 - Marketing website (`briefly-landing/`) built with Astro + Tailwind CSS.
+- Web app (`web/briefly/`) built with Next.js + Tailwind, mirroring the iOS feature set (login, library, create/topics, settings, Stripe billing).
 - Backend NestJS API (`backend/`) with a BullMQ worker for episode generation.
 - Supabase for Auth + Postgres (row-level security), Redis for queues, and S3-compatible storage for audio and covers.
 - AI services are pluggable: LLMs (OpenAI/Anthropic/Gemini), TTS vendors (e.g. ElevenLabs), search/retrieval via Perplexity.
@@ -14,6 +15,7 @@
 - Auth: Supabase JWTs enforced by a global guard (`Authorization: Bearer <token>`); JWKS or HS secret supported.
 - AI: LLM abstraction with interchangeable providers; onboarding transcription uses OpenAI (`gpt-4o-transcribe` by default). TTS providers are swappable.
 - Mobile: Swift/SwiftUI client + CarPlay extension; communicates with the NestJS API using Supabase auth tokens.
+- Web app: Next.js + Tailwind in `web/briefly`, designed to match iOS features (topics, episodes, playback, billing via Stripe).
 - Landing: Astro 5 + Tailwind CSS 4 (Vite) in `briefly-landing/`; scripts: `npm run dev`, `npm run build`, `npm run preview`.
 
 ## Current App Features
@@ -24,13 +26,14 @@
 - Episode library: recency-grouped lists (Today/This Week/Earlier), delete episodes, and detail views with cover art, summary/show notes, topics, segments, and source links.
 - Playback: global audio player with play/pause/resume, segment-level seeking, progress tracking, and configurable speed plus player bar.
 - Settings: playback preferences (speed, auto-play latest, resume last) and logout; dark-theme styling applied across views.
-- Web + backend: Astro marketing site, NestJS API + BullMQ worker, Supabase schema with RLS, and S3-backed audio with signed URL fetching when missing from payloads.
+- Web + backend: Astro marketing site, Next.js web app in `web/briefly`, NestJS API + BullMQ worker, Supabase schema with RLS, and S3-backed audio with signed URL fetching when missing from payloads.
 
 ## TODO Features
 - Wire Episode detail secondary actions (transcript view, bookmark/queue, share, “talk to producer”, overflow) to real flows/endpoints.
 - Add voice selection in Settings (UI placeholder exists) and surface multiple TTS voices when available.
 - Build notification settings/UX once backend support is ready (currently a placeholder section).
 - Add the analytics snippet to `briefly-landing` once tracking is decided.
+- Hook the new Next.js web app to Supabase auth + backend endpoints (topics, episodes, billing) instead of static data.
 
 ## Repository Structure
 ```text
@@ -38,6 +41,7 @@
 ├─ backend/              # NestJS API + BullMQ worker + Supabase migrations
 ├─ briefly-landing/      # Marketing site (Astro + Tailwind)
 ├─ ios/Briefly/          # Xcode workspace (Swift/SwiftUI app + CarPlay extension)
+├─ web/briefly/          # Next.js web app mirroring iOS features
 ├─ branding/             # Visual assets
 ├─ supabase/             # Additional database migrations (project-level)
 └─ README.md

@@ -55,6 +55,7 @@ export class EpisodesService {
       description: updates.description ?? existing.description,
       errorMessage: updates.errorMessage ?? existing.errorMessage,
       durationSeconds: updates.durationSeconds ?? existing.durationSeconds,
+      usageRecordedAt: updates.usageRecordedAt ?? existing.usageRecordedAt,
       archivedAt: updates.archivedAt ?? existing.archivedAt,
     });
     if (!updated) {

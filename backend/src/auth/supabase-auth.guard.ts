@@ -13,6 +13,9 @@ export class SupabaseAuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
+    if (request.path?.startsWith('/billing/webhook')) {
+      return true;
+    }
     const token = this.extractToken(request);
     if (!token) {
       throw new UnauthorizedException('Missing Authorization header');
