@@ -11,6 +11,7 @@ import { StorageModule } from './storage/storage.module';
 import { CommonModule } from './common/common.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { BillingModule } from './billing/billing.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { BillingModule } from './billing/billing.module';
     StorageModule,
     OnboardingModule,
     BillingModule,
+    HealthModule,
   ],
 })
 export class AppModule {}
