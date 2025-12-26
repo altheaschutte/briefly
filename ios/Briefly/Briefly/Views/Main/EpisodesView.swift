@@ -19,6 +19,7 @@ struct EpisodesView: View {
                             } label: {
                                 Label("Delete", systemImage: "trash")
                             }
+                            .tint(.brieflyDestructive)
                         }
                     }
                 }
