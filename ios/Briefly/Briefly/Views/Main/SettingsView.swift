@@ -91,7 +91,7 @@ private struct PlanSummaryView: View {
                 .foregroundColor(.brieflyTextMuted)
             Text(limitsLine)
                 .foregroundColor(.brieflyTextMuted)
-            Text("Subscriptions can't be purchased in the app. Manage your plan on the web.")
+            Text("Subscriptions can't be purchased in the app. Visit brieflypodcast.app to manage your account.")
                 .font(.footnote)
                 .foregroundColor(.brieflyTextMuted)
         }

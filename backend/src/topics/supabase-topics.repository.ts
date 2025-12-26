@@ -83,6 +83,7 @@ export class SupabaseTopicsRepository implements TopicsRepository {
       original_text: originalText,
       order_index: nextOrderIndex,
       is_active: true,
+      is_seed: false,
       created_at: now,
       updated_at: now,
     };
@@ -147,6 +148,7 @@ export class SupabaseTopicsRepository implements TopicsRepository {
       originalText: row.original_text,
       orderIndex: row.order_index,
       isActive: row.is_active,
+      isSeed: row.is_seed,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
     };

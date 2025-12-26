@@ -2,33 +2,44 @@ import XCTest
 @testable import Briefly
 
 final class AuthManagerTests: XCTestCase {
-    func testLoginPersistsToken() async throws {
-        let config = URLSessionConfiguration.ephemeral
-        config.protocolClasses = [MockURLProtocol.self]
-        let session = URLSession(configuration: config)
-
-        MockURLProtocol.handler = { request in
-            XCTAssertEqual(request.httpMethod, "POST")
-            XCTAssertTrue(request.url?.absoluteString.contains("grant_type=password") ?? false)
-            let body = try XCTUnwrap(request.httpBody)
-            let json = try JSONSerialization.jsonObject(with: body) as? [String: String]
-            XCTAssertEqual(json?["email"], "test@example.com")
-            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
-            let data = #"{"access_token":"abc","refresh_token":"ref","expires_at": 0}"#.data(using: .utf8)!
-            return (response, data)
-        }
-
-        let apiClient = APIClient(baseURL: URL(string: "https://example.com")!, session: session)
+    func testVerifyOtpPersistsToken() async throws {
         let keychain = KeychainStore()
-        let manager = AuthManager(baseURL: URL(string: "https://example.com")!,
-                                  anonKey: "anon",
-                                  keychain: keychain,
-                                  apiClient: apiClient)
+        let mockProvider = MockOTPProvider()
+        mockProvider.verifyResult = AuthToken(accessToken: "abc", refreshToken: "ref", expiresAt: Date())
 
-        let token = try await manager.login(email: "test@example.com", password: "password")
+        let manager = AuthManager(authProvider: mockProvider, keychain: keychain)
+
+        try await manager.sendOtp(email: "test@example.com")
+        XCTAssertEqual(mockProvider.sentEmails.last, "test@example.com")
+
+        let token = try await manager.verifyOtp(email: "test@example.com", token: "123456")
         XCTAssertEqual(token.accessToken, "abc")
         XCTAssertEqual(manager.currentToken?.accessToken, "abc")
 
-        manager.logout()
+        await manager.logout()
+        XCTAssertNil(manager.currentToken)
+    }
+}
+
+private final class MockOTPProvider: OTPAuthProviding {
+    var sentEmails: [String] = []
+    var verifyResult: AuthToken?
+    var refreshResult: AuthToken?
+    var signOutCalled = false
+
+    func sendOtp(email: String) async throws {
+        sentEmails.append(email)
+    }
+
+    func verifyOtp(email: String, token: String) async throws -> AuthToken {
+        return verifyResult ?? AuthToken(accessToken: "token", refreshToken: nil, expiresAt: nil)
+    }
+
+    func refreshSession(refreshToken: String) async throws -> AuthToken {
+        return refreshResult ?? AuthToken(accessToken: "refreshed", refreshToken: nil, expiresAt: nil)
+    }
+
+    func signOut() async throws {
+        signOutCalled = true
     }
 }

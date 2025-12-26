@@ -93,13 +93,26 @@ final class OnboardingViewModel: ObservableObject {
         }
     }
 
-    func deleteTopic(at offsets: IndexSet) {
-        for index in offsets {
-            if let id = topics[index].id {
-                Task { try? await topicService.deleteTopic(id: id) }
+    func deleteTopic(at offsets: IndexSet, undoManager: UndoManager?) async {
+        let snapshots = offsets.compactMap { index -> DeletedTopicSnapshot? in
+            guard topics.indices.contains(index) else { return nil }
+            return DeletedTopicSnapshot(topic: topics[index], index: index)
+        }
+        guard snapshots.isEmpty == false else { return }
+
+        registerUndoForDeletion(snapshots, undoManager: undoManager)
+
+        for snapshot in snapshots {
+            if let id = snapshot.topic.id {
+                try? await topicService.deleteTopic(id: id)
             }
         }
-        topics.remove(atOffsets: offsets)
+        topics.remove(atOffsets: IndexSet(snapshots.map { $0.index }))
+    }
+
+    func deleteTopic(_ topic: Topic, undoManager: UndoManager?) async {
+        guard let index = topics.firstIndex(where: { $0.id == topic.id }) ?? topics.firstIndex(of: topic) else { return }
+        await deleteTopic(at: IndexSet(integer: index), undoManager: undoManager)
     }
 
     func updateTopic(_ topic: Topic) async {
@@ -189,4 +202,70 @@ final class OnboardingViewModel: ObservableObject {
         guard let entitlements else { return }
         reachedUsageLimit = entitlements.isGenerationUsageExhausted
     }
+
+    private func registerUndoForDeletion(_ snapshots: [DeletedTopicSnapshot], undoManager: UndoManager?) {
+        guard let undoManager, snapshots.isEmpty == false else { return }
+        undoManager.registerUndo(withTarget: self) { target in
+            Task { await target.restoreDeletedTopics(snapshots, undoManager: undoManager) }
+        }
+        undoManager.setActionName("Delete Topic")
+    }
+
+    private func restoreDeletedTopics(_ snapshots: [DeletedTopicSnapshot], undoManager: UndoManager?) async {
+        errorMessage = nil
+        let sorted = snapshots.sorted { $0.index < $1.index }
+
+        var recreated: [Topic] = []
+        for snapshot in sorted {
+            do {
+                var restored = try await topicService.createTopic(originalText: snapshot.topic.originalText)
+                restored.isActive = snapshot.topic.isActive
+                restored.orderIndex = snapshot.topic.orderIndex
+                recreated.append(restored)
+            } catch {
+                errorMessage = error.localizedDescription
+                return
+            }
+        }
+
+        var updated = topics
+        for (snapshot, restored) in zip(sorted, recreated) {
+            let insertIndex = min(snapshot.index, updated.count)
+            updated.insert(restored, at: insertIndex)
+        }
+
+        updated = updated.enumerated().map { index, topic in
+            var topic = topic
+            topic.orderIndex = index
+            return topic
+        }
+
+        topics = updated
+        await persistOrderChanges(for: updated)
+
+        guard errorMessage == nil else { return }
+
+        let redoSnapshots: [DeletedTopicSnapshot] = recreated.compactMap { restored in
+            guard let index = topics.firstIndex(where: { $0.id == restored.id }) else { return nil }
+            return DeletedTopicSnapshot(topic: restored, index: index)
+        }
+        registerUndoForDeletion(redoSnapshots, undoManager: undoManager)
+    }
+
+    private func persistOrderChanges(for topics: [Topic]) async {
+        for topic in topics {
+            guard topic.id != nil else { continue }
+            do {
+                _ = try await topicService.updateTopic(topic)
+            } catch {
+                errorMessage = error.localizedDescription
+                return
+            }
+        }
+    }
+}
+
+private struct DeletedTopicSnapshot {
+    let topic: Topic
+    let index: Int
 }

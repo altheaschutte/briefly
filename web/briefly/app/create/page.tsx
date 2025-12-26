@@ -10,7 +10,8 @@ import { Mic, Sparkles, Plus, CheckCircle, Target, ArrowRight, Loader2, AlertCir
 const suggested = ["AI + startups", "Climate & energy", "Global headlines", "Local arts", "Longform essays"];
 
 export default function CreatePage() {
-  const token = useRequireAuth();
+  const session = useRequireAuth();
+  const accessToken = session?.access_token;
   const [topics, setTopics] = useState<Topic[]>([]);
   const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
   const [loading, setLoading] = useState(true);
@@ -20,13 +21,13 @@ export default function CreatePage() {
 
   useEffect(() => {
     const load = async () => {
-      if (!token) return;
+      if (!accessToken) return;
       setLoading(true);
       setError(null);
       try {
         const [fetched, ents] = await Promise.all([
-          fetchTopics(token.access_token),
-          fetchEntitlements(token.access_token)
+          fetchTopics(accessToken),
+          fetchEntitlements(accessToken)
         ]);
         setTopics(fetched.sort((a, b) => a.orderIndex - b.orderIndex));
         setEntitlements(ents);
@@ -37,13 +38,13 @@ export default function CreatePage() {
       }
     };
     load();
-  }, [token]);
+  }, [accessToken]);
 
   const addTopic = async (text: string) => {
-    if (!token || !text.trim()) return;
+    if (!accessToken || !text.trim()) return;
     setSaving(true);
     try {
-      const created = await createTopic(token.access_token, text.trim());
+      const created = await createTopic(accessToken, text.trim());
       setTopics((prev) => [...prev, created].sort((a, b) => a.orderIndex - b.orderIndex));
       setNewTopic("");
     } catch (err: any) {
@@ -54,10 +55,10 @@ export default function CreatePage() {
   };
 
   const toggleTopic = async (topic: Topic) => {
-    if (!token) return;
+    if (!accessToken) return;
     setSaving(true);
     try {
-      const updated = await updateTopic(token.access_token, { ...topic, isActive: !topic.isActive });
+      const updated = await updateTopic(accessToken, { ...topic, isActive: !topic.isActive });
       setTopics((prev) =>
         prev
           .map((t) => (t.id === updated.id ? updated : t))
@@ -71,11 +72,11 @@ export default function CreatePage() {
   };
 
   const removeTopic = async (topic: Topic) => {
-    if (!token) return;
+    if (!accessToken) return;
     if (!confirm(`Delete "${topic.originalText}"?`)) return;
     setSaving(true);
     try {
-      await deleteTopic(token.access_token, topic.id);
+      await deleteTopic(accessToken, topic.id);
       setTopics((prev) => prev.filter((t) => t.id !== topic.id));
     } catch (err: any) {
       setError(err?.message ?? "Failed to delete topic");
@@ -85,10 +86,10 @@ export default function CreatePage() {
   };
 
   const queueEpisode = async () => {
-    if (!token) return;
+    if (!accessToken) return;
     setSaving(true);
     try {
-      await requestEpisodeGeneration(token.access_token);
+      await requestEpisodeGeneration(accessToken);
       alert("Episode generation requested. Check your library for status.");
     } catch (err: any) {
       setError(err?.message ?? "Could not queue episode");

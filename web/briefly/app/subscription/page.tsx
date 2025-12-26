@@ -34,7 +34,8 @@ function formatMinutes(minutes: number | null | undefined) {
 }
 
 export default function SubscriptionPage() {
-  const token = useRequireAuth();
+  const session = useRequireAuth();
+  const accessToken = session?.access_token;
   const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
   const [tiers, setTiers] = useState<BillingTierInfo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,13 +57,13 @@ export default function SubscriptionPage() {
   }, [tiers]);
 
   const loadData = async () => {
-    if (!token) return;
+    if (!accessToken) return;
     setLoading(true);
     setError(null);
     try {
       const [ents, tierList] = await Promise.all([
-        fetchEntitlements(token.access_token),
-        fetchBillingTiers(token.access_token)
+        fetchEntitlements(accessToken),
+        fetchBillingTiers(accessToken)
       ]);
       setEntitlements(ents);
       setTiers(tierList ?? []);
@@ -76,14 +77,14 @@ export default function SubscriptionPage() {
   useEffect(() => {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [accessToken]);
 
   const goToPortal = async () => {
-    if (!token) return;
+    if (!accessToken) return;
     setPortalLoading(true);
     setError(null);
     try {
-      const { url } = await createStripePortalSession(token.access_token);
+      const { url } = await createStripePortalSession(accessToken);
       if (!url) {
         throw new Error("Stripe portal is unavailable right now.");
       }
@@ -96,7 +97,7 @@ export default function SubscriptionPage() {
   };
 
   const handleTierClick = async (tier: BillingTier) => {
-    if (!token) return;
+    if (!accessToken) return;
     setRedirectingTier(tier);
     setError(null);
     try {
@@ -112,7 +113,7 @@ export default function SubscriptionPage() {
         setError("Free tier is available automatically. Use the Stripe portal to cancel a paid plan.");
         return;
       }
-      const { url } = await createStripeCheckoutSession(token.access_token, tier);
+      const { url } = await createStripeCheckoutSession(accessToken, tier);
       if (!url) {
         throw new Error("Stripe checkout is unavailable right now.");
       }
@@ -129,23 +130,27 @@ export default function SubscriptionPage() {
     <div className="container space-y-10 ">
      
       <section className="space-y-4 flex flex-col items-center justify-center">
-        <h1 className="mb-8 text-center text-3xl font-semibold text-white">Manage your Subscription</h1>
+        <h1 className="mb-8 text-center text-2xl font-semibold text-white">Manage your Subscription</h1>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {displayedTiers.map((tier) => {
             const isCurrent = currentTier === tier.tier;
+            const tierCurrency = (tier.priceCurrency ?? "USD").toUpperCase();
+            const hasPrice = tier.priceAmount !== null && tier.priceAmount !== undefined;
             const priceValue =
-              tier.priceAmount === null || tier.priceAmount === undefined
-                ? tier.limits?.minutesPerMonth === null || tier.limits?.minutesPerMonth === undefined
-                  ? "—"
-                  : tier.limits.minutesPerMonth.toLocaleString()
-                : new Intl.NumberFormat("en-US", { style: "currency", currency: (tier.priceCurrency ?? "USD").toUpperCase() }).format((tier.priceAmount ?? 0) / 100);
+              hasPrice
+                ? new Intl.NumberFormat("en-US", { style: "currency", currency: tierCurrency }).format((tier.priceAmount ?? 0) / 100)
+                : tier.tier === "free"
+                  ? new Intl.NumberFormat("en-US", { style: "currency", currency: tierCurrency }).format(0)
+                  : tier.limits?.minutesPerMonth === null || tier.limits?.minutesPerMonth === undefined
+                    ? "—"
+                    : tier.limits.minutesPerMonth.toLocaleString();
             const priceSuffix =
-              tier.priceAmount === null || tier.priceAmount === undefined
-                ? tier.limits?.minutesPerMonth
+              hasPrice || tier.tier === "free"
+                ? "/month"
+                : tier.limits?.minutesPerMonth
                   ? "min / month"
-                  : "/ month"
-                : "/month";
+                  : "/ month";
 
             return (
               <div

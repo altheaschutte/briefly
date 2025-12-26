@@ -1,136 +1,105 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AuthToken } from "@/lib/types";
-import {
-  clearAuthStorage,
-  loadStoredAuth,
-  login as supabaseLogin,
-  persistAuth,
-  refreshSession,
-  shouldRefreshToken
-} from "@/lib/auth";
+import type { Session } from "@supabase/supabase-js";
+import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
 import { setUnauthorizedHandler } from "@/lib/api";
 
 type AuthState = {
-  token: AuthToken | null;
+  session: Session | null;
+  accessToken: string | null;
   email: string | null;
   isReady: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
+  requestOtp: (email: string) => Promise<void>;
+  verifyOtp: (email: string, token: string) => Promise<void>;
+  logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [token, setToken] = useState<AuthToken | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [email, setEmail] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
   const router = useRouter();
-  const refreshTimer = useRef<number | null>(null);
-  const refreshInFlight = useRef(false);
-
-  const clearRefreshTimer = useCallback(() => {
-    if (refreshTimer.current !== null) {
-      window.clearTimeout(refreshTimer.current);
-      refreshTimer.current = null;
-    }
-  }, []);
+  const supabase = getSupabaseBrowserClient();
 
   useEffect(() => {
-    const stored = loadStoredAuth();
-    if (stored.token) setToken(stored.token);
-    if (stored.email) setEmail(stored.email);
-    setIsReady(true);
-  }, []);
+    let isMounted = true;
+    supabase.auth.getSession().then(({ data }) => {
+      if (!isMounted) return;
+      setSession(data.session ?? null);
+      setEmail(data.session?.user?.email ?? null);
+      setIsReady(true);
+    });
 
-  const handleLogin = useCallback(
-    async (emailInput: string, password: string) => {
-      clearRefreshTimer();
-      const auth = await supabaseLogin(emailInput, password);
-      setToken(auth);
-      setEmail(emailInput);
-      persistAuth(auth, emailInput);
-      router.push("/");
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setEmail(nextSession?.user?.email ?? null);
+      setIsReady(true);
+    });
+
+    setUnauthorizedHandler(() => {
+      supabase.auth.signOut();
+      router.replace("/login");
+    });
+
+    return () => {
+      isMounted = false;
+      listener.subscription.unsubscribe();
+      setUnauthorizedHandler(null);
+    };
+  }, [router, supabase]);
+
+  const requestOtp = useCallback(
+    async (emailInput: string) => {
+      const { error } = await supabase.auth.signInWithOtp({
+        email: emailInput,
+        options: { shouldCreateUser: true }
+      });
+      if (error) throw error;
     },
-    [clearRefreshTimer, router]
+    [supabase]
   );
 
   const handleLogout = useCallback(
-    (redirectToLogin = true) => {
-      clearRefreshTimer();
-      clearAuthStorage();
-      setToken(null);
+    async () => {
+      await supabase.auth.signOut();
+      setSession(null);
       setEmail(null);
-      if (redirectToLogin) {
-        router.replace("/login");
-      } else {
-        router.push("/");
-      }
+      router.replace("/login");
     },
-    [clearRefreshTimer, router]
+    [router, supabase]
   );
 
-  const refreshAccessToken = useCallback(async () => {
-    if (!token?.refresh_token || refreshInFlight.current) return token;
-    refreshInFlight.current = true;
-    try {
-      const refreshed = await refreshSession(token.refresh_token);
-      setToken(refreshed);
-      persistAuth(refreshed, email ?? "");
-      return refreshed;
-    } catch (err) {
-      console.error("Failed to refresh auth token", err);
-      handleLogout(true);
-      return null;
-    } finally {
-      refreshInFlight.current = false;
-    }
-  }, [token, email, handleLogout]);
-
-  useEffect(() => {
-    setUnauthorizedHandler(() => handleLogout(true));
-    return () => setUnauthorizedHandler(null);
-  }, [handleLogout]);
-
-  useEffect(() => {
-    if (!token) {
-      clearRefreshTimer();
-      return;
-    }
-
-    if (shouldRefreshToken(token)) {
-      refreshAccessToken();
-    }
-
-    if (!token.refresh_token || !token.expires_at) {
-      clearRefreshTimer();
-      return;
-    }
-
-    const refreshAtMs = token.expires_at * 1000 - 60_000;
-    const delay = Math.max(refreshAtMs - Date.now(), 15_000);
-
-    clearRefreshTimer();
-    refreshTimer.current = window.setTimeout(() => {
-      refreshAccessToken();
-    }, delay);
-
-    return clearRefreshTimer;
-  }, [token, refreshAccessToken, clearRefreshTimer]);
-
-  const logout = useCallback(() => handleLogout(true), [handleLogout]);
+  const verifyOtp = useCallback(
+    async (emailInput: string, token: string) => {
+      const { data, error } = await supabase.auth.verifyOtp({
+        email: emailInput,
+        token,
+        type: "email"
+      });
+      if (error) {
+        throw error;
+      }
+      setSession(data.session ?? null);
+      setEmail(data.session?.user?.email ?? emailInput ?? null);
+    },
+    [supabase]
+  );
 
   const value = useMemo(
     () => ({
-      token,
+      session,
+      accessToken: session?.access_token ?? null,
       email,
       isReady,
-      login: handleLogin,
-      logout
+      requestOtp,
+      verifyOtp,
+      logout: handleLogout
     }),
-    [token, email, isReady, handleLogin, logout]
+    [session, email, isReady, requestOtp, verifyOtp, handleLogout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

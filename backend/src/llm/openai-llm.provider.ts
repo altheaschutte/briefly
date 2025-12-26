@@ -121,24 +121,23 @@ ${historyBlock}`,
     const messages = [
       {
         role: 'system',
-        content: `You are an expert podcast segment writer. Output a TWO-HOST dialogue for ElevenLabs v3 Dialogue (multi-speaker).
+        content: `You are an expert podcast segment writer. Output a SINGLE-HOST narration for ElevenLabs v3 Dialogue (single speaker).
 
-Hosts:
-- SPEAKER_1 (Australian male): warm, curious, grounded.
-- SPEAKER_2 (British female): sharp, witty, insightful.
+Host:
+- SPEAKER_1 (Australian male): warm, curious, grounded. No other speakers or guests.
 
-Non-negotiable rules:
+Non-negotiable rules (single host only):
 - Use ONLY the provided Findings. Do not invent facts, names, numbers, dates, or quotes.
 - If Findings contain multiple possible stories and intent is "single_story", choose ONE most compelling/most detailed story and ignore the rest.
 - No URLs spoken aloud.
 - Spell out numbers and dates.
 - Create a fresh segment title for this script (see rules below).
-- Keep lines short and speakable. Natural conversational rhythm. No monologues: max 3 turns in a row per speaker.
+- Keep lines short and speakable. Natural rhythm, 1–3 sentences per turn. Vary cadence without filler.
 - Do NOT include speaker names or name cues inside any turn text. Rely on the speaker labels only.
-- Avoid excessive audio tags in this draft. Use at most ONE tag per 3 turns on average.
-- Tags must be auditory voice cues only, in square brackets, placed immediately before or after the words they color.
-  Allowed examples: [thoughtful], [excited], [sighs], [chuckles], [whispers], [short pause], [long pause].
-  Do NOT use non-voice stage directions (no [music], [walking], [pacing]) and do NOT wrap entire paragraphs in brackets.
+- No audio direction tags or bracketed stage directions. Do NOT use cues like [excited], [pause], [whispers]; write the tone into the words instead.
+- Do NOT summarize or preview the topic sections; jump straight into the story/findings without meta commentary.
+- Do NOT write dialogue, banter, or acknowledgements to another host. Avoid lead-ins like "absolutely," "that's right," or "as you mentioned."
+- Every turn must use SPEAKER_1 only. There is no co-host or interviewee.
 
 Segment title rules:
 - 4–10 words, descriptive, and specific to this segment.
@@ -154,7 +153,7 @@ Target length:
 - Aim for a ${durationLabel} segment at ~150 words per minute total spoken words.
 
 Output JSON only, exactly this shape:
-{"title": string, "intent": "single_story"|"multi_item", "turns":[{"speaker":"SPEAKER_1"|"SPEAKER_2","text":string}...]}`,
+{"title": string, "intent": "single_story"|"multi_item", "turns":[{"speaker":"SPEAKER_1","text":string}...]}`,
       },
       {
         role: 'user',
@@ -179,11 +178,12 @@ ${sourceList}`,
     if (!content) {
       throw new Error('OpenAI returned empty content for segment script');
     }
-    const script = this.parseDialogueScript(content, intent, title);
-    if (script.turns.length < 6) {
-      throw new Error('OpenAI returned too few dialogue turns for segment script');
-    }
-    return script;
+    const script = this.parseDialogueScript(content, intent, title, { stripAudioTags: true });
+    const singleSpeakerScript: SegmentDialogueScript = {
+      ...script,
+      turns: script.turns.map((turn) => ({ ...turn, speaker: 'SPEAKER_1' as const })),
+    };
+    return singleSpeakerScript;
   }
 
   async enhanceSegmentDialogueForElevenV3(script: SegmentDialogueScript): Promise<SegmentDialogueScript> {
@@ -191,7 +191,7 @@ ${sourceList}`,
     const messages = [
       {
         role: 'system',
-        content: `You enhance an existing TWO-SPEAKER dialogue for ElevenLabs v3.
+        content: `You enhance an existing SINGLE-SPEAKER narration for ElevenLabs v3.
 
 Primary goal:
 - Improve delivery by inserting concise audio tags in square brackets.
@@ -202,10 +202,11 @@ Hard rules:
 - Tags must be placed immediately before or after the words they color.
 - No non-voice stage directions (no [music], [walking], etc.).
 - Do not add speaker names or name cues inside any text.
+- All turns already use SPEAKER_1. Do not introduce new speakers or change speaker labels.
 - Keep tags sparse: typically 1 tag every 2–4 turns, unless the moment clearly benefits.
 
 Return JSON only in the exact same shape:
-{"title": string, "intent": "single_story"|"multi_item", "turns":[{"speaker":"SPEAKER_1"|"SPEAKER_2","text":string}...]}`,
+{"title": string, "intent": "single_story"|"multi_item", "turns":[{"speaker":"SPEAKER_1","text":string}...]}`,
       },
       {
         role: 'user',
@@ -225,7 +226,11 @@ Return JSON only in the exact same shape:
       throw new Error('OpenAI returned empty content for dialogue enhancement');
     }
 
-    const enhanced = this.parseDialogueScript(content, script.intent, script.title);
+    const enhancedParsed = this.parseDialogueScript(content, script.intent, script.title);
+    const enhanced: SegmentDialogueScript = {
+      ...enhancedParsed,
+      turns: enhancedParsed.turns.map((turn) => ({ ...turn, speaker: 'SPEAKER_1' as const })),
+    };
     const sameLength = enhanced.turns.length === script.turns.length;
     const sameSpeakers =
       sameLength && enhanced.turns.every((turn, idx) => turn.speaker === script.turns[idx]?.speaker);
@@ -268,10 +273,10 @@ DESCRIPTION RULES
 
 SHOW NOTES RULES
 - Output in Markdown format.
-- Begin with a 2–3 sentence summary that incorporates the unique details highlighted in the title/description.
-- Follow with a short bullet list of key moments from the episode.
+- Begin with a single tight 1–2 sentence summary that uses the unique details highlighted in the title/description.
+- Follow with an ultra-brief bullet list (3–5 items, max 12 words each) of key moments.
 - Do NOT include a Sources section or any URLs; sources are stored and rendered separately.
-- Keep the entire notes section under 400 words.`,
+- Keep the entire notes section under 150 words; favor brevity over detail.`,
       },
       {
         role: 'user',
@@ -404,9 +409,15 @@ SHOW NOTES RULES
     return null;
   }
 
-  private parseDialogueScript(content: string, fallbackIntent: TopicIntent, fallbackTitle: string): SegmentDialogueScript {
+  private parseDialogueScript(
+    content: string,
+    fallbackIntent: TopicIntent,
+    fallbackTitle: string,
+    options?: { stripAudioTags?: boolean },
+  ): SegmentDialogueScript {
     const normalizedContent = content.trim();
     const parsed = this.parseJsonWithFallback(normalizedContent, 'dialogue script');
+    const stripAudioTags = options?.stripAudioTags ?? false;
 
     const intent = this.parseTopicIntent(parsed?.intent, fallbackIntent);
     const title = typeof parsed?.title === 'string' && parsed.title.trim() ? parsed.title.trim() : fallbackTitle;
@@ -415,7 +426,7 @@ SHOW NOTES RULES
     const turns: DialogueTurn[] = rawTurns
       .map((turn: any) => {
         const speaker = this.parseSpeaker(turn?.speaker);
-        const text = this.sanitizeDialogueText(turn?.text);
+        const text = this.sanitizeDialogueText(turn?.text, { stripAudioTags });
         if (!speaker || !text) {
           return null;
         }
@@ -446,16 +457,22 @@ SHOW NOTES RULES
     };
   }
 
-  private sanitizeDialogueText(text: any): string {
+  private sanitizeDialogueText(text: any, options?: { stripAudioTags?: boolean }): string {
     if (typeof text !== 'string') {
       return '';
     }
     const withoutSpeakerLabels = text
       .replace(/\bSPEAKER[_ ]?1\b:?/gi, '')
       .replace(/\bSPEAKER[_ ]?2\b:?/gi, '')
-      .replace(/\s{2,}/g, ' ')
       .trim();
-    return withoutSpeakerLabels;
+    const withoutAudioTags = options?.stripAudioTags
+      ? this.stripAudioDirectionTags(withoutSpeakerLabels)
+      : withoutSpeakerLabels;
+    return withoutAudioTags.replace(/\s{2,}/g, ' ').trim();
+  }
+
+  private stripAudioDirectionTags(text: string): string {
+    return text.replace(/\s*\[[^\]\n]{1,40}\]\s*/g, ' ');
   }
 
   private parseList(content: string): string[] {

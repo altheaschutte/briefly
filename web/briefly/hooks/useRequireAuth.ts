@@ -3,17 +3,32 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
+import { getProfile } from "@/lib/profile";
 
 export function useRequireAuth() {
-  const { token, isReady } = useAuth();
+  const { session, isReady } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (!isReady) return;
-    if (!token) {
+    if (!session) {
       router.replace("/login");
+      return;
     }
-  }, [isReady, token, router]);
+    const supabase = getSupabaseBrowserClient();
+    const enforceProfile = async () => {
+      try {
+        const profile = await getProfile(supabase, session.user.id);
+        if (!profile) {
+          router.replace("/onboarding");
+        }
+      } catch (err) {
+        console.error("Failed to fetch profile for gate", err);
+      }
+    };
+    enforceProfile();
+  }, [isReady, session, router]);
 
-  return token;
+  return session;
 }

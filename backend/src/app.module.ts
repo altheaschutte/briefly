@@ -12,6 +12,7 @@ import { CommonModule } from './common/common.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { BillingModule } from './billing/billing.module';
 import { HealthModule } from './health/health.module';
+import { AppController } from './app.controller';
 
 @Module({
   imports: [
@@ -29,5 +30,6 @@ import { HealthModule } from './health/health.module';
     BillingModule,
     HealthModule,
   ],
+  controllers: [AppController],
 })
 export class AppModule {}

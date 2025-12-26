@@ -94,7 +94,8 @@ const normalizeTopic = (raw: any): Topic => ({
   id: raw.id ?? raw.topic_id ?? crypto.randomUUID(),
   originalText: raw.originalText ?? raw.original_text ?? raw.title ?? "",
   orderIndex: Number(raw.orderIndex ?? raw.order_index ?? 0),
-  isActive: Boolean(raw.isActive ?? raw.is_active ?? raw.active ?? true)
+  isActive: Boolean(raw.isActive ?? raw.is_active ?? raw.active ?? true),
+  isSeed: Boolean(raw.isSeed ?? raw.is_seed ?? false)
 });
 
 export async function fetchEpisodes(token: string): Promise<Episode[]> {

@@ -1,33 +1,38 @@
 import Foundation
 
 enum APIConfig {
-    // Update these values to point at the running backend
-    static let baseURL = URL(string: "http://127.0.0.1:3344")!
-    static let authBaseURL = URL(string: "http://127.0.0.1:54321")!
-    static let authAPIKey: String = {
-        if let env = ProcessInfo.processInfo.environment["SUPABASE_ANON_KEY"], env.isEmpty == false {
+    private static func string(for key: String) -> String {
+        if let env = ProcessInfo.processInfo.environment[key], env.isEmpty == false {
             return env
         }
-        if let plistValue = Bundle.main.object(forInfoDictionaryKey: "SUPABASE_ANON_KEY") as? String,
-           plistValue.isEmpty == false {
+        if let plistValue = Bundle.main.object(forInfoDictionaryKey: key) as? String, plistValue.isEmpty == false {
             return plistValue
         }
-        return ""
-    }()
+        fatalError("Missing config key: \(key)")
+    }
 
-    static let webAppURL: URL = {
-        if let env = ProcessInfo.processInfo.environment["APP_WEB_URL"],
-           let url = URL(string: env) {
-            return url
+    private static func url(for key: String) -> URL {
+        let value = string(for: key)
+        guard let url = URL(string: value) else {
+            fatalError("Invalid URL for key \(key): \(value)")
         }
-        if let plistValue = Bundle.main.object(forInfoDictionaryKey: "APP_WEB_URL") as? String,
-           let url = URL(string: plistValue) {
-            return url
-        }
-        return URL(string: "https://brieflypodcast.app")!
-    }()
+        return url
+    }
+
+    static let baseURL = url(for: "API_BASE_URL")
+    static let authBaseURL = url(for: "SUPABASE_URL")
+    static let authAPIKey: String = string(for: "SUPABASE_ANON_KEY")
+    static let webAppURL: URL = url(for: "APP_WEB_URL")
 
     static var manageAccountURL: URL {
         webAppURL.appendingPathComponent("account")
+    }
+
+    static var supabaseRestURL: URL {
+        authBaseURL.appendingPathComponent("rest/v1")
+    }
+
+    static var supabaseAuthURL: URL {
+        authBaseURL.appendingPathComponent("auth/v1")
     }
 }

@@ -15,6 +15,7 @@ extension Color {
     static let brieflyDurationBackground = Color(hex: 0x2A7997, alpha: 0.3)
     static let brieflyTextMuted = Color.white.opacity(0.78)
     static let brieflyBorder = Color.white.opacity(0.12)
+    static let brieflyDestructive = Color(hex: 0xC13232)
 }
 
 private extension Color {

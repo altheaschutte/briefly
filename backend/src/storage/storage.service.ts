@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
@@ -5,6 +6,7 @@ import { getSignedUrl as getS3SignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuid } from 'uuid';
 import { promises as fs } from 'fs';
 import path from 'path';
+import { Readable } from 'stream';
 
 @Injectable()
 export class StorageService {
@@ -106,6 +108,40 @@ export class StorageService {
       Key: normalizedKey,
     });
     return getS3SignedUrl(client, command, { expiresIn: ttl });
+  }
+
+  async fetchAudioBuffer(keyOrUrl: string): Promise<Buffer> {
+    if (!keyOrUrl) {
+      throw new Error('Audio key or URL is required');
+    }
+
+    if (/^https?:\/\//i.test(keyOrUrl)) {
+      const response = await axios.get<ArrayBuffer>(keyOrUrl, { responseType: 'arraybuffer' });
+      return Buffer.from(response.data);
+    }
+
+    if (this.driver === 'local' || keyOrUrl.startsWith('file://')) {
+      const localPath = keyOrUrl.replace(/^file:\/\//, '');
+      return fs.readFile(localPath);
+    }
+
+    const normalizedKey = this.normalizeKey(keyOrUrl);
+    const { bucket, client } = this.getClient();
+    const response = await client.send(
+      new GetObjectCommand({
+        Bucket: bucket,
+        Key: normalizedKey,
+      }),
+    );
+    const body = response.Body as Readable | undefined;
+    if (!body) {
+      throw new Error(`Empty response when fetching audio ${normalizedKey}`);
+    }
+    const chunks: Buffer[] = [];
+    for await (const chunk of body) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
   }
 
   async getEpisodeAudioSignedUrl(userId: string, episodeId: string, key?: string): Promise<string> {

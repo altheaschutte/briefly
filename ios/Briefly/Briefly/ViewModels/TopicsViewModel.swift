@@ -31,9 +31,10 @@ final class TopicsViewModel: ObservableObject {
         entitlements?.limits.maxActiveTopics ?? defaultMaxActiveTopics
     }
 
-    init(topicService: TopicProviding, entitlementsService: EntitlementsProviding? = nil) {
+    init(topicService: TopicProviding, entitlementsService: EntitlementsProviding? = nil, initialTopics: [Topic] = []) {
         self.topicService = topicService
         self.entitlementsService = entitlementsService
+        applyPrefetchedTopics(initialTopics)
     }
 
     func load() async {
@@ -72,29 +73,39 @@ final class TopicsViewModel: ObservableObject {
         }
     }
 
-    func deleteTopic(at offsets: IndexSet) async {
+    func deleteTopic(at offsets: IndexSet, undoManager: UndoManager?) async {
         errorMessage = nil
-        for index in offsets {
-            if let id = topics[index].id {
+        let snapshots = offsets.compactMap { index -> DeletedTopicSnapshot? in
+            guard topics.indices.contains(index) else { return nil }
+            return DeletedTopicSnapshot(topic: topics[index], index: index)
+        }
+        guard snapshots.isEmpty == false else { return }
+
+        registerUndoForDeletion(snapshots, undoManager: undoManager)
+
+        for snapshot in snapshots {
+            if let id = snapshot.topic.id {
                 try? await topicService.deleteTopic(id: id)
             }
         }
-        topics.remove(atOffsets: offsets)
+
+        topics.remove(atOffsets: IndexSet(snapshots.map { $0.index }))
         originalTopics = topics
         hasChanges = false
     }
 
-    func deleteTopic(_ topic: Topic) async {
-        guard let id = topic.id else { return }
+    func deleteTopic(_ topic: Topic, undoManager: UndoManager?) async {
         errorMessage = nil
-        do {
-            try await topicService.deleteTopic(id: id)
-            topics.removeAll { $0.id == id }
-            originalTopics = topics
-            hasChanges = false
-        } catch {
-            errorMessage = error.localizedDescription
+        guard let index = topics.firstIndex(where: { $0.id == topic.id }) ?? topics.firstIndex(of: topic) else { return }
+
+        registerUndoForDeletion([DeletedTopicSnapshot(topic: topic, index: index)], undoManager: undoManager)
+
+        if let id = topic.id {
+            try? await topicService.deleteTopic(id: id)
         }
+        topics.remove(at: index)
+        originalTopics = topics
+        hasChanges = false
     }
 
     func activateTopic(_ topic: Topic) async {
@@ -172,6 +183,14 @@ final class TopicsViewModel: ObservableObject {
     func updateTopicWithLimit(_ topic: Topic) async {
         errorMessage = nil
         await updateTopic(topic, enforceActiveLimit: true)
+    }
+
+    func applyPrefetchedTopics(_ prefetched: [Topic]) {
+        guard topics.isEmpty, prefetched.isEmpty == false else { return }
+        let sorted = prefetched.sorted { $0.orderIndex < $1.orderIndex }
+        originalTopics = sorted
+        topics = sorted
+        hasChanges = false
     }
 
     private func updateTopic(_ topic: Topic, enforceActiveLimit: Bool) async {
@@ -267,10 +286,64 @@ final class TopicsViewModel: ObservableObject {
             topics.append(topic)
         }
     }
+
+    private func registerUndoForDeletion(_ snapshots: [DeletedTopicSnapshot], undoManager: UndoManager?) {
+        guard let undoManager, snapshots.isEmpty == false else { return }
+        undoManager.registerUndo(withTarget: self) { target in
+            Task { await target.restoreDeletedTopics(snapshots, undoManager: undoManager) }
+        }
+        undoManager.setActionName("Delete Topic")
+    }
+
+    private func restoreDeletedTopics(_ snapshots: [DeletedTopicSnapshot], undoManager: UndoManager?) async {
+        errorMessage = nil
+        let sorted = snapshots.sorted { $0.index < $1.index }
+
+        var recreated: [Topic] = []
+        for snapshot in sorted {
+            do {
+                var restored = try await topicService.createTopic(originalText: snapshot.topic.originalText)
+                restored.isActive = snapshot.topic.isActive
+                restored.orderIndex = snapshot.topic.orderIndex
+                recreated.append(restored)
+            } catch {
+                errorMessage = error.localizedDescription
+                return
+            }
+        }
+
+        var updatedTopics = topics
+        for (snapshot, restored) in zip(sorted, recreated) {
+            let insertIndex = min(snapshot.index, updatedTopics.count)
+            updatedTopics.insert(restored, at: insertIndex)
+        }
+
+        updatedTopics = updatedTopics.enumerated().map { index, topic in
+            var updated = topic
+            updated.orderIndex = index
+            return updated
+        }
+
+        topics = updatedTopics
+        await saveChanges()
+
+        guard errorMessage == nil else { return }
+
+        let redoSnapshots: [DeletedTopicSnapshot] = recreated.compactMap { restored in
+            guard let index = topics.firstIndex(where: { $0.id == restored.id }) else { return nil }
+            return DeletedTopicSnapshot(topic: restored, index: index)
+        }
+        registerUndoForDeletion(redoSnapshots, undoManager: undoManager)
+    }
 }
 
 private extension Topic {
     func withActiveState(_ isActive: Bool) -> Topic {
         Topic(id: id, originalText: originalText, orderIndex: orderIndex, isActive: isActive)
     }
+}
+
+private struct DeletedTopicSnapshot {
+    let topic: Topic
+    let index: Int
 }

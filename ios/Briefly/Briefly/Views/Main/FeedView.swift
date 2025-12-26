@@ -12,41 +12,13 @@ struct FeedView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                if let latest = viewModel.latestEpisode {
-                    latestCard(for: latest)
-                } else if viewModel.isLoading {
-                    latestSkeletonCard
-                } else if viewModel.errorMessage == nil {
-                    emptyState
-                }
-
-                if viewModel.previousEpisodes.isEmpty == false {
-                    Text("Previous episodes")
-                        .font(.headline)
-                    VStack(spacing: 0) {
-                        ForEach(Array(viewModel.previousEpisodes.enumerated()), id: \.element.id) { index, episode in
-                            NavigationLink(value: episode) {
-                                EpisodeRow(episode: episode)
-                            }
-                            .buttonStyle(.plain)
-                            if index < viewModel.previousEpisodes.count - 1 {
-                                Divider()
-                                    .padding(.leading, 2)
-                            }
-                        }
-                    }
-                }
-            }
-            .padding()
-        }
+        ScrollView { feedContent }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color.brieflyBackground)
         .navigationTitle("Your Library")
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(for: Episode.self) { episode in
-            EpisodeDetailView(episode: episode)
+            EpisodeDetailView(episode: episode, onCreateEpisode: onCreateEpisode)
         }
         .task {
             await refreshFeed()
@@ -55,26 +27,66 @@ struct FeedView: View {
             await refreshFeed()
         }
         .overlay(alignment: .bottom) {
-            PlayerBarView()
-                .padding(.bottom, 8)
+            playerBarOverlay
         }
         .overlay(alignment: .top) {
             bannerView
         }
         .overlay {
-            if let message = viewModel.errorMessage, viewModel.episodes.isEmpty {
-                FullScreenErrorView(
-                    title: "Couldn't load your feed",
-                    message: message,
-                    actionTitle: "Retry"
-                ) {
-                    Task { await refreshFeed() }
-                }
-                .transition(.opacity)
-            }
+            errorOverlay
         }
         .onChange(of: viewModel.errorMessage) { newValue in
             handleErrorChange(newValue)
+        }
+    }
+
+    @ViewBuilder
+    private var feedContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if let latest = viewModel.latestEpisode {
+                latestCard(for: latest)
+            } else if viewModel.isLoading {
+                latestSkeletonCard
+            } else if viewModel.errorMessage == nil {
+                emptyState
+            }
+
+            if viewModel.previousEpisodes.isEmpty == false {
+                Text("Previous episodes")
+                    .font(.headline)
+                VStack(spacing: 0) {
+                    ForEach(Array(viewModel.previousEpisodes.enumerated()), id: \.element.id) { index, episode in
+                        NavigationLink(value: episode) {
+                            EpisodeRow(episode: episode)
+                        }
+                        .buttonStyle(.plain)
+                        if index < viewModel.previousEpisodes.count - 1 {
+                            Divider()
+                                .padding(.leading, 2)
+                        }
+                    }
+                }
+            }
+        }
+        .padding()
+    }
+
+    private var playerBarOverlay: some View {
+        PlayerBarView(onCreateEpisode: onCreateEpisode)
+            .padding(.bottom, 8)
+    }
+
+    @ViewBuilder
+    private var errorOverlay: some View {
+        if let message = viewModel.errorMessage, viewModel.episodes.isEmpty {
+            FullScreenErrorView(
+                title: "Couldn't load your feed",
+                message: message,
+                actionTitle: "Retry"
+            ) {
+                Task { await refreshFeed() }
+            }
+            .transition(.opacity)
         }
     }
 

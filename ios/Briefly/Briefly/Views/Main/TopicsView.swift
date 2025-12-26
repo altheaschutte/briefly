@@ -3,6 +3,7 @@ import SwiftUI
 struct TopicsView: View {
     @ObservedObject var viewModel: TopicsViewModel
     @State private var newTopicText: String = ""
+    @Environment(\.undoManager) private var undoManager
 
     var body: some View {
         List {
@@ -21,9 +22,14 @@ struct TopicsView: View {
                         }
                     }
                     .padding(.vertical, 6)
-                }
-                .onDelete { indexSet in
-                    Task { await viewModel.deleteTopic(at: indexSet) }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            Task { await viewModel.deleteTopic(topic, undoManager: undoManager) }
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                        .tint(.brieflyDestructive)
+                    }
                 }
                 .listRowBackground(Color.brieflyBackground)
 

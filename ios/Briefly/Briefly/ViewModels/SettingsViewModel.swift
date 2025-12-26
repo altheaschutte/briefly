@@ -1,6 +1,6 @@
 import Foundation
 
-private struct TargetDurationPreference {
+struct TargetDurationPreference {
     static let defaultMinutes = 15
     static let allowedOptions: [Int] = [10, 15, 20, 25, 30, 35]
     private static let storageKey = "targetDurationMinutes"
@@ -55,12 +55,13 @@ final class SettingsViewModel: ObservableObject {
     init(appViewModel: AppViewModel, audioManager: AudioPlayerManager) {
         self.appViewModel = appViewModel
         self.audioManager = audioManager
+        let savedSpeed = defaults.double(forKey: "playbackSpeed")
+        let initialSpeed = savedSpeed == 0 ? 1.0 : savedSpeed
         autoPlayLatest = defaults.bool(forKey: "autoPlayLatest")
         resumeLast = defaults.bool(forKey: "resumeLast")
-        let savedSpeed = defaults.double(forKey: "playbackSpeed")
-        playbackSpeed = savedSpeed == 0 ? 1.0 : savedSpeed
-        audioManager.setPlaybackSpeed(playbackSpeed)
         targetDurationMinutes = targetPreference.value
+        playbackSpeed = initialSpeed
+        audioManager.setPlaybackSpeed(initialSpeed)
     }
 
     func save() {
@@ -80,7 +81,7 @@ final class SettingsViewModel: ObservableObject {
     }
 
     func logout() {
-        appViewModel.logout()
+        Task { await appViewModel.logout() }
     }
 
     var durationOptions: [Int] {

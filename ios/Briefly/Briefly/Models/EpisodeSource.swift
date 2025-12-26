@@ -82,6 +82,34 @@ struct EpisodeSource: Codable, Identifiable, Hashable {
         return sanitizedUrlString
     }
 
+    var displayHost: String? {
+        if let host = url?.host?.replacingOccurrences(of: "www.", with: ""), host.isEmpty == false {
+            return host
+        }
+        return sanitizedHostFromUrlString
+    }
+
+    var displayPath: String? {
+        if let url {
+            var path = url.path
+            if path == "/" { path = "" }
+
+            if let query = url.query, query.isEmpty == false {
+                path += "?\(query)"
+            }
+
+            if let fragment = url.fragment, fragment.isEmpty == false {
+                path += "#\(fragment)"
+            }
+
+            if path.isEmpty == false {
+                return path
+            }
+        }
+
+        return fallbackPathFromSanitizedUrl
+    }
+
     private var sanitizedTitle: String? {
         guard let nonEmpty = title.nonEmpty else { return nil }
         return nonEmpty
@@ -93,6 +121,25 @@ struct EpisodeSource: Codable, Identifiable, Hashable {
         urlString
             .replacingOccurrences(of: #"^https?://"#, with: "", options: .regularExpression)
             .replacingOccurrences(of: #"^www\."#, with: "", options: .regularExpression)
+    }
+
+    private var sanitizedHostFromUrlString: String? {
+        let host = sanitizedUrlString
+            .split(separator: "/")
+            .first?
+            .split(separator: "?")
+            .first?
+            .split(separator: "#")
+            .first
+        return host.map(String.init)?.nonEmpty
+    }
+
+    private var fallbackPathFromSanitizedUrl: String? {
+        let sanitized = sanitizedUrlString
+        guard let index = sanitized.firstIndex(where: { $0 == "/" || $0 == "?" || $0 == "#" }) else { return nil }
+        let path = sanitized[index...]
+        guard path.isEmpty == false, path != "/" else { return nil }
+        return String(path)
     }
 }
 

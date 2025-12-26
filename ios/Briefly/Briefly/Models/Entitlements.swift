@@ -1,7 +1,7 @@
 import Foundation
 
-struct Entitlements: Codable {
-    struct Limits: Codable {
+struct Entitlements: Codable, Equatable {
+    struct Limits: Codable, Equatable {
         let minutesPerMonth: Int?
         let maxActiveTopics: Int
         let maxEpisodeMinutes: Int

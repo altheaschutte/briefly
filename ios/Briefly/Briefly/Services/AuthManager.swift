@@ -3,65 +3,81 @@ import os.log
 
 @MainActor
 final class AuthManager: ObservableObject {
-    private let apiClient: APIClient
     private let keychain: KeychainStore
-    private let anonKey: String
+    private let authProvider: OTPAuthProviding
     private let authLog = OSLog(subsystem: "com.briefly.app", category: "Auth")
 
     @Published private(set) var currentToken: AuthToken?
     @Published private(set) var currentUserEmail: String?
+    private var lastRefreshDate: Date?
 
-    init(baseURL: URL, anonKey: String, keychain: KeychainStore, apiClient: APIClient? = nil) {
+    init(authProvider: OTPAuthProviding, keychain: KeychainStore) {
+        self.authProvider = authProvider
         self.keychain = keychain
-        self.anonKey = anonKey
-        self.apiClient = apiClient ?? APIClient(baseURL: baseURL)
         self.currentToken = keychain.loadToken()
         self.currentUserEmail = keychain.loadEmail()
     }
 
-    func login(email: String, password: String) async throws -> AuthToken {
-        os_log("AuthManager sending login request for email: %{public}@", log: authLog, type: .debug, email)
-        let body = ["email": email, "password": password]
-        let endpoint = APIEndpoint(
-            path: "/auth/v1/token",
-            method: .post,
-            queryItems: [URLQueryItem(name: "grant_type", value: "password")],
-            body: AnyEncodable(body),
-            headers: [
-                "apikey": anonKey,
-                "Authorization": "Bearer \(anonKey)"
-            ],
-            requiresAuth: false
-        )
-        do {
-            let token: AuthToken = try await apiClient.request(endpoint)
-            os_log("AuthManager login succeeded for email: %{public}@ token length: %{public}d", log: authLog, type: .info, email, token.accessToken.count)
-            persist(token: token, email: email)
-            return token
-        } catch {
-            os_log("AuthManager login failed for email: %{public}@ error: %{public}@", log: authLog, type: .error, email, error.localizedDescription)
-            throw error
-        }
+    func sendOtp(email: String) async throws {
+        os_log("AuthManager sending OTP for email: %{public}@", log: authLog, type: .debug, email)
+        try await authProvider.sendOtp(email: email)
     }
 
-    func signup(email: String, password: String) async throws -> AuthToken {
-        let body = ["email": email, "password": password]
-        let endpoint = APIEndpoint(
-            path: "/auth/v1/signup",
-            method: .post,
-            body: AnyEncodable(body),
-            headers: [
-                "apikey": anonKey,
-                "Authorization": "Bearer \(anonKey)"
-            ],
-            requiresAuth: false
-        )
-        let token: AuthToken = try await apiClient.request(endpoint)
+    func verifyOtp(email: String, token code: String) async throws -> AuthToken {
+        os_log("AuthManager verifying OTP for email: %{public}@", log: authLog, type: .debug, email)
+        let token = try await authProvider.verifyOtp(email: email, token: code)
         persist(token: token, email: email)
+        os_log("AuthManager OTP verification succeeded for email: %{public}@", log: authLog, type: .info, email)
         return token
     }
 
-    func logout() {
+    func signInWithGoogle() async throws -> AuthToken {
+        os_log("AuthManager starting Google sign-in", log: authLog, type: .info)
+        let token = try await authProvider.signInWithGoogle()
+        let email = token.userEmail ?? currentUserEmail ?? ""
+        persist(token: token, email: email)
+        os_log("AuthManager Google sign-in succeeded for email: %{public}@", log: authLog, type: .info, email)
+        return token
+    }
+
+    func refreshSessionIfNeeded(force: Bool = false) async {
+        guard let token = currentToken else { return }
+        guard let refresh = token.refreshToken else { return }
+
+        let now = Date()
+        var shouldRefresh = force
+
+        if let expiresAt = token.expiresAt {
+            let timeRemaining = expiresAt.timeIntervalSince(now)
+            if timeRemaining <= 0 || timeRemaining < 600 { // refresh if expired or within 10 minutes
+                shouldRefresh = true
+            }
+        } else if let last = lastRefreshDate {
+            if now.timeIntervalSince(last) > 86_400 { // once a day when no expiry provided
+                shouldRefresh = true
+            }
+        } else {
+            shouldRefresh = true
+        }
+
+        guard shouldRefresh else { return }
+        do {
+            let refreshed = try await authProvider.refreshSession(refreshToken: refresh)
+            lastRefreshDate = Date()
+            persist(token: refreshed, email: currentUserEmail ?? "")
+            os_log("AuthManager refreshed session for email: %{public}@", log: authLog, type: .info, currentUserEmail ?? "unknown")
+        } catch {
+            os_log("AuthManager refresh failed: %{public}@", log: authLog, type: .error, error.localizedDescription)
+            await logout()
+        }
+    }
+
+    func logout() async {
+        do {
+            try await authProvider.signOut()
+        } catch {
+            os_log("AuthManager signOut error: %{public}@", log: authLog, type: .error, error.localizedDescription)
+        }
         keychain.deleteToken()
         keychain.deleteEmail()
         currentToken = nil

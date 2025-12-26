@@ -39,6 +39,7 @@ struct BrieflyApp: App {
 
 struct AppRootView: View {
     @EnvironmentObject private var appViewModel: AppViewModel
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ZStack {
@@ -48,6 +49,8 @@ struct AppRootView: View {
             Group {
                 if appViewModel.isAuthenticated == false {
                     AuthFlowView(appViewModel: appViewModel)
+                } else if appViewModel.hasCompletedOnboarding == false {
+                    OnboardingProfileView(appViewModel: appViewModel)
                 } else {
                     MainTabView(appViewModel: appViewModel)
                 }
@@ -55,6 +58,11 @@ struct AppRootView: View {
         }
         .onAppear {
             appViewModel.bootstrap()
+        }
+        .onChange(of: scenePhase) { phase in
+            if phase == .active {
+                Task { await appViewModel.authManager.refreshSessionIfNeeded(force: true) }
+            }
         }
     }
 }

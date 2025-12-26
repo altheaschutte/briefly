@@ -4,6 +4,7 @@ struct TopicEditView: View {
     @ObservedObject var viewModel: TopicsViewModel
     @State private var topic: Topic
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.undoManager) private var undoManager
     @FocusState private var isFieldFocused: Bool
     @State private var alertMessage: String?
     private let isNew: Bool
@@ -43,6 +44,7 @@ struct TopicEditView: View {
                         Text("Delete topic")
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .tint(.brieflyDestructive)
                 }
                 .listRowBackground(Color.brieflySurface)
             }
@@ -124,7 +126,7 @@ struct TopicEditView: View {
     }
 
     private func deleteTopic() async {
-        await viewModel.deleteTopic(topic)
+        await viewModel.deleteTopic(topic, undoManager: undoManager)
         guard viewModel.errorMessage == nil else {
             alertMessage = viewModel.errorMessage
             return

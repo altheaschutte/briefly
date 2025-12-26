@@ -5,11 +5,12 @@ import { useParams } from "next/navigation";
 import { Play, Loader2, AlertCircle } from "lucide-react";
 import { useRequireAuth } from "@/hooks/useRequireAuth";
 import { Episode } from "@/lib/types";
-import { fetchEpisodeById, isEpisodeReady } from "@/lib/api";
+import { fetchEpisodeById } from "@/lib/api";
 import { Container } from "@/components/Container";
 
 export default function EpisodeDetailPage() {
-  const token = useRequireAuth();
+  const session = useRequireAuth();
+  const accessToken = session?.access_token;
   const params = useParams();
   const id = params?.id?.toString() ?? "";
 
@@ -19,11 +20,11 @@ export default function EpisodeDetailPage() {
 
   useEffect(() => {
     const load = async () => {
-      if (!token || !id) return;
+      if (!accessToken || !id) return;
       setLoading(true);
       setError(null);
       try {
-        const ep = await fetchEpisodeById(token.access_token, id);
+        const ep = await fetchEpisodeById(accessToken, id);
         setEpisode(ep);
       } catch (err: any) {
         setError(err?.message ?? "Failed to load episode");
@@ -32,7 +33,7 @@ export default function EpisodeDetailPage() {
       }
     };
     load();
-  }, [token, id]);
+  }, [accessToken, id]);
 
   const date = formatDate(episode?.publishedAt || episode?.createdAt);
 

@@ -4,6 +4,7 @@ export interface Topic {
   originalText: string;
   orderIndex: number;
   isActive: boolean;
+  isSeed: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

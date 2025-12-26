@@ -30,6 +30,7 @@ export class InMemoryTopicsRepository implements TopicsRepository {
       originalText,
       orderIndex: nextOrder,
       isActive: true,
+      isSeed: false,
       createdAt: now,
       updatedAt: now,
     };

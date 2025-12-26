@@ -3,6 +3,7 @@ import SwiftUI
 struct TopicReviewView: View {
     @ObservedObject var viewModel: OnboardingViewModel
     @State private var newText: String = ""
+    @Environment(\.undoManager) private var undoManager
     let onConfirm: () -> Void
 
     var body: some View {
@@ -37,9 +38,14 @@ struct TopicReviewView: View {
                         .frame(maxWidth: .infinity, alignment: .trailing)
                     }
                     .padding(8)
-                }
-                .onDelete { indexSet in
-                    viewModel.deleteTopic(at: indexSet)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            Task { await viewModel.deleteTopic(topic, undoManager: undoManager) }
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                        .tint(.brieflyDestructive)
+                    }
                 }
                 .listRowBackground(Color.brieflyBackground)
 

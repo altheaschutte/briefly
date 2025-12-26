@@ -3,6 +3,7 @@ import UIKit
 
 struct EpisodeDetailView: View {
     let episode: Episode
+    let onCreateEpisode: (() -> Void)?
     @EnvironmentObject private var appViewModel: AppViewModel
     @EnvironmentObject private var audioManager: AudioPlayerManager
     @State private var detailedEpisode: Episode
@@ -14,8 +15,9 @@ struct EpisodeDetailView: View {
     @State private var hasLoaded: Bool = false
     @State private var isSummaryExpanded: Bool = false
 
-    init(episode: Episode) {
+    init(episode: Episode, onCreateEpisode: (() -> Void)? = nil) {
         self.episode = episode
+        self.onCreateEpisode = onCreateEpisode
         _detailedEpisode = State(initialValue: episode)
         _segments = State(initialValue: episode.segments ?? [])
         _sources = State(initialValue: episode.sources ?? [])
@@ -25,6 +27,7 @@ struct EpisodeDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header
+                playbackControls
                 actionRow
                 if let notes = detailedEpisode.showNotes?.trimmingCharacters(in: .whitespacesAndNewlines),
                    notes.isEmpty == false {
@@ -51,8 +54,16 @@ struct EpisodeDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: { audioManager.play(episode: detailedEpisode) }) {
-                    Image(systemName: "play.circle")
+                if let onCreateEpisode {
+                    Button(action: onCreateEpisode) {
+                        Label("Create", systemImage: "sparkles")
+                            .labelStyle(.iconOnly)
+                    }
+                    .accessibilityLabel("Create episode")
+                } else {
+                    Button(action: { audioManager.play(episode: detailedEpisode) }) {
+                        Image(systemName: "play.circle")
+                    }
                 }
             }
         }
@@ -143,9 +154,8 @@ private extension EpisodeDetailView {
             secondaryActionButton(systemName: "square.and.arrow.up") // share
             secondaryActionButton(systemName: "mic.fill") // talk to producer
             secondaryActionButton(systemName: "ellipsis") // more
-            Spacer()
-            primaryPlayButton
         }
+        .frame(maxWidth: .infinity, alignment: .center)
         .padding(.horizontal, 4)
     }
 
@@ -162,6 +172,55 @@ private extension EpisodeDetailView {
                 )
         }
         .buttonStyle(.plain)
+    }
+
+    var playbackControls: some View {
+        VStack(spacing: 14) {
+            playbackScrubber
+            HStack(spacing: 28) {
+                skipButton(icon: "gobackward.10", direction: -10)
+                primaryPlayButton
+                skipButton(icon: "goforward.10", direction: 10)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var playbackScrubber: some View {
+        VStack(spacing: 6) {
+            Slider(value: Binding(
+                get: { max(0, min(audioManager.progress, 1)) },
+                set: { newValue in audioManager.seek(to: newValue) }
+            ))
+            .tint(.brieflyPrimary)
+
+            HStack {
+                Text(timeString(audioManager.currentTimeSeconds))
+                Spacer()
+                Text(timeString(audioManager.durationSeconds))
+            }
+            .font(.caption2)
+            .foregroundColor(.brieflyTextMuted)
+        }
+    }
+
+    private func skipButton(icon: String, direction: Double) -> some View {
+        Button(action: { skip(seconds: direction) }) {
+            Image(systemName: icon)
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundColor(.primary)
+                .frame(width: 48, height: 48)
+                .background(
+                    Circle()
+                        .fill(Color.brieflySurface)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func skip(seconds: Double) {
+        let target = audioManager.currentTimeSeconds + seconds
+        audioManager.seek(toSeconds: target)
     }
 
     private func secondaryActionButton(systemName: String) -> some View {
@@ -301,19 +360,18 @@ private extension EpisodeDetailView {
                             .padding(.top, 2)
                         if let url = source.url {
                             Link(destination: url) {
-                                Text(source.displayTitle)
+                                sourceLabel(for: source)
                                     .font(.footnote)
-                                    .foregroundColor(.brieflyTextMuted)
-                                    .lineLimit(2)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
                                     .multilineTextAlignment(.leading)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                             }
-                            .tint(.brieflyTextMuted)
                         } else {
-                            Text(source.displayTitle)
+                            sourceLabel(for: source)
                                 .font(.footnote)
-                                .foregroundColor(.brieflyTextMuted)
-                                .lineLimit(2)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .multilineTextAlignment(.leading)
                         }
@@ -339,6 +397,25 @@ private extension EpisodeDetailView {
                 .padding(.top, 8)
             }
         }
+    }
+
+    private func sourceLabel(for source: EpisodeSource) -> Text {
+        guard let host = source.displayHost else {
+            return Text(source.displayTitle)
+                .foregroundColor(.brieflyTextMuted)
+        }
+
+        let hostText = Text(host)
+            .foregroundColor(.primary)
+
+        guard let path = source.displayPath else {
+            return hostText
+        }
+
+        let pathText = Text(path)
+            .foregroundColor(Color.white.opacity(0.6))
+
+        return hostText + pathText
     }
 
     @MainActor
@@ -440,9 +517,9 @@ private extension EpisodeDetailView {
 private extension EpisodeDetailView {
     @ViewBuilder
     var playerBarInset: some View {
-        if audioManager.currentEpisode != nil {
+        if let current = audioManager.currentEpisode, current.id != detailedEpisode.id {
             VStack(spacing: 0) {
-                PlayerBarView()
+                PlayerBarView(onCreateEpisode: onCreateEpisode)
                     .padding(.vertical, 8)
             }
             .background(Color.brieflyBackground)

@@ -2,20 +2,25 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
-import { useState, type FocusEvent } from "react";
-import { Menu, X, Headphones, LogOut, LogIn, CircleUser, CreditCard, ExternalLink, Loader2 } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState, type FocusEvent } from "react";
+import { X, LogOut, LogIn, CircleUser, CreditCard, ExternalLink, Loader2 } from "lucide-react";
 import clsx from "clsx";
 import { useAuth } from "@/context/AuthContext";
 import { createStripePortalSession } from "@/lib/api";
+import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
+import { getProfile } from "@/lib/profile";
 
 export default function Navigation() {
   const [open, setOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingError, setBillingError] = useState<string | null>(null);
+  const [firstName, setFirstName] = useState<string | null>(null);
+  const pathname = usePathname();
   const router = useRouter();
-  const { token, email, logout } = useAuth();
+  const { session, accessToken, email, logout } = useAuth();
+  const isLoginPage = pathname === "/login";
 
   const handleAccountBlur = (event: FocusEvent<HTMLDivElement>) => {
     const nextFocus = event.relatedTarget as Node | null;
@@ -25,11 +30,11 @@ export default function Navigation() {
   };
 
   const handleManageBilling = async () => {
-    if (!token) return;
+    if (!session || !accessToken) return;
     setBillingLoading(true);
     setBillingError(null);
     try {
-      const { url } = await createStripePortalSession(token.access_token);
+      const { url } = await createStripePortalSession(accessToken);
       if (!url) {
         throw new Error("Stripe portal is unavailable right now.");
       }
@@ -40,6 +45,40 @@ export default function Navigation() {
       setBillingLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!session) {
+      setFirstName(null);
+      return;
+    }
+
+    let isMounted = true;
+    const supabase = getSupabaseBrowserClient();
+    const loadProfile = async () => {
+      try {
+        const profile = await getProfile(supabase, session.user.id);
+        if (isMounted) {
+          setFirstName(profile?.first_name ?? null);
+        }
+      } catch (err) {
+        console.error("Failed to load profile for navigation", err);
+        if (isMounted) {
+          setFirstName(null);
+        }
+      }
+    };
+    loadProfile();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [session]);
+
+  if (isLoginPage) {
+    return null;
+  }
+
+  const primaryName = firstName ?? (email ? email.split("@")[0] : null);
 
   return (
     <header className="sticky top-0 z-30 bg-gradient-to-b from-[#0f1d2c] via-[#0f1d2c] to-transparent">
@@ -59,7 +98,7 @@ export default function Navigation() {
 
         <div className="absolute right-0 flex items-center justify-end gap-2">
           <nav className="hidden items-center gap-2 md:flex">
-            {token ? (
+            {session ? (
               <>
             
                 <div
@@ -118,13 +157,15 @@ export default function Navigation() {
                 </div>
               </>
             ) : (
-              <button
-                onClick={() => router.push("/login")}
-                className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-ink transition hover:opacity-90"
-              >
-                <LogIn className="h-4 w-4" />
-                Login
-              </button>
+              !isLoginPage && (
+                <button
+                  onClick={() => router.push("/login")}
+                  className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-ink transition hover:opacity-90"
+                >
+                  <LogIn className="h-4 w-4" />
+                  Login
+                </button>
+              )
             )}
           </nav>
 
@@ -133,60 +174,90 @@ export default function Navigation() {
             onClick={() => setOpen((prev) => !prev)}
             aria-label="Toggle navigation"
           >
-            {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            {open ? <X className="h-5 w-5" /> : <CircleUser className="h-5 w-5" />}
           </button>
         </div>
       </div>
 
-      {open && (
-        <div className="px-6 pb-6 pt-2 md:hidden">
-          <div className="flex flex-col gap-3">
-            {token ? (
-              <>
-                <div className="rounded-2xl border border-borderSoft/70 bg-overlay/70 p-4 text-left">
-                  <p className="text-[10px] uppercase tracking-[0.2em] text-tealSoft">Account</p>
-                  <p className="mt-1 truncate text-sm font-semibold text-white">{email ?? "Unknown user"}</p>
-                </div>
-            
+      <div
+        className={clsx(
+          "fixed inset-0 z-40 overflow-hidden md:hidden",
+          open ? "pointer-events-auto" : "pointer-events-none"
+        )}
+        aria-hidden={!open}
+      >
+        <div
+          className={clsx(
+            "absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-200",
+            open ? "opacity-100" : "opacity-0"
+          )}
+          onClick={() => setOpen(false)}
+        />
+        <div
+          className={clsx(
+            "absolute right-0 top-0 flex h-full w-80 max-w-[85%] flex-col gap-6 bg-overlay/95 p-6 shadow-2xl ring-1 ring-borderSoft transition-transform duration-200",
+            open ? "translate-x-0" : "translate-x-full"
+          )}
+        >
+          {session ? (
+            <>
+              <div className="pt-4">
+                <p className="text-lg font-semibold text-white">{primaryName ?? "Account"}</p>
+                {email ? <p className="mt-1 text-sm text-muted">{email}</p> : null}
+              </div>
+
+              <div className="flex flex-col gap-3">
                 <button
-                  className="inline-flex items-center justify-center gap-2 rounded-full border border-borderSoft px-4 py-3 text-sm font-semibold text-white transition hover:border-teal disabled:opacity-60"
+                  className="inline-flex items-center justify-between gap-2 rounded-xl border border-borderSoft px-4 py-3 text-sm font-semibold text-white transition hover:border-teal disabled:opacity-60"
                   onClick={() => {
                     setOpen(false);
                     handleManageBilling();
                   }}
                   disabled={billingLoading}
                 >
-                  {billingLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
-                  Manage billing
+                  <span className="flex items-center gap-2">
+                    {billingLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-muted" />
+                    ) : (
+                      <CreditCard className="h-4 w-4 text-muted" />
+                    )}
+                    Manage billing
+                  </span>
                   <ExternalLink className="h-3 w-3 text-muted" />
                 </button>
-                {billingError && <p className="text-center text-xs text-red-200">{billingError}</p>}
                 <button
-                  className="inline-flex items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-semibold text-white transition hover:opacity-80"
+                  className="inline-flex items-center justify-between gap-2 rounded-xl bg-surface px-4 py-3 text-sm font-semibold text-white transition hover:bg-overlay/80"
                   onClick={() => {
                     setOpen(false);
                     logout();
                   }}
                 >
-                  <LogOut className="h-4 w-4" />
-                  Logout {email ? `(${email})` : ""}
+                  <span className="flex items-center gap-2">
+                    <LogOut className="h-4 w-4 text-muted" />
+                    Logout
+                  </span>
                 </button>
-              </>
-            ) : (
-              <button
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-accent px-4 py-3 text-sm font-semibold text-ink transition hover:opacity-90"
-                onClick={() => {
-                  setOpen(false);
-                  router.push("/login");
-                }}
-              >
-                <LogIn className="h-4 w-4" />
-                Login
-              </button>
-            )}
-          </div>
+                {billingError && <p className="text-sm text-red-200">{billingError}</p>}
+              </div>
+            </>
+          ) : (
+            !isLoginPage && (
+              <div className="pt-4">
+                <button
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-accent px-4 py-3 text-sm font-semibold text-ink transition hover:opacity-90"
+                  onClick={() => {
+                    setOpen(false);
+                    router.push("/login");
+                  }}
+                >
+                  <LogIn className="h-4 w-4" />
+                  Login
+                </button>
+              </div>
+            )
+          )}
         </div>
-      )}
+      </div>
     </header>
   );
 }

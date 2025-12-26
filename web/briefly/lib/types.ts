@@ -13,6 +13,7 @@ export type Topic = {
   originalText: string;
   orderIndex: number;
   isActive: boolean;
+  isSeed?: boolean;
 };
 
 export type EpisodeSegment = {

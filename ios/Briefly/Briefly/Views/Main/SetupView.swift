@@ -1,5 +1,5 @@
 import SwiftUI
-import UniformTypeIdentifiers
+import Combine
 
 private enum TopicRoute: Hashable {
     case edit(Topic)
@@ -8,15 +8,17 @@ private enum TopicRoute: Hashable {
 
 struct SetupView: View {
     @ObservedObject var topicsViewModel: TopicsViewModel
+    @ObservedObject private var appViewModel: AppViewModel
     @StateObject private var creationViewModel: EpisodeCreationViewModel
     @Environment(\.openURL) private var openURL
+    @Environment(\.undoManager) private var undoManager
     @State private var bannerMessage: String?
     @State private var editingTopic: Topic?
-    @State private var draggingTopic: Topic?
     @State private var showActiveLimitAlert: Bool = false
 
     init(topicsViewModel: TopicsViewModel, appViewModel: AppViewModel) {
         _topicsViewModel = ObservedObject(wrappedValue: topicsViewModel)
+        _appViewModel = ObservedObject(wrappedValue: appViewModel)
         _creationViewModel = StateObject(
             wrappedValue: EpisodeCreationViewModel(
                 episodeService: appViewModel.episodeService,
@@ -27,6 +29,8 @@ struct SetupView: View {
 
     var body: some View {
         List {
+            createPageDescription
+
             if let episode = creationViewModel.inProgressEpisode,
                creationViewModel.hasActiveGeneration == false {
                 creationStatusSection(episode: episode)
@@ -47,7 +51,16 @@ struct SetupView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             Task { @MainActor in
-                await topicsViewModel.load()
+                if let prefetched = appViewModel.prefetchedTopics {
+                    topicsViewModel.applyPrefetchedTopics(prefetched)
+                }
+
+                if topicsViewModel.topics.isEmpty {
+                    await topicsViewModel.load()
+                } else {
+                    await topicsViewModel.refreshEntitlements()
+                }
+
                 creationViewModel.updateLimitState(with: topicsViewModel.entitlements)
             }
             Task { await creationViewModel.resumeInFlightIfNeeded() }
@@ -72,6 +85,9 @@ struct SetupView: View {
         }
         .onChange(of: topicsViewModel.entitlements) { entitlements in
             creationViewModel.updateLimitState(with: entitlements)
+        }
+        .onReceive(appViewModel.$prefetchedTopics.compactMap { $0 }) { topics in
+            topicsViewModel.applyPrefetchedTopics(topics)
         }
         .navigationDestination(for: TopicRoute.self) { route in
             switch route {
@@ -134,6 +150,17 @@ struct SetupView: View {
         .padding(.vertical, 12)
     }
 
+    private var createPageDescription: some View {
+        Section {
+            Text("Add up to \(topicsViewModel.maxActiveTopics) active topics for your podcast, then generate. We'll source the content and notify you when it's ready.")
+                .font(.subheadline)
+                .foregroundColor(.brieflyTextMuted)
+                .padding(.vertical, 4)
+        }
+        .listRowBackground(Color.brieflyBackground)
+        .listRowSeparator(.hidden)
+    }
+
     private func creationStatusSection(episode: Episode) -> some View {
         Section(header: setupPaddedHeader(statusHeader(for: episode))) {
             statusCardContent(for: episode)
@@ -148,15 +175,9 @@ struct SetupView: View {
                     .foregroundColor(.brieflyTextMuted)
             } else {
                 ForEach(topicsViewModel.activeTopics) { topic in
-                    topicRow(topic: topic, isActive: true)
-                        .onDrop(
-                            of: [UTType.text],
-                            delegate: ActiveTopicDropDelegate(
-                                target: topic,
-                                current: $draggingTopic,
-                                viewModel: topicsViewModel
-                            )
-                        )
+                    let isFirst = topicsViewModel.activeTopics.first?.id == topic.id
+                    let isLast = topicsViewModel.activeTopics.last?.id == topic.id
+                    topicRow(topic: topic, isActive: true, isFirst: isFirst, isLast: isLast)
                 }
             }
         } header: {
@@ -281,22 +302,9 @@ struct SetupView: View {
         }
     }
 
-    private func topicDragIdentifier(for topic: Topic) -> String {
-        topic.id?.uuidString ?? topic.originalText
-    }
-
-    private func topicRow(topic: Topic, isActive: Bool) -> some View {
+    private func topicRow(topic: Topic, isActive: Bool, isFirst: Bool = false, isLast: Bool = false) -> some View {
         let isInactiveAtLimit = !isActive && !topicsViewModel.canAddActiveTopic
-        HStack(alignment: .center, spacing: 16) {
-            if isActive {
-                GripDots()
-                    .padding(.trailing, 4)
-                    .contentShape(Rectangle())
-                    .onDrag {
-                        draggingTopic = topic
-                        return NSItemProvider(object: NSString(string: topicDragIdentifier(for: topic)))
-                    }
-            }
+        return HStack(alignment: .center, spacing: 16) {
             Button {
                 editingTopic = topic
             } label: {
@@ -308,6 +316,25 @@ struct SetupView: View {
             }
             .buttonStyle(.plain)
             Spacer(minLength: 10)
+            if isActive {
+                VStack(spacing: 6) {
+                    Button {
+                        moveActiveTopic(topic, direction: .up)
+                    } label: {
+                        Image(systemName: "chevron.up")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(isFirst)
+                    Button {
+                        moveActiveTopic(topic, direction: .down)
+                    } label: {
+                        Image(systemName: "chevron.down")
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(isLast)
+                }
+                .tint(.brieflyTextMuted)
+            }
             Button {
                 if isActive {
                     Task { await topicsViewModel.deactivateTopic(topic) }
@@ -333,10 +360,22 @@ struct SetupView: View {
         .listRowInsets(EdgeInsets(top: 8, leading: 14, bottom: 8, trailing: 16))
         .listRowSeparator(.visible)
         .listRowBackground(Color.brieflySurface)
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive) {
+                Task { await topicsViewModel.deleteTopic(topic, undoManager: undoManager) }
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+            .tint(.brieflyDestructive)
+        }
     }
 }
 
 private extension SetupView {
+    enum MoveDirection {
+        case up, down
+    }
+
     @ViewBuilder
     var bannerView: some View {
         if let bannerMessage {
@@ -349,6 +388,31 @@ private extension SetupView {
             .transition(.move(edge: .top).combined(with: .opacity))
             .padding(.top, 8)
         }
+    }
+
+    func moveActiveTopic(_ topic: Topic, direction: MoveDirection) {
+        guard let fromIndex = topicsViewModel.activeTopics.firstIndex(where: { isSame($0, as: topic) }) else { return }
+        let count = topicsViewModel.activeTopics.count
+
+        let destination: Int
+        switch direction {
+        case .up:
+            destination = max(fromIndex - 1, 0)
+        case .down:
+            destination = min(count, fromIndex + 2)
+        }
+
+        withAnimation {
+            topicsViewModel.reorderActiveTopicsInMemory(from: IndexSet(integer: fromIndex), to: destination)
+        }
+        Task { await topicsViewModel.persistActiveTopicOrder() }
+    }
+
+    func isSame(_ lhs: Topic, as rhs: Topic) -> Bool {
+        if let l = lhs.id, let r = rhs.id {
+            return l == r
+        }
+        return lhs.originalText == rhs.originalText
     }
 
     func handleErrorChange(_ message: String?) {
@@ -616,27 +680,6 @@ final class EpisodeCreationViewModel: ObservableObject {
     }
 }
 
-private struct GripDots: View {
-    private let dotSize: CGFloat = 3
-    private let spacing: CGFloat = 3
-
-    var body: some View {
-        HStack(spacing: spacing) {
-            ForEach(0..<2, id: \.self) { _ in
-                VStack(spacing: spacing) {
-                    ForEach(0..<3, id: \.self) { _ in
-                        Circle()
-                            .frame(width: dotSize, height: dotSize)
-                    }
-                }
-            }
-        }
-        .foregroundColor(.brieflyTextMuted)
-        .frame(width: (dotSize * 2) + spacing, alignment: .leading)
-        .accessibilityHidden(true)
-    }
-}
-
 private struct SetupSectionHeader: View {
     let title: String
 
@@ -657,51 +700,4 @@ private func setupPaddedHeader(_ title: String) -> some View {
             .padding(.vertical, 6)
     }
     .listRowInsets(EdgeInsets())
-}
-
-private struct ActiveTopicDropDelegate: DropDelegate {
-    let target: Topic
-    @Binding var current: Topic?
-    let viewModel: TopicsViewModel
-
-    func validateDrop(info: DropInfo) -> Bool {
-        info.hasItemsConforming(to: [UTType.text])
-    }
-
-    func dropEntered(info: DropInfo) {
-        guard let current else { return }
-        guard !isSame(current, as: target) else { return }
-        guard let fromIndex = index(for: current),
-              let toIndex = index(for: target) else { return }
-
-        let destination = toIndex > fromIndex ? toIndex + 1 : toIndex
-        withAnimation {
-            viewModel.reorderActiveTopicsInMemory(from: IndexSet(integer: fromIndex), to: destination)
-            if let updatedCurrent = viewModel.activeTopics.first(where: { isSame($0, as: current) }) {
-                self.current = updatedCurrent
-            }
-        }
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        guard current != nil else { return false }
-        Task { await viewModel.persistActiveTopicOrder() }
-        current = nil
-        return true
-    }
-
-    private func index(for topic: Topic) -> Int? {
-        viewModel.activeTopics.firstIndex { isSame($0, as: topic) }
-    }
-
-    private func isSame(_ lhs: Topic, as rhs: Topic) -> Bool {
-        if let l = lhs.id, let r = rhs.id {
-            return l == r
-        }
-        return lhs.originalText == rhs.originalText
-    }
 }

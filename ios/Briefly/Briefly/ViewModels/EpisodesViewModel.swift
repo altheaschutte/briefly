@@ -13,9 +13,14 @@ final class EpisodesViewModel: ObservableObject {
     @Published var isLoading: Bool = false
 
     private let episodeService: EpisodeProviding
+    private var hasAppliedPrefetch = false
+    private var hasLoadedOnce = false
 
-    init(episodeService: EpisodeProviding) {
+    init(episodeService: EpisodeProviding, initialEpisodes: [Episode]? = nil) {
         self.episodeService = episodeService
+        if let initialEpisodes {
+            applyPrefetchedEpisodes(initialEpisodes)
+        }
     }
 
     private var readyEpisodes: [Episode] {
@@ -58,12 +63,17 @@ final class EpisodesViewModel: ObservableObject {
     }
 
     func load() async {
-        isLoading = true
+        let shouldShowLoading = episodes.isEmpty && hasLoadedOnce == false
+        isLoading = shouldShowLoading
         errorMessage = nil
-        defer { isLoading = false }
+        defer {
+            isLoading = false
+            hasLoadedOnce = true
+        }
         do {
             let fetched = try await episodeService.fetchEpisodes()
             episodes = sortAndDeduplicate(fetched)
+            hasAppliedPrefetch = true
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -91,5 +101,12 @@ final class EpisodesViewModel: ObservableObject {
             unique.append(episode)
         }
         return unique
+    }
+
+    func applyPrefetchedEpisodes(_ prefetched: [Episode]) {
+        guard hasAppliedPrefetch == false else { return }
+        guard episodes.isEmpty else { return }
+        episodes = sortAndDeduplicate(prefetched)
+        hasAppliedPrefetch = true
     }
 }
