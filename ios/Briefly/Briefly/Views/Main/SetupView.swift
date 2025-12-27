@@ -15,6 +15,7 @@ struct SetupView: View {
     @State private var bannerMessage: String?
     @State private var editingTopic: Topic?
     @State private var showActiveLimitAlert: Bool = false
+    @State private var editMode: EditMode = .inactive
 
     init(topicsViewModel: TopicsViewModel, appViewModel: AppViewModel) {
         _topicsViewModel = ObservedObject(wrappedValue: topicsViewModel)
@@ -105,6 +106,12 @@ struct SetupView: View {
             }
         }
         .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                if !topicsViewModel.activeTopics.isEmpty {
+                    EditButton()
+                        .disabled(topicsViewModel.activeTopics.count < 2)
+                }
+            }
             ToolbarItem(placement: .navigationBarTrailing) {
                 NavigationLink(value: TopicRoute.create) {
                     Label("Add topic", systemImage: "plus")
@@ -136,6 +143,7 @@ struct SetupView: View {
         } message: {
             Text("You can have up to \(topicsViewModel.maxActiveTopics) active topics on your plan.")
         }
+        .environment(\.editMode, $editMode)
     }
 
     private var emptyState: some View {
@@ -168,23 +176,27 @@ struct SetupView: View {
         .listRowBackground(Color.brieflyBackground)
     }
 
-   private var activeTopicsSection: some View {
-    Section {
-        if topicsViewModel.activeTopics.isEmpty {
+    private var activeTopicsSection: some View {
+        Section {
+            if topicsViewModel.activeTopics.isEmpty {
                 Text("No active topics yet.")
                     .foregroundColor(.brieflyTextMuted)
             } else {
                 ForEach(topicsViewModel.activeTopics) { topic in
-                    let isFirst = topicsViewModel.activeTopics.first?.id == topic.id
-                    let isLast = topicsViewModel.activeTopics.last?.id == topic.id
-                    topicRow(topic: topic, isActive: true, isFirst: isFirst, isLast: isLast)
+                    topicRow(topic: topic, isActive: true)
+                }
+                .onMove { indexSet, destination in
+                    withAnimation {
+                        topicsViewModel.reorderActiveTopicsInMemory(from: indexSet, to: destination)
+                    }
+                    Task { await topicsViewModel.persistActiveTopicOrder() }
                 }
             }
         } header: {
             setupPaddedHeader("Active topics")
         }
-    .textCase(nil)
-}
+        .textCase(nil)
+    }
 
     private var inactiveTopicsSection: some View {
         Section {
@@ -302,7 +314,7 @@ struct SetupView: View {
         }
     }
 
-    private func topicRow(topic: Topic, isActive: Bool, isFirst: Bool = false, isLast: Bool = false) -> some View {
+    private func topicRow(topic: Topic, isActive: Bool) -> some View {
         let isInactiveAtLimit = !isActive && !topicsViewModel.canAddActiveTopic
         return HStack(alignment: .center, spacing: 16) {
             Button {
@@ -316,25 +328,6 @@ struct SetupView: View {
             }
             .buttonStyle(.plain)
             Spacer(minLength: 10)
-            if isActive {
-                VStack(spacing: 6) {
-                    Button {
-                        moveActiveTopic(topic, direction: .up)
-                    } label: {
-                        Image(systemName: "chevron.up")
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(isFirst)
-                    Button {
-                        moveActiveTopic(topic, direction: .down)
-                    } label: {
-                        Image(systemName: "chevron.down")
-                    }
-                    .buttonStyle(.borderless)
-                    .disabled(isLast)
-                }
-                .tint(.brieflyTextMuted)
-            }
             Button {
                 if isActive {
                     Task { await topicsViewModel.deactivateTopic(topic) }
@@ -372,10 +365,6 @@ struct SetupView: View {
 }
 
 private extension SetupView {
-    enum MoveDirection {
-        case up, down
-    }
-
     @ViewBuilder
     var bannerView: some View {
         if let bannerMessage {
@@ -388,31 +377,6 @@ private extension SetupView {
             .transition(.move(edge: .top).combined(with: .opacity))
             .padding(.top, 8)
         }
-    }
-
-    func moveActiveTopic(_ topic: Topic, direction: MoveDirection) {
-        guard let fromIndex = topicsViewModel.activeTopics.firstIndex(where: { isSame($0, as: topic) }) else { return }
-        let count = topicsViewModel.activeTopics.count
-
-        let destination: Int
-        switch direction {
-        case .up:
-            destination = max(fromIndex - 1, 0)
-        case .down:
-            destination = min(count, fromIndex + 2)
-        }
-
-        withAnimation {
-            topicsViewModel.reorderActiveTopicsInMemory(from: IndexSet(integer: fromIndex), to: destination)
-        }
-        Task { await topicsViewModel.persistActiveTopicOrder() }
-    }
-
-    func isSame(_ lhs: Topic, as rhs: Topic) -> Bool {
-        if let l = lhs.id, let r = rhs.id {
-            return l == r
-        }
-        return lhs.originalText == rhs.originalText
     }
 
     func handleErrorChange(_ message: String?) {

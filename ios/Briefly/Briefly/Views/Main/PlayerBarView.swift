@@ -21,10 +21,13 @@ struct PlayerBarView: View {
 
                     VStack(spacing: 8) {
                         HStack(spacing: 12) {
-                            Text(episode.displayTitle)
-                                .font(.callout.weight(.semibold))
-                                .lineLimit(1)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Button(action: { navigateToDetail = true }) {
+                                Text(episode.displayTitle)
+                                    .font(.callout.weight(.semibold))
+                                    .lineLimit(1)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .buttonStyle(.plain)
 
                             Button(action: togglePlay) {
                                 Image(systemName: audioManager.isPlaying ? "pause.fill" : "play.fill")
@@ -41,10 +44,6 @@ struct PlayerBarView: View {
                     .background(Color.brieflySurface)
                     .cornerRadius(12)
                     .padding(.horizontal)
-                    .contentShape(Rectangle())
-                    .simultaneousGesture(
-                        TapGesture().onEnded { navigateToDetail = true }
-                    )
                 }
             }
         }
@@ -65,10 +64,7 @@ struct PlayerBarView: View {
     }
 
     private func togglePlay() {
-        if audioManager.isPlaying {
-            audioManager.pause()
-        } else if let episode = audioManager.currentEpisode {
-            audioManager.play(episode: episode)
-        }
+        guard audioManager.currentEpisode != nil else { return }
+        audioManager.isPlaying ? audioManager.pause() : audioManager.resume()
     }
 }

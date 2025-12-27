@@ -3,7 +3,10 @@ import Foundation
 @MainActor
 final class TopicsViewModel: ObservableObject {
     @Published var topics: [Topic] = [] {
-        didSet { updateHasChanges() }
+        didSet {
+            topicsVersion &+= 1
+            updateHasChanges()
+        }
     }
     @Published var errorMessage: String?
     @Published var isLoading: Bool = false
@@ -14,6 +17,7 @@ final class TopicsViewModel: ObservableObject {
     private let topicService: TopicProviding
     private let entitlementsService: EntitlementsProviding?
     private var originalTopics: [Topic] = []
+    private var topicsVersion: Int = 0
 
     var activeTopics: [Topic] {
         topics.filter { $0.isActive }.sorted { $0.orderIndex < $1.orderIndex }
@@ -38,6 +42,7 @@ final class TopicsViewModel: ObservableObject {
     }
 
     func load() async {
+        let requestVersion = topicsVersion
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
@@ -45,6 +50,7 @@ final class TopicsViewModel: ObservableObject {
             await refreshEntitlements()
             let fetched = try await topicService.fetchTopics()
             let sorted = fetched.sorted { $0.orderIndex < $1.orderIndex }
+            guard requestVersion == topicsVersion else { return } // Drop stale responses when local edits occurred mid-request.
             originalTopics = sorted
             topics = sorted
             hasChanges = false
