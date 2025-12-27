@@ -16,6 +16,7 @@ export interface LlmProvider {
     intent: TopicIntent,
     targetDurationMinutes?: number,
   ): Promise<SegmentDialogueScript>;
+  generateCoverMotif(title: string, topics?: string[]): Promise<string>;
   enhanceSegmentDialogueForElevenV3(script: SegmentDialogueScript): Promise<SegmentDialogueScript>;
   generateEpisodeMetadata(script: string, segments: EpisodeSegment[]): Promise<EpisodeMetadata>;
   extractTopicBriefs(transcript: string): Promise<string[]>;

@@ -13,31 +13,31 @@ struct FeedView: View {
 
     var body: some View {
         ScrollView { feedContent }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color.brieflyBackground)
-        .navigationTitle("Your Library")
-        .navigationBarTitleDisplayMode(.inline)
-        .navigationDestination(for: Episode.self) { episode in
-            EpisodeDetailView(episode: episode, onCreateEpisode: onCreateEpisode)
-        }
-        .task {
-            await refreshFeed()
-        }
-        .refreshable {
-            await refreshFeed()
-        }
-        .overlay(alignment: .bottom) {
-            playerBarOverlay
-        }
-        .overlay(alignment: .top) {
-            bannerView
-        }
-        .overlay {
-            errorOverlay
-        }
-        .onChange(of: viewModel.errorMessage) { newValue in
-            handleErrorChange(newValue)
-        }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(Color.brieflyBackground.ignoresSafeArea())
+            .navigationTitle("Your Library")
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(for: Episode.self) { episode in
+                EpisodeDetailView(episode: episode, onCreateEpisode: onCreateEpisode)
+            }
+            .task {
+                await refreshFeed()
+            }
+            .refreshable {
+                await refreshFeed()
+            }
+            .overlay(alignment: .bottom) {
+                playerBarOverlay
+            }
+            .overlay(alignment: .top) {
+                bannerView
+            }
+            .overlay {
+                errorOverlay
+            }
+            .onChange(of: viewModel.errorMessage) { newValue in
+                handleErrorChange(newValue)
+            }
     }
 
     @ViewBuilder

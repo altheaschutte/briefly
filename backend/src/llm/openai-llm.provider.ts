@@ -104,6 +104,57 @@ ${historyBlock}`,
     return topics;
   }
 
+  async generateCoverMotif(title: string, topics: string[] = []): Promise<string> {
+    const client = this.getClient();
+    const topicHints = (topics || [])
+      .map((topic) => topic?.trim())
+      .filter((topic): topic is string => Boolean(topic))
+      .slice(0, 2);
+    const topicLine = topicHints.length ? `Topics: ${topicHints.join(' | ')}` : 'Topics: None';
+    const examples = `Examples (stay literal and drawable):
+Title: The Quantum Internet → Motif: interlaced fiber loop around two signal nodes
+Title: Coastal Storm Prep → Motif: twin radar arcs bracketing a shoreline beacon
+Title: Startup Burnout → Motif: tapering battery line encircled by climbing steps`;
+    const messages = [
+      {
+        role: 'system',
+        content: `You propose a single visual motif for abstract, text-free line art posters.
+Rules:
+- Return ONE noun-based motif that can be drawn as a single continuous line plus 1–2 supporting shapes.
+- 12 words max.
+- No people, faces, hands, bodies, silhouettes, logos, brand marks, or copyrighted characters.
+- No text, no letters, no numbers.
+- Keep it safe/PG and concrete (objects, signals, shapes, tools).
+- Style hint: abstract, single-line focal shape + 1–2 supporting shapes.
+Respond as JSON only: {"motif":"..."}.
+${examples}`,
+      },
+      {
+        role: 'user',
+        content: `Title: ${title || 'Untitled'}
+${topicLine}
+Describe the motif only.`,
+      },
+    ] satisfies ChatCompletionMessageParam[];
+
+    const response = await client.chat.completions.create({
+      model: this.queryModel,
+      messages,
+      temperature: 0.3,
+      max_tokens: 140,
+      response_format: { type: 'json_object' },
+    });
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error('OpenAI returned empty content for cover motif');
+    }
+    const motif = this.parseMotif(content);
+    if (!motif) {
+      throw new Error('OpenAI did not return a valid cover motif');
+    }
+    return motif;
+  }
+
   async generateSegmentScript(
     title: string,
     findings: string,
@@ -510,6 +561,38 @@ SHOW NOTES RULES
         seen.add(key);
         return true;
       });
+  }
+
+  private parseMotif(content: string): string | null {
+    const normalized = content.trim();
+    const jsonCandidate = this.extractJsonBlock(normalized);
+    const parsedFromJson = this.parseMotifJson(jsonCandidate);
+    if (parsedFromJson) {
+      return parsedFromJson;
+    }
+    const cleaned = normalized.replace(/^(motif|subject)[:\s-]+/i, '').trim();
+    const sanitized = this.sanitizeMotif(cleaned);
+    return sanitized || null;
+  }
+
+  private parseMotifJson(raw: string): string | null {
+    try {
+      const parsed = JSON.parse(raw);
+      const motif = this.sanitizeMotif((parsed as any)?.motif || (parsed as any)?.idea || (parsed as any)?.subject);
+      return motif || null;
+    } catch {
+      return null;
+    }
+  }
+
+  private sanitizeMotif(raw: unknown): string {
+    if (typeof raw !== 'string') {
+      return '';
+    }
+    const withoutLabels = raw.replace(/^(motif|idea|subject)[:\s-]+/i, '').trim();
+    const collapsed = withoutLabels.replace(/\s+/g, ' ').replace(/[."']+$/g, '').trim();
+    const words = collapsed.split(' ').filter(Boolean).slice(0, 12);
+    return words.join(' ');
   }
 
   private parseMetadata(content: string): EpisodeMetadata {

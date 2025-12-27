@@ -5,9 +5,21 @@ import UIKit
 
 @main
 struct BrieflyApp: App {
-    @StateObject private var appViewModel = AppViewModel()
+    #if os(iOS)
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    #endif
+    @StateObject private var appViewModel: AppViewModel
+    @StateObject private var pushManager: PushNotificationManager
 
     init() {
+        let viewModel = AppViewModel()
+        let notificationService = NotificationService(apiClient: viewModel.apiClient)
+        let pushManager = PushNotificationManager(notificationService: notificationService)
+        _appViewModel = StateObject(wrappedValue: viewModel)
+        _pushManager = StateObject(wrappedValue: pushManager)
+        #if os(iOS)
+        AppDelegate.pushManager = pushManager
+        #endif
         Self.configureAppearance()
     }
 
@@ -16,6 +28,7 @@ struct BrieflyApp: App {
             AppRootView()
                 .environmentObject(appViewModel)
                 .environmentObject(appViewModel.audioPlayer)
+                .environmentObject(pushManager)
                 .tint(.brieflyPrimary)
                 .preferredColorScheme(.dark)
         }
@@ -39,6 +52,7 @@ struct BrieflyApp: App {
 
 struct AppRootView: View {
     @EnvironmentObject private var appViewModel: AppViewModel
+    @EnvironmentObject private var pushManager: PushNotificationManager
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -58,6 +72,16 @@ struct AppRootView: View {
         }
         .onAppear {
             appViewModel.bootstrap()
+            if appViewModel.isAuthenticated {
+                Task { await pushManager.registerForPushNotifications() }
+            }
+        }
+        .onChange(of: appViewModel.isAuthenticated) { isAuthenticated in
+            if isAuthenticated {
+                Task { await pushManager.registerForPushNotifications() }
+            } else {
+                Task { await pushManager.unregisterCurrentDevice() }
+            }
         }
         .onChange(of: scenePhase) { phase in
             if phase == .active {

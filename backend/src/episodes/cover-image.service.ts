@@ -3,18 +3,21 @@ import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { EpisodeSegment } from '../domain/types';
 import { StorageService } from '../storage/storage.service';
+import { LlmService } from '../llm/llm.service';
 
 @Injectable()
 export class CoverImageService {
   private readonly logger = new Logger(CoverImageService.name);
   private client: OpenAI | null = null;
+  private readonly fallbackMotifs = ['interlocking waves', 'orbiting rings'];
 
   constructor(
     private readonly configService: ConfigService,
     private readonly storageService: StorageService,
+    private readonly llmService: LlmService,
   ) {}
 
-  buildPrompt(title?: string, segments: EpisodeSegment[] = []): string {
+  async buildPrompt(title?: string, segments: EpisodeSegment[] = []): Promise<string> {
     const STYLE =
       'Premium podcast cover art. Modern editorial illustration. ' +
       'Soft matte finish, subtle paper/gouache texture, pastel tones, clean shapes. ' +
@@ -24,13 +27,17 @@ export class CoverImageService {
 
     const hero = this.pickHeroSegment(segments);
     const heroText = [title, hero?.title].filter(Boolean).join(' — ');
-    const motif = this.motifFromText(heroText || title || '');
+    const visualStyle = this.motifFromText(heroText || title || '');
+    const motif = await this.buildMotif(title, segments);
+    const motifLine =
+      `Main line motif: Minimal abstract poster; single continuous line forming ${motif}; ` +
+      'geometric backdrop; subtle texture; 3–5 colors; no text/letters/faces. ';
 
     const prompt =
       STYLE +
-      `Subject: ${motif.subject}. ` +
-      `Color palette: ${motif.palette}. ` +
-      `Composition: ${motif.composition}. ` +
+      motifLine +
+      `Color palette: ${visualStyle.palette}. ` +
+      `Composition: ${visualStyle.composition}. ` +
       'Keep it stylized, flat shapes, gentle gradients, subtle texture. ' +
       'High quality, cohesive, not busy.';
 
@@ -73,6 +80,59 @@ export class CoverImageService {
       });
     }
     return this.client;
+  }
+
+  private async buildMotif(title?: string, segments: EpisodeSegment[] = []): Promise<string> {
+    const topics = this.pickMotifTopics(segments);
+    const baseTitle = title || 'Untitled episode';
+    try {
+      const motif = await this.llmService.generateCoverMotif(baseTitle, topics);
+      const validated = this.validateMotif(motif);
+      if (validated) {
+        return validated;
+      }
+      this.logger.warn(`Discarding unsafe motif "${motif}"; using fallback.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Cover motif generation failed for "${baseTitle}": ${message}`);
+    }
+    return this.pickFallbackMotif(baseTitle);
+  }
+
+  private validateMotif(motif: unknown): string | null {
+    if (typeof motif !== 'string') {
+      return null;
+    }
+    const sanitized = motif.replace(/\s+/g, ' ').replace(/[."']+$/g, '').trim();
+    if (!sanitized) {
+      return null;
+    }
+    const words = sanitized.split(' ').filter(Boolean);
+    if (!words.length) {
+      return null;
+    }
+    const limited = words.slice(0, 12).join(' ');
+    if (/\btext\b|\bletter\b|\bletters\b|\bwords?\b/.test(limited.toLowerCase())) {
+      return null;
+    }
+    if (/\d/.test(limited)) {
+      return null;
+    }
+    return limited;
+  }
+
+  private pickFallbackMotif(seed?: string): string {
+    const hashes = (seed || '').split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const index = this.fallbackMotifs.length ? hashes % this.fallbackMotifs.length : 0;
+    return this.fallbackMotifs[index] || 'interlocking waves';
+  }
+
+  private pickMotifTopics(segments: EpisodeSegment[]): string[] {
+    return [...(segments || [])]
+      .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0))
+      .map((segment) => segment.title?.trim())
+      .filter((title): title is string => Boolean(title))
+      .slice(0, 2);
   }
 
   private pickHeroSegment(segments: EpisodeSegment[]): EpisodeSegment | undefined {

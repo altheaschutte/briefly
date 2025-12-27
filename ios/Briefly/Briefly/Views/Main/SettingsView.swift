@@ -51,7 +51,7 @@ struct SettingsView: View {
             .listRowBackground(Color.brieflySurface)
 
             Section {
-                Text("Coming soon")
+                Text("You'll get a push on this device when a new episode is ready.")
                     .foregroundColor(.brieflyTextMuted)
             } header: {
                 settingsHeader("Notifications")

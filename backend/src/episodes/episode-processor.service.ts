@@ -20,6 +20,7 @@ import { CoverImageService } from './cover-image.service';
 import { getDefaultVoices } from '../tts/voice-config';
 import { EntitlementsService } from '../billing/entitlements.service';
 import { StorageService } from '../storage/storage.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   buildEpisodeSources,
   buildSegmentContent,
@@ -47,6 +48,7 @@ export class EpisodeProcessorService {
     private readonly configService: ConfigService,
     private readonly entitlementsService: EntitlementsService,
     private readonly storageService: StorageService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async process(job: Job<{ episodeId: string; userId: string }>): Promise<void> {
@@ -174,7 +176,7 @@ export class EpisodeProcessorService {
       await this.markEpisodeStatus(userId, episodeId, 'generating_audio');
       stage = 'generate_metadata';
       const metadata = await this.llmService.generateEpisodeMetadata(fullScript, persistedSegments);
-      const coverPrompt = this.coverImageService.buildPrompt(metadata.title, persistedSegments);
+      const coverPrompt = await this.coverImageService.buildPrompt(metadata.title, persistedSegments);
       const coverPromise = this.coverImageService
         .generateCoverImage(userId, episodeId, coverPrompt)
         .then((result) => ({ ...result, prompt: coverPrompt }))
@@ -206,6 +208,21 @@ export class EpisodeProcessorService {
         coverPrompt: coverResult.prompt,
       });
       try {
+        stage = 'notify_ready';
+        await this.notificationsService.notifyEpisodeStatus(userId, {
+          episodeId,
+          status: 'ready',
+          title: metadata.title,
+          description: metadata.description,
+        });
+      } catch (notifyError) {
+        this.logger.warn(
+          `Failed to send ready notification for episode ${episodeId}: ${
+            notifyError instanceof Error ? notifyError.message : notifyError
+          }`,
+        );
+      }
+      try {
         stage = 'record_usage';
         await this.entitlementsService.recordEpisodeUsage(userId, episodeId, episodeDurationSeconds);
       } catch (error) {
@@ -220,6 +237,19 @@ export class EpisodeProcessorService {
       await this.markEpisodeStatus(userId, episodeId, 'failed', {
         errorMessage: this.buildErrorMessage(error, stage),
       });
+      try {
+        await this.notificationsService.notifyEpisodeStatus(userId, {
+          episodeId,
+          status: 'failed',
+          description: this.buildErrorMessage(error, stage),
+        });
+      } catch (notifyError) {
+        this.logger.warn(
+          `Failed to send failure notification for episode ${episodeId}: ${
+            notifyError instanceof Error ? notifyError.message : notifyError
+          }`,
+        );
+      }
       throw error;
     }
   }

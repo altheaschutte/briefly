@@ -12,6 +12,7 @@ import { CommonModule } from './common/common.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { BillingModule } from './billing/billing.module';
 import { HealthModule } from './health/health.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { AppController } from './app.controller';
 
 @Module({
@@ -29,6 +30,7 @@ import { AppController } from './app.controller';
     OnboardingModule,
     BillingModule,
     HealthModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
 })

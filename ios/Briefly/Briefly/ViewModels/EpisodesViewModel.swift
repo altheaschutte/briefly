@@ -74,6 +74,12 @@ final class EpisodesViewModel: ObservableObject {
             let fetched = try await episodeService.fetchEpisodes()
             episodes = sortAndDeduplicate(fetched)
             hasAppliedPrefetch = true
+        } catch let apiError as APIError {
+            if case .unauthorized = apiError {
+                // AppViewModel handles logout/navigation on 401s; skip showing an overlay here.
+                return
+            }
+            errorMessage = apiError.localizedDescription
         } catch {
             errorMessage = error.localizedDescription
         }

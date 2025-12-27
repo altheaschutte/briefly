@@ -57,7 +57,7 @@ async function run() {
         logger.log(`Skipping ${episode.id} (already has cover)`);
         continue;
       }
-      const prompt = coverService.buildPrompt(episode.title, []);
+      const prompt = await coverService.buildPrompt(episode.title, []);
       try {
         logger.log(`Generating cover for episode ${episode.id}`);
         const result = await coverService.generateCoverImage(args.userId, episode.id, prompt);

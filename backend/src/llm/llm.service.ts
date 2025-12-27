@@ -27,6 +27,10 @@ export class LlmService implements LlmProvider {
     return this.provider.generateEpisodeMetadata(script, segments);
   }
 
+  generateCoverMotif(title: string, topics?: string[]): Promise<string> {
+    return this.provider.generateCoverMotif(title, topics);
+  }
+
   enhanceSegmentDialogueForElevenV3(script: SegmentDialogueScript): Promise<SegmentDialogueScript> {
     return this.provider.enhanceSegmentDialogueForElevenV3(script);
   }

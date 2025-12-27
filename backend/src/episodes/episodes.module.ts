@@ -26,6 +26,7 @@ import { EPISODE_SEGMENTS_REPOSITORY } from './episode-segments.repository';
 import { InMemoryEpisodeSegmentsRepository } from './in-memory-episode-segments.repository';
 import { SupabaseEpisodeSegmentsRepository } from './supabase-episode-segments.repository';
 import { BillingModule } from '../billing/billing.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 const episodesRepositoryProvider: Provider = {
   provide: EPISODES_REPOSITORY,
@@ -94,6 +95,7 @@ const episodeSegmentsRepositoryProvider: Provider = {
     PerplexityModule,
     TtsModule,
     StorageModule,
+    NotificationsModule,
     forwardRef(() => BillingModule),
   ],
   controllers: [EpisodesController],
