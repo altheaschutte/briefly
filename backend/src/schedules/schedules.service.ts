@@ -102,6 +102,7 @@ export class SchedulesService {
     localTimeMinutes: number,
     timezone: string,
     now: Date,
+    options?: { skipCurrentWindow?: boolean },
   ): Date {
     const intervalDays = this.frequencyToDays(frequency);
     if (intervalDays <= 0) {
@@ -118,13 +119,18 @@ export class SchedulesService {
     });
 
     const windowStartOffsetMinutes = 15;
-    const windowStart = target.minus({ minutes: windowStartOffsetMinutes });
+    let windowStart = target.minus({ minutes: windowStartOffsetMinutes });
+
+    if (options?.skipCurrentWindow && nowZoned >= windowStart) {
+      target = target.plus({ days: intervalDays });
+      windowStart = target.minus({ minutes: windowStartOffsetMinutes });
+    }
 
     if (nowZoned < windowStart) {
       return windowStart.toUTC().toJSDate();
     }
 
-    if (nowZoned < target) {
+    if (nowZoned < target && !options?.skipCurrentWindow) {
       return nowZoned.toUTC().toJSDate();
     }
 

@@ -39,6 +39,7 @@ export class SchedulesRunnerService {
       schedule.localTimeMinutes,
       schedule.timezone,
       now,
+      { skipCurrentWindow: true },
     );
 
     try {

@@ -382,41 +382,15 @@ private extension FeedView {
 
 struct SkeletonBlock: View {
     var cornerRadius: CGFloat = 12
-    @State private var shimmerOffset: CGFloat = -1
+    @State private var isFading = false
 
     var body: some View {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             .fill(Color.white.opacity(0.08))
-            .overlay {
-                shimmer
-                    .mask(
-                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    )
-            }
+            .opacity(isFading ? 0.9 : 0.5)
+            .animation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true), value: isFading)
             .onAppear {
-                withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: false)) {
-                    shimmerOffset = 1.25
-                }
+                isFading = true
             }
-    }
-
-    private var shimmer: some View {
-        GeometryReader { geometry in
-            let width = geometry.size.width
-            let height = geometry.size.height
-
-            LinearGradient(
-                colors: [
-                    Color.white.opacity(0.0),
-                    Color.white.opacity(0.25),
-                    Color.white.opacity(0.0)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(width: width * 1.6, height: height * 1.6)
-            .rotationEffect(.degrees(16))
-            .offset(x: shimmerOffset * width)
-        }
     }
 }

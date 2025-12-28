@@ -2,6 +2,7 @@ import Foundation
 import AVFoundation
 import MediaPlayer
 import UIKit
+import os.log
 
 @MainActor
 final class AudioPlayerManager: NSObject, ObservableObject {
@@ -20,12 +21,14 @@ final class AudioPlayerManager: NSObject, ObservableObject {
     private var nowPlayingInfo: [String: Any] = [:]
     private var artworkCache: [URL: MPMediaItemArtwork] = [:]
     private var artworkFetchTasks: [URL: Task<MPMediaItemArtwork?, Never>] = [:]
+    private let audioLog = OSLog(subsystem: "com.briefly.app", category: "Audio")
 
     init(audioURLProvider: ((UUID) async -> URL?)? = nil) {
         self.audioURLProvider = audioURLProvider
         super.init()
         configureSession()
         configureRemoteCommands()
+        UIApplication.shared.beginReceivingRemoteControlEvents()
     }
 
     func play(episode: Episode, from startTime: Double? = nil) {
@@ -78,10 +81,12 @@ final class AudioPlayerManager: NSObject, ObservableObject {
             progress = 0
             currentTimeSeconds = 0
             updateNowPlayingInfo(for: episode, elapsed: startSeconds, duration: durationSeconds, rate: 0)
+            os_log("Started new playback item. url=%{public}@ startSeconds=%{public}.2f duration=%{public}.2f", log: audioLog, type: .info, url.absoluteString, startSeconds, durationSeconds)
         } else {
             currentEpisode = episode
         }
 
+        activateAudioSessionIfNeeded()
         seek(toSeconds: startSeconds, autoPlay: true)
     }
 
@@ -92,6 +97,7 @@ final class AudioPlayerManager: NSObject, ObservableObject {
     }
 
     func resume() {
+        activateAudioSessionIfNeeded()
         player?.play()
         player?.rate = Float(playbackSpeed)
         isPlaying = true
@@ -132,6 +138,7 @@ final class AudioPlayerManager: NSObject, ObservableObject {
             }
             let shouldPlay = autoPlay ?? self.isPlaying
             if shouldPlay {
+                self.activateAudioSessionIfNeeded()
                 player.play()
                 player.rate = Float(self.playbackSpeed)
                 self.isPlaying = true
@@ -211,8 +218,17 @@ final class AudioPlayerManager: NSObject, ObservableObject {
             let session = AVAudioSession.sharedInstance()
             try session.setCategory(.playback, mode: .spokenAudio, options: [.interruptSpokenAudioAndMixWithOthers])
             try session.setActive(true, options: [])
+            os_log("Audio session configured for playback", log: audioLog, type: .info)
         } catch {
-            print("Failed to set audio session: \(error)")
+            os_log("Failed to set audio session: %{public}@", log: audioLog, type: .error, error.localizedDescription)
+        }
+    }
+
+    private func activateAudioSessionIfNeeded() {
+        do {
+            try AVAudioSession.sharedInstance().setActive(true, options: [])
+        } catch {
+            os_log("Failed to activate audio session: %{public}@", log: audioLog, type: .error, error.localizedDescription)
         }
     }
 
@@ -247,6 +263,7 @@ final class AudioPlayerManager: NSObject, ObservableObject {
             self.seek(toSeconds: positionEvent.positionTime)
             return .success
         }
+        os_log("Remote command center configured", log: audioLog, type: .info)
     }
 
     @MainActor
@@ -266,6 +283,8 @@ final class AudioPlayerManager: NSObject, ObservableObject {
         if let rate {
             info[MPNowPlayingInfoPropertyPlaybackRate] = rate
         }
+        info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = rate ?? 1
+        info[MPNowPlayingInfoPropertyMediaType] = MPNowPlayingInfoMediaType.audio.rawValue
         if let artworkURL = episode.coverImageURL {
             if let cached = artworkCache[artworkURL] {
                 info[MPMediaItemPropertyArtwork] = cached
@@ -276,6 +295,14 @@ final class AudioPlayerManager: NSObject, ObservableObject {
 
         nowPlayingInfo = info
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        os_log("Set nowPlayingInfo title=%{public}@ elapsed=%{public}.2f duration=%{public}.2f rate=%{public}.2f artwork=%{public}@",
+               log: audioLog,
+               type: .info,
+               episode.title,
+               elapsed ?? -1,
+               duration ?? -1,
+               rate ?? -1,
+               (info[MPMediaItemPropertyArtwork] as? MPMediaItemArtwork) != nil ? "yes" : "no")
     }
 
     private func startArtworkFetch(for url: URL) {
@@ -300,12 +327,14 @@ final class AudioPlayerManager: NSObject, ObservableObject {
             self.artworkCache[url] = artwork
             self.nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
             MPNowPlayingInfoCenter.default().nowPlayingInfo = self.nowPlayingInfo
+            os_log("Updated nowPlayingInfo with fetched artwork: %{public}@", log: self.audioLog, type: .info, url.absoluteString)
         }
     }
 
     private func clearNowPlayingInfo() {
         nowPlayingInfo = [:]
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        os_log("Cleared nowPlayingInfo", log: audioLog, type: .info)
     }
 
     private func addTimeObserver() {
