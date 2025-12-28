@@ -28,20 +28,20 @@ struct EpisodeDetailView: View {
             VStack(alignment: .leading, spacing: 16) {
                 header
                 playbackControls
-                actionRow
+//                actionRow
                 if let notes = detailedEpisode.showNotes?.trimmingCharacters(in: .whitespacesAndNewlines),
                    notes.isEmpty == false {
                     showNotesSection(notes)
                 }
-                if let topics = detailedEpisode.topics, topics.isEmpty == false {
-                    topicsSection(topics)
-                }
-                segmentsSection
-                if let errorMessage {
-                    InlineErrorText(message: errorMessage)
-                        .padding(.top, 4)
-                    Button("Retry") {
-                        Task { await loadDetailsIfNeeded(force: true) }
+            if let topics = detailedEpisode.topics, topics.isEmpty == false {
+                topicsSection(topics)
+            }
+            segmentsSection
+            if let errorMessage {
+                InlineErrorText(message: errorMessage)
+                    .padding(.top, 4)
+                Button("Retry") {
+                    Task { await loadDetailsIfNeeded(force: true) }
                     }
                     .font(.footnote.weight(.semibold))
                     .padding(.top, 2)
@@ -143,21 +143,21 @@ private extension EpisodeDetailView {
 
     var fallbackArtwork: some View {
         Image(systemName: "waveform.circle.fill")
-            .font(.system(size: 42, weight: .semibold))
-            .foregroundColor(Color.brieflySecondary)
+                .font(.system(size: 42, weight: .semibold))
+                .foregroundColor(Color.brieflySecondary)
     }
 
-    var actionRow: some View {
-        HStack(spacing: 12) {
-            secondaryActionButton(systemName: "note.text") // transcript
-            secondaryActionButton(systemName: "plus") // add/bookmark
-            secondaryActionButton(systemName: "square.and.arrow.up") // share
-            secondaryActionButton(systemName: "mic.fill") // talk to producer
-            secondaryActionButton(systemName: "ellipsis") // more
-        }
-        .frame(maxWidth: .infinity, alignment: .center)
-        .padding(.horizontal, 4)
-    }
+//    var actionRow: some View {
+//        HStack(spacing: 12) {
+//            secondaryActionButton(systemName: "note.text") // transcript
+//            secondaryActionButton(systemName: "plus") // add/bookmark
+//            secondaryActionButton(systemName: "square.and.arrow.up") // share
+//            secondaryActionButton(systemName: "mic.fill") // talk to producer
+//            secondaryActionButton(systemName: "ellipsis") // more
+//        }
+//        .frame(maxWidth: .infinity, alignment: .center)
+//        .padding(.horizontal, 4)
+//    }
 
     private var primaryPlayButton: some View {
         Button(action: togglePlayback) {

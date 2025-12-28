@@ -117,19 +117,19 @@ export class SchedulesService {
       millisecond: 0,
     });
 
-    const windowStartOffsetMinutes = 60;
-    let windowStart = target.minus({ minutes: windowStartOffsetMinutes });
+    const windowStartOffsetMinutes = 15;
+    const windowStart = target.minus({ minutes: windowStartOffsetMinutes });
 
-    if (windowStart <= nowZoned) {
-      let attempts = 0;
-      while (windowStart <= nowZoned && attempts < 400) {
-        target = target.plus({ days: intervalDays });
-        windowStart = target.minus({ minutes: windowStartOffsetMinutes });
-        attempts += 1;
-      }
+    if (nowZoned < windowStart) {
+      return windowStart.toUTC().toJSDate();
     }
 
-    return windowStart.toUTC().toJSDate();
+    if (nowZoned < target) {
+      return nowZoned.toUTC().toJSDate();
+    }
+
+    target = target.plus({ days: intervalDays });
+    return target.minus({ minutes: windowStartOffsetMinutes }).toUTC().toJSDate();
   }
 
   private async assertScheduleLimit(userId: string) {

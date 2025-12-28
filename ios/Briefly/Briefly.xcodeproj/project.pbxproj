@@ -63,6 +63,8 @@
 		D0B25200F283FA5FE773466A /* TestHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61FCDBC9F778F4AA77A85336 /* TestHelpers.swift */; };
 		D91F3DBBDAF0D78CCC85BE96 /* TopicEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14A5B9BD3287AACD7A479D84 /* TopicEditView.swift */; };
 		DC7944637485E6D32E958DAC /* APIConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6D26D15DB3DFE43BFB64269 /* APIConfig.swift */; };
+		E1A5C7F1234567890ABCDE11 /* Schedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A5C7F1234567890ABCDE01 /* Schedule.swift */; };
+		E1A5C7F1234567890ABCDE12 /* ScheduleService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A5C7F1234567890ABCDE02 /* ScheduleService.swift */; };
 		E245736905FFB017AECF64B5 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 656381315E92E63835300681 /* Supabase */; };
 		E7E275A4E80B9F72F844044B /* OnboardingFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 676B66B377B920BF160E0D2F /* OnboardingFlowView.swift */; };
 		ED150F1EB076104C7BD3D241 /* OnboardingVoiceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A7CA2CC98180B43613BA498 /* OnboardingVoiceService.swift */; };
@@ -70,8 +72,6 @@
 		F6245ED5B1F11716913119CE /* EntitlementsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D66297076130D205C500A5D9 /* EntitlementsService.swift */; };
 		F85D310421C652BDC79E120B /* AuthToken.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BB7F45006ED55441EE8E1A9 /* AuthToken.swift */; };
 		FEC0D559A22F915BB1FAFAC8 /* EpisodesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 892D63BC7941AE98C69301D2 /* EpisodesViewModel.swift */; };
-		E1A5C7F1234567890ABCDE11 /* Schedule.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A5C7F1234567890ABCDE01 /* Schedule.swift */; };
-		E1A5C7F1234567890ABCDE12 /* ScheduleService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A5C7F1234567890ABCDE02 /* ScheduleService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -139,6 +139,8 @@
 		D782D6CEBB24F0CECE3A9B0B /* AuthManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthManagerTests.swift; sourceTree = "<group>"; };
 		DCF6AD3E2828E25B853D7FD4 /* EpisodeDecodingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpisodeDecodingTests.swift; sourceTree = "<group>"; };
 		E0EC0638F8C0FDBAED803B24 /* TopicService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicService.swift; sourceTree = "<group>"; };
+		E1A5C7F1234567890ABCDE01 /* Schedule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Schedule.swift; sourceTree = "<group>"; };
+		E1A5C7F1234567890ABCDE02 /* ScheduleService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleService.swift; sourceTree = "<group>"; };
 		E35FFADD570DF4AC18D585CF /* ProfileOnboardingViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileOnboardingViewModel.swift; sourceTree = "<group>"; };
 		E4B6857EF04F1B97C1D9B3AD /* APIClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClientTests.swift; sourceTree = "<group>"; };
 		E90343BF0A44EACAF4241860 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
@@ -152,8 +154,6 @@
 		F6D26D15DB3DFE43BFB64269 /* APIConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIConfig.swift; sourceTree = "<group>"; };
 		F8898DDB7383A2DDE17A9A9F /* AppViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppViewModel.swift; sourceTree = "<group>"; };
 		FB01CCC437E99C37318D1884 /* EpisodeSegment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpisodeSegment.swift; sourceTree = "<group>"; };
-		E1A5C7F1234567890ABCDE01 /* Schedule.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Schedule.swift; sourceTree = "<group>"; };
-		E1A5C7F1234567890ABCDE02 /* ScheduleService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScheduleService.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -641,7 +641,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = brieflypodcast.com;
+				PRODUCT_BUNDLE_IDENTIFIER = brieflypodcast.app;
 				SDKROOT = iphoneos;
 				SUPPORTS_MACCATALYST = NO;
 				TARGETED_DEVICE_FAMILY = "1,2";

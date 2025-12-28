@@ -1,6 +1,9 @@
 import Foundation
 import AVFoundation
+import MediaPlayer
+import UIKit
 
+@MainActor
 final class AudioPlayerManager: NSObject, ObservableObject {
     @Published var currentEpisode: Episode?
     @Published var isPlaying: Bool = false
@@ -14,11 +17,15 @@ final class AudioPlayerManager: NSObject, ObservableObject {
     private var playbackSpeed: Double = 1.0
     private var didRetryPlayback: Bool = false
     private let audioURLProvider: ((UUID) async -> URL?)?
+    private var nowPlayingInfo: [String: Any] = [:]
+    private var artworkCache: [URL: MPMediaItemArtwork] = [:]
+    private var artworkFetchTasks: [URL: Task<MPMediaItemArtwork?, Never>] = [:]
 
     init(audioURLProvider: ((UUID) async -> URL?)? = nil) {
         self.audioURLProvider = audioURLProvider
         super.init()
         configureSession()
+        configureRemoteCommands()
     }
 
     func play(episode: Episode, from startTime: Double? = nil) {
@@ -27,7 +34,6 @@ final class AudioPlayerManager: NSObject, ObservableObject {
         }
     }
 
-    @MainActor
     private func preparePlayback(episode: Episode, startTime: Double?) async {
         var resolvedEpisode = episode
         if resolvedEpisode.audioURL == nil, let urlProvider = audioURLProvider {
@@ -45,7 +51,6 @@ final class AudioPlayerManager: NSObject, ObservableObject {
         startPlayback(episode: resolvedEpisode, url: url, startSeconds: startSeconds)
     }
 
-    @MainActor
     private func startPlayback(episode: Episode, url: URL, startSeconds: Double) {
         // Stop observing the previous player before swapping in a new instance.
         let needsNewPlayer = currentEpisode?.id != episode.id ||
@@ -72,6 +77,7 @@ final class AudioPlayerManager: NSObject, ObservableObject {
             }
             progress = 0
             currentTimeSeconds = 0
+            updateNowPlayingInfo(for: episode, elapsed: startSeconds, duration: durationSeconds, rate: 0)
         } else {
             currentEpisode = episode
         }
@@ -82,12 +88,14 @@ final class AudioPlayerManager: NSObject, ObservableObject {
     func pause() {
         player?.pause()
         isPlaying = false
+        updateNowPlayingInfo(for: currentEpisode, elapsed: currentTimeSeconds, duration: durationSeconds, rate: 0)
     }
 
     func resume() {
         player?.play()
         player?.rate = Float(playbackSpeed)
         isPlaying = true
+        updateNowPlayingInfo(for: currentEpisode, elapsed: currentTimeSeconds, duration: durationSeconds, rate: Float(playbackSpeed))
     }
 
     func stop() {
@@ -95,6 +103,11 @@ final class AudioPlayerManager: NSObject, ObservableObject {
         isPlaying = false
         progress = 0
         currentTimeSeconds = 0
+        if currentEpisode != nil {
+            updateNowPlayingInfo(for: currentEpisode, elapsed: 0, duration: durationSeconds, rate: 0)
+        } else {
+            clearNowPlayingInfo()
+        }
     }
 
     func seek(to progress: Double) {
@@ -123,6 +136,10 @@ final class AudioPlayerManager: NSObject, ObservableObject {
                 player.rate = Float(self.playbackSpeed)
                 self.isPlaying = true
             }
+            self.updateNowPlayingInfo(for: self.currentEpisode,
+                                      elapsed: clampedSeconds,
+                                      duration: validDuration ?? self.durationSeconds,
+                                      rate: shouldPlay ? Float(self.playbackSpeed) : 0)
         }
     }
 
@@ -147,6 +164,7 @@ final class AudioPlayerManager: NSObject, ObservableObject {
                 updated.status != current.status {
                 currentEpisode = updated
                 durationSeconds = updated.durationSeconds ?? durationSeconds
+                updateNowPlayingInfo(for: updated, elapsed: currentTimeSeconds, duration: durationSeconds, rate: isPlaying ? Float(playbackSpeed) : 0)
             }
         } else {
             stop()
@@ -198,6 +216,98 @@ final class AudioPlayerManager: NSObject, ObservableObject {
         }
     }
 
+    private func configureRemoteCommands() {
+        let commandCenter = MPRemoteCommandCenter.shared()
+
+        commandCenter.playCommand.isEnabled = true
+        commandCenter.playCommand.addTarget { [weak self] _ in
+            self?.resume()
+            return .success
+        }
+
+        commandCenter.pauseCommand.isEnabled = true
+        commandCenter.pauseCommand.addTarget { [weak self] _ in
+            self?.pause()
+            return .success
+        }
+
+        commandCenter.togglePlayPauseCommand.isEnabled = true
+        commandCenter.togglePlayPauseCommand.addTarget { [weak self] _ in
+            guard let self else { return .commandFailed }
+            self.isPlaying ? self.pause() : self.resume()
+            return .success
+        }
+
+        let changePosition = commandCenter.changePlaybackPositionCommand
+        changePosition.isEnabled = true
+        changePosition.addTarget { [weak self] event in
+            guard let self, let positionEvent = event as? MPChangePlaybackPositionCommandEvent else {
+                return .commandFailed
+            }
+            self.seek(toSeconds: positionEvent.positionTime)
+            return .success
+        }
+    }
+
+    @MainActor
+    private func updateNowPlayingInfo(for episode: Episode?, elapsed: Double? = nil, duration: Double? = nil, rate: Float? = nil) {
+        guard let episode else { return }
+        var info = nowPlayingInfo
+        info[MPMediaItemPropertyTitle] = episode.title
+        info[MPMediaItemPropertyArtist] = "Briefly"
+        info[MPMediaItemPropertyAlbumTitle] = "News Brief"
+
+        if let duration, duration.isFinite {
+            info[MPMediaItemPropertyPlaybackDuration] = duration
+        }
+        if let elapsed, elapsed.isFinite {
+            info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = elapsed
+        }
+        if let rate {
+            info[MPNowPlayingInfoPropertyPlaybackRate] = rate
+        }
+        if let artworkURL = episode.coverImageURL {
+            if let cached = artworkCache[artworkURL] {
+                info[MPMediaItemPropertyArtwork] = cached
+            } else {
+                startArtworkFetch(for: artworkURL)
+            }
+        }
+
+        nowPlayingInfo = info
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+    }
+
+    private func startArtworkFetch(for url: URL) {
+        if artworkCache[url] != nil || artworkFetchTasks[url] != nil { return }
+
+        let task = Task.detached(priority: .utility) { () async -> MPMediaItemArtwork? in
+            do {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                guard let image = UIImage(data: data) else { return nil }
+                return MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+            } catch {
+                return nil
+            }
+        }
+        artworkFetchTasks[url] = task
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let artwork = await task.value
+            self.artworkFetchTasks[url] = nil
+            guard let artwork else { return }
+            self.artworkCache[url] = artwork
+            self.nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
+            MPNowPlayingInfoCenter.default().nowPlayingInfo = self.nowPlayingInfo
+        }
+    }
+
+    private func clearNowPlayingInfo() {
+        nowPlayingInfo = [:]
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+    }
+
     private func addTimeObserver() {
         removeTimeObserverIfNeeded()
         let interval = CMTime(seconds: 0.5, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
@@ -207,6 +317,10 @@ final class AudioPlayerManager: NSObject, ObservableObject {
             self.currentTimeSeconds = current
             self.durationSeconds = duration
             self.progress = duration > 0 ? current / duration : 0
+            self.updateNowPlayingInfo(for: self.currentEpisode,
+                                      elapsed: current,
+                                      duration: duration,
+                                      rate: self.isPlaying ? Float(self.playbackSpeed) : 0)
         }
     }
 
@@ -218,7 +332,10 @@ final class AudioPlayerManager: NSObject, ObservableObject {
     }
 
     deinit {
-        removeTimeObserverIfNeeded()
-        removeStatusObserverIfNeeded()
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.removeTimeObserverIfNeeded()
+            self.removeStatusObserverIfNeeded()
+        }
     }
 }

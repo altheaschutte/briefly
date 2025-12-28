@@ -12,23 +12,17 @@ struct SettingsView: View {
     var body: some View {
         List {
             Section {
-                PlanSummaryView(entitlements: viewModel.entitlements)
-                Picker("Target duration", selection: $viewModel.targetDurationMinutes) {
-                    ForEach(viewModel.durationOptions, id: \.self) { minutes in
-                        Text("\(minutes) minutes").tag(minutes)
-                    }
-                }
-            } header: {
-                settingsHeader("Plan & limits")
-            }
-            .listRowBackground(Color.brieflySurface)
-
-            Section {
                 if let email {
                     Text(email)
                 } else {
                     Text("Not signed in")
                 }
+                PlanSummaryView(entitlements: viewModel.entitlements)
+//                Picker("Target duration", selection: $viewModel.targetDurationMinutes) {
+//                    ForEach(viewModel.durationOptions, id: \.self) { minutes in
+//                        Text("\(minutes) minutes").tag(minutes)
+//                    }
+//                }
             } header: {
                 settingsHeader("Account")
             }
@@ -40,20 +34,19 @@ struct SettingsView: View {
                         Text("\(String(format: "%.1fx", speed))").tag(speed)
                     }
                 }
-                Toggle("Auto-play latest episode", isOn: $viewModel.autoPlayLatest)
-                Toggle("Resume last episode", isOn: $viewModel.resumeLast)
+                Toggle("Auto-play next episode", isOn: $viewModel.autoPlayNextEpisode)
             } header: {
                 settingsHeader("Playback")
             }
             .listRowBackground(Color.brieflySurface)
 
-            Section {
-                Text("Voice selection coming soon.")
-                    .foregroundColor(.brieflyTextMuted)
-            } header: {
-                settingsHeader("Voices")
-            }
-            .listRowBackground(Color.brieflySurface)
+//            Section {
+//                Text("Voice selection coming soon.")
+//                    .foregroundColor(.brieflyTextMuted)
+//            } header: {
+//                settingsHeader("Voices")
+//            }
+//            .listRowBackground(Color.brieflySurface)
 
             Section {
                 Toggle(isOn: Binding(get: {

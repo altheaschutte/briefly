@@ -89,7 +89,7 @@ struct AuthFlowView: View {
                                         .keyboardType(.numberPad)
                                         .textContentType(.oneTimeCode)
                                         .onChange(of: viewModel.code) { newValue in
-                                            viewModel.code = String(newValue.prefix(6).filter { $0.isNumber })
+                                            viewModel.handleCodeChange(newValue)
                                         }
                                         .inputFieldStyle()
                                         .foregroundColor(.white)

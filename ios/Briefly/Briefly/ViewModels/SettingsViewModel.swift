@@ -33,11 +33,15 @@ struct TargetDurationPreference {
 
 @MainActor
 final class SettingsViewModel: ObservableObject {
-    @Published var autoPlayLatest: Bool
-    @Published var resumeLast: Bool
+    @Published var autoPlayNextEpisode: Bool {
+        didSet {
+            defaults.set(autoPlayNextEpisode, forKey: Self.autoPlayNextKey)
+        }
+    }
     @Published var playbackSpeed: Double {
         didSet {
             audioManager?.setPlaybackSpeed(playbackSpeed)
+            defaults.set(playbackSpeed, forKey: Self.playbackSpeedKey)
         }
     }
     @Published var entitlements: Entitlements?
@@ -57,6 +61,9 @@ final class SettingsViewModel: ObservableObject {
     private var targetPreference = TargetDurationPreference()
     private let scheduleService: ScheduleService
     private var hasLoadedSchedulesOnce: Bool
+    private static let playbackSpeedKey = "playbackSpeed"
+    private static let autoPlayNextKey = "autoPlayNextEpisode"
+    private static let legacyAutoPlayLatestKey = "autoPlayLatest"
 
     init(appViewModel: AppViewModel,
          audioManager: AudioPlayerManager,
@@ -65,10 +72,13 @@ final class SettingsViewModel: ObservableObject {
         self.appViewModel = appViewModel
         self.audioManager = audioManager
         self.scheduleService = appViewModel.scheduleService
-        let savedSpeed = defaults.double(forKey: "playbackSpeed")
+        let savedSpeed = defaults.double(forKey: Self.playbackSpeedKey)
         let initialSpeed = savedSpeed == 0 ? 1.0 : savedSpeed
-        autoPlayLatest = defaults.bool(forKey: "autoPlayLatest")
-        resumeLast = defaults.bool(forKey: "resumeLast")
+        let hasNewAutoPlayPreference = defaults.object(forKey: Self.autoPlayNextKey) != nil
+        let resolvedAutoPlay = hasNewAutoPlayPreference
+            ? defaults.bool(forKey: Self.autoPlayNextKey)
+            : defaults.bool(forKey: Self.legacyAutoPlayLatestKey)
+        autoPlayNextEpisode = resolvedAutoPlay
         targetDurationMinutes = targetPreference.value
         playbackSpeed = initialSpeed
         audioManager.setPlaybackSpeed(initialSpeed)
@@ -79,9 +89,8 @@ final class SettingsViewModel: ObservableObject {
     }
 
     func save() {
-        defaults.set(autoPlayLatest, forKey: "autoPlayLatest")
-        defaults.set(resumeLast, forKey: "resumeLast")
-        defaults.set(playbackSpeed, forKey: "playbackSpeed")
+        defaults.set(autoPlayNextEpisode, forKey: Self.autoPlayNextKey)
+        defaults.set(playbackSpeed, forKey: Self.playbackSpeedKey)
         defaults.set(targetDurationMinutes, forKey: "targetDurationMinutes")
     }
 

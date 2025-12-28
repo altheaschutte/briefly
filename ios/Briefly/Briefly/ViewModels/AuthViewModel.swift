@@ -75,6 +75,17 @@ final class AuthViewModel: ObservableObject {
         }
     }
 
+    func handleCodeChange(_ newValue: String) {
+        let digitsOnly = newValue.filter { $0.isNumber }
+        let trimmed = String(digitsOnly.prefix(6))
+        if trimmed != code {
+            code = trimmed
+            return
+        }
+        guard codeSent, trimmed.count == 6, isLoading == false else { return }
+        Task { await verifyCode() }
+    }
+
     private func validateEmail() -> Bool {
         guard email.contains("@") else {
             errorMessage = "Enter a valid email."
