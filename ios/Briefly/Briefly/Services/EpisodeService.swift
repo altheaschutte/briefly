@@ -80,7 +80,7 @@ final class EpisodeService: EpisodeProviding {
         try await apiClient.requestVoid(endpoint)
     }
 
-    private func fetchSignedAudioURL(for id: UUID) async -> URL? {
+    func fetchSignedAudioURL(for id: UUID) async -> URL? {
         let endpoint = APIEndpoint(path: "/episodes/\(id.uuidString)/audio", method: .get)
         struct Response: Decodable {
             let audioUrl: String?

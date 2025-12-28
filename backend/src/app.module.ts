@@ -14,6 +14,8 @@ import { BillingModule } from './billing/billing.module';
 import { HealthModule } from './health/health.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { AppController } from './app.controller';
+import { ProfilesModule } from './profiles/profiles.module';
+import { SchedulesModule } from './schedules/schedules.module';
 
 @Module({
   imports: [
@@ -31,6 +33,8 @@ import { AppController } from './app.controller';
     BillingModule,
     HealthModule,
     NotificationsModule,
+    ProfilesModule,
+    SchedulesModule,
   ],
   controllers: [AppController],
 })

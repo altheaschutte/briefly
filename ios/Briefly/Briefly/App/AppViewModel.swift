@@ -13,6 +13,9 @@ final class AppViewModel: ObservableObject {
     @Published var isCheckingProfile: Bool = false
     @Published var prefetchedTopics: [Topic]?
     @Published var prefetchedEpisodes: [Episode]?
+    @Published var prefetchedEntitlements: Entitlements?
+    @Published var prefetchedSchedules: [Schedule]?
+    @Published var isSeedingTopics: Bool = false
 
     let apiClient: APIClient
     let authManager: AuthManager
@@ -21,7 +24,13 @@ final class AppViewModel: ObservableObject {
     let entitlementsService: EntitlementsService
     let profileService: ProfileService
     let supabaseUserService: SupabaseUserService
-    let audioPlayer = AudioPlayerManager()
+    let scheduleService: ScheduleService
+    lazy var audioPlayer: AudioPlayerManager = {
+        AudioPlayerManager(audioURLProvider: { [weak self] episodeId in
+            guard let self else { return nil }
+            return await self.episodeService.fetchSignedAudioURL(for: episodeId)
+        })
+    }()
 
     private let keychain = KeychainStore()
     private let authLog = OSLog(subsystem: "com.briefly.app", category: "Auth")
@@ -47,6 +56,7 @@ final class AppViewModel: ObservableObject {
         self.supabaseUserService = SupabaseUserService(tokenProvider: { [weak authManager] in
             authManager?.currentToken?.accessToken
         })
+        self.scheduleService = ScheduleService(apiClient: apiClient)
 
         self.apiClient.unauthorizedHandler = { [weak self] in
             Task { @MainActor in
@@ -71,6 +81,8 @@ final class AppViewModel: ObservableObject {
             Task { await refreshUserAndProfile() }
             Task { await preloadTopics() }
             Task { await preloadEpisodes() }
+            Task { await preloadEntitlements() }
+            Task { await preloadSchedules() }
         }
         isBootstrapping = false
     }
@@ -87,8 +99,11 @@ final class AppViewModel: ObservableObject {
         }
         currentUserEmail = email
         await refreshUserAndProfile()
-        await preloadTopics()
-        await preloadEpisodes()
+        async let topics = preloadTopics()
+        async let episodes = preloadEpisodes()
+        async let entitlements = preloadEntitlements()
+        async let schedules = preloadSchedules()
+        _ = await (topics, episodes, entitlements, schedules)
         isAuthenticated = token.accessToken.isEmpty == false
         os_log("AppViewModel authenticated=%{public}@ for email: %{public}@", log: authLog, type: .info, isAuthenticated.description, email)
     }
@@ -101,8 +116,11 @@ final class AppViewModel: ObservableObject {
         }
         currentUserEmail = authManager.currentUserEmail
         await refreshUserAndProfile()
-        await preloadTopics()
-        await preloadEpisodes()
+        async let topics = preloadTopics()
+        async let episodes = preloadEpisodes()
+        async let entitlements = preloadEntitlements()
+        async let schedules = preloadSchedules()
+        _ = await (topics, episodes, entitlements, schedules)
         isAuthenticated = token.accessToken.isEmpty == false
         os_log("AppViewModel Google sign-in completed, authenticated=%{public}@ email=%{public}@",
                log: authLog,
@@ -123,6 +141,9 @@ final class AppViewModel: ObservableObject {
         isCheckingProfile = false
         prefetchedTopics = nil
         prefetchedEpisodes = nil
+        prefetchedEntitlements = nil
+        prefetchedSchedules = nil
+        isSeedingTopics = false
     }
 
     func markOnboardingComplete() {
@@ -140,8 +161,11 @@ final class AppViewModel: ObservableObject {
             currentUserEmail = user.email ?? currentUserEmail
             suggestedFirstName = user.suggestedFirstName
             let profile = try await profileService.fetchProfile(for: user.id)
-            hasCompletedOnboarding = profile != nil
-            UserDefaults.standard.set(hasCompletedOnboarding, forKey: "hasCompletedOnboarding")
+            let storedFlag = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+            let remoteFlag = (profile?.userAboutContext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+            let resolved = storedFlag || remoteFlag
+            hasCompletedOnboarding = isSeedingTopics ? false : resolved
+            UserDefaults.standard.set(resolved, forKey: "hasCompletedOnboarding")
         } catch {
             os_log("Fetching Supabase user/profile failed: %{public}@", log: authLog, type: .error, error.localizedDescription)
         }
@@ -150,6 +174,7 @@ final class AppViewModel: ObservableObject {
     func preloadTopics() async {
         do {
             let fetched = try await topicService.fetchTopics()
+            guard isSeedingTopics == false else { return }
             prefetchedTopics = fetched.sorted { $0.orderIndex < $1.orderIndex }
         } catch {
             os_log("Preloading topics failed: %{public}@", log: authLog, type: .error, error.localizedDescription)
@@ -162,6 +187,24 @@ final class AppViewModel: ObservableObject {
             prefetchedEpisodes = sortEpisodes(fetched)
         } catch {
             os_log("Preloading episodes failed: %{public}@", log: authLog, type: .error, error.localizedDescription)
+        }
+    }
+
+    func preloadEntitlements() async {
+        do {
+            let fetched = try await entitlementsService.fetchEntitlements()
+            prefetchedEntitlements = fetched
+        } catch {
+            os_log("Preloading entitlements failed: %{public}@", log: authLog, type: .error, error.localizedDescription)
+        }
+    }
+
+    func preloadSchedules() async {
+        do {
+            let fetched = try await scheduleService.listSchedules()
+            prefetchedSchedules = fetched.sorted { $0.localTimeMinutes < $1.localTimeMinutes }
+        } catch {
+            os_log("Preloading schedules failed: %{public}@", log: authLog, type: .error, error.localizedDescription)
         }
     }
 
@@ -178,5 +221,14 @@ final class AppViewModel: ObservableObject {
             unique.append(episode)
         }
         return unique
+    }
+
+    func seedTopics(from userAboutContext: String) async throws -> [Topic] {
+        isSeedingTopics = true
+        defer { isSeedingTopics = false }
+        let seeded = try await topicService.seedTopics(userAboutContext: userAboutContext)
+        let sorted = seeded.sorted { $0.orderIndex < $1.orderIndex }
+        prefetchedTopics = sorted
+        return sorted
     }
 }

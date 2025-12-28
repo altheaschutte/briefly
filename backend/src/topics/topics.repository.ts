@@ -15,6 +15,10 @@ export interface TopicListFilter {
 export interface TopicsRepository {
   listByUser(userId: string, filter?: TopicListFilter): Promise<Topic[]>;
   getById(userId: string, topicId: string): Promise<Topic | undefined>;
-  create(userId: string, originalText: string): Promise<Topic>;
+  create(
+    userId: string,
+    originalText: string,
+    options?: { isSeed?: boolean; isActive?: boolean },
+  ): Promise<Topic>;
   update(userId: string, topicId: string, updates: TopicUpdateInput): Promise<Topic | undefined>;
 }

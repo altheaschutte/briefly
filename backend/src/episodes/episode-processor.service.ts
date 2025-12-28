@@ -34,6 +34,7 @@ import { EpisodeSegmentsService } from './episode-segments.service';
 @Injectable()
 export class EpisodeProcessorService {
   private readonly logger = new Logger(EpisodeProcessorService.name);
+  private readonly segmentGapSeconds = 2;
 
   constructor(
     private readonly topicsService: TopicsService,
@@ -81,6 +82,7 @@ export class EpisodeProcessorService {
       const segments: EpisodeSegment[] = [];
       let cumulativeStartSeconds = 0;
       const { voiceA, voiceB } = getDefaultVoices(this.configService);
+      let previousSegmentTitle: string | null = null;
 
       for (const [index, topic] of topics.entries()) {
         stage = `topic:${index}:previous_queries`;
@@ -118,12 +120,17 @@ export class EpisodeProcessorService {
         const segmentSources = buildEpisodeSources(queryResults, episodeId, segmentId);
         const segmentContent = buildSegmentContent(topic.originalText, savedQueries);
         stage = `topic:${index}:segment_script`;
+        const instruction =
+          previousSegmentTitle !== null
+            ? `This continues immediately after the previous segment on "${previousSegmentTitle}".`
+            : undefined;
         let segmentDialogue = await this.llmService.generateSegmentScript(
           topic.originalText,
           segmentContent,
           segmentSources,
           topicIntent,
           perSegmentTargetMinutes,
+          instruction,
         );
         if (enhanceDialogueForVoiceTags) {
           try {
@@ -138,11 +145,11 @@ export class EpisodeProcessorService {
         const segmentScriptText = renderDialogueScript(segmentDialogue);
         stage = `topic:${index}:tts`;
         const segmentTtsResult = await this.ttsService.synthesize(segmentDialogue, { voiceA, voiceB });
-        const segmentAudioUrl = segmentTtsResult.storageKey ?? segmentTtsResult.audioUrl;
         const segmentDurationSeconds =
           segmentTtsResult.durationSeconds ?? estimateDurationSeconds(segmentScriptText);
         const segmentStartSeconds = cumulativeStartSeconds;
-        cumulativeStartSeconds += segmentDurationSeconds;
+        const gapPadding = index < topics.length - 1 ? this.segmentGapSeconds : 0;
+        cumulativeStartSeconds += segmentDurationSeconds + gapPadding;
 
         segments.push({
           id: segmentId,
@@ -154,10 +161,12 @@ export class EpisodeProcessorService {
           rawSources: segmentSources,
           script: segmentScriptText,
           dialogueScript: segmentDialogue,
-          audioUrl: segmentAudioUrl,
+          audioUrl: segmentTtsResult.storageKey ?? segmentTtsResult.audioUrl,
           startTimeSeconds: segmentStartSeconds,
           durationSeconds: segmentDurationSeconds,
         });
+
+        previousSegmentTitle = segmentTitle;
       }
 
       stage = 'persist_segments';
@@ -273,13 +282,24 @@ export class EpisodeProcessorService {
 
     const workingDir = await this.createWorkingDirectory();
     const concatEntries: string[] = [];
+    let silencePath: string | null = null;
 
     try {
       for (const [index, key] of audioKeys.entries()) {
         const buffer = await this.storageService.fetchAudioBuffer(key);
+        if (!silencePath && audioKeys.length > 1) {
+          const formatHint = await this.detectAudioFormat(buffer);
+          silencePath = await this.createSilenceFile(ffmpegPath, workingDir, {
+            durationSeconds: this.segmentGapSeconds,
+            ...formatHint,
+          });
+        }
         const partPath = path.join(workingDir, `part-${index}.mp3`);
         await fs.writeFile(partPath, buffer);
         concatEntries.push(`file '${partPath.replace(/'/g, "'\\''")}'`);
+        if (silencePath && index < audioKeys.length - 1) {
+          concatEntries.push(`file '${silencePath.replace(/'/g, "'\\''")}'`);
+        }
       }
 
       const listPath = path.join(workingDir, 'concat.txt');
@@ -295,6 +315,53 @@ export class EpisodeProcessorService {
       return { audioUrl: upload.url, storageKey: upload.key, durationSeconds };
     } finally {
       await fs.rm(workingDir, { recursive: true, force: true });
+    }
+  }
+
+  private async createSilenceFile(
+    ffmpegPath: string,
+    workingDir: string,
+    options?: { durationSeconds?: number; sampleRate?: number; channels?: number },
+  ): Promise<string> {
+    const durationSeconds =
+      options?.durationSeconds && options.durationSeconds > 0 ? options.durationSeconds : this.segmentGapSeconds;
+    const sampleRate =
+      options?.sampleRate && Number.isFinite(options.sampleRate) && options.sampleRate > 0
+        ? Math.round(options.sampleRate)
+        : 44100;
+    const channels = options?.channels === 1 ? 1 : 2;
+    const channelLayout = channels === 1 ? 'mono' : 'stereo';
+    const silencePath = path.join(workingDir, `silence-${durationSeconds}s.mp3`);
+    await this.runFfmpeg(ffmpegPath, [
+      '-y',
+      '-f',
+      'lavfi',
+      '-i',
+      `anullsrc=r=${sampleRate}:cl=${channelLayout}`,
+      '-t',
+      durationSeconds.toString(),
+      '-ac',
+      channels.toString(),
+      '-ar',
+      sampleRate.toString(),
+      '-q:a',
+      '9',
+      silencePath,
+    ]);
+    return silencePath;
+  }
+
+  private async detectAudioFormat(buffer: Buffer): Promise<{ sampleRate?: number; channels?: number }> {
+    try {
+      const metadata = await parseBuffer(buffer, 'audio/mpeg');
+      const sampleRate = metadata?.format?.sampleRate;
+      const channels = (metadata?.format as any)?.numberOfChannels ?? (metadata?.format as any)?.channels;
+      return { sampleRate, channels };
+    } catch (error) {
+      this.logger.warn(
+        `Failed to read segment audio format: ${error instanceof Error ? error.message : error}`,
+      );
+      return {};
     }
   }
 

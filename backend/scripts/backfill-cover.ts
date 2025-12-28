@@ -59,7 +59,7 @@ async function run() {
       }
       const prompt = await coverService.buildPrompt(episode.title, []);
       try {
-        logger.log(`Generating cover for episode ${episode.id}`);
+        logger.log(`Generating cover for episode ${episode.id} using provider ${coverService.getProvider()}`);
         const result = await coverService.generateCoverImage(args.userId, episode.id, prompt);
         await episodesService.updateEpisode(args.userId, episode.id, {
           coverImageUrl: result.imageUrl,

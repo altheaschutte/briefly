@@ -91,3 +91,52 @@ export interface EpisodeSource {
   url: string;
   type?: string;
 }
+
+export interface UserProfile {
+  id: string;
+  firstName: string;
+  intention: string;
+  userAboutContext: string;
+  timezone: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type ScheduleFrequency =
+  | 'daily'
+  | 'every_2_days'
+  | 'every_3_days'
+  | 'every_4_days'
+  | 'every_5_days'
+  | 'every_6_days'
+  | 'weekly';
+
+export type ScheduleRunStatus = 'queued' | 'success' | 'skipped' | 'failed';
+
+export interface EpisodeSchedule {
+  id: string;
+  userId: string;
+  frequency: ScheduleFrequency;
+  localTimeMinutes: number;
+  timezone: string;
+  isActive: boolean;
+  nextRunAt?: Date | null;
+  lastRunAt?: Date | null;
+  lastStatus?: ScheduleRunStatus | null;
+  lastError?: string | null;
+  targetDurationMinutes?: number | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ScheduleRun {
+  id: string;
+  scheduleId: string;
+  userId: string;
+  runAt: Date;
+  status: ScheduleRunStatus;
+  message?: string | null;
+  episodeId?: string | null;
+  durationSeconds?: number | null;
+  createdAt: Date;
+}

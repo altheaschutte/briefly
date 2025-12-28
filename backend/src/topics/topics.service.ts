@@ -2,23 +2,35 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from '@nes
 import { Topic } from '../domain/types';
 import { TOPICS_REPOSITORY, TopicListFilter, TopicsRepository } from './topics.repository';
 import { EntitlementsService } from '../billing/entitlements.service';
+import { LlmService } from '../llm/llm.service';
 
 @Injectable()
 export class TopicsService {
   constructor(
     @Inject(TOPICS_REPOSITORY) private readonly repository: TopicsRepository,
     private readonly entitlementsService: EntitlementsService,
+    private readonly llmService: LlmService,
   ) {}
 
   listTopics(userId: string, filter?: TopicListFilter): Promise<Topic[]> {
     return this.repository.listByUser(userId, filter);
   }
 
-  async createTopic(userId: string, originalText: string): Promise<Topic> {
-    const limit = await this.getActiveTopicLimit(userId);
-    const activeCount = await this.countActiveTopics(userId);
-    this.assertActiveTopicLimit(activeCount + 1, limit);
-    const topic = await this.repository.create(userId, originalText);
+  async createTopic(
+    userId: string,
+    originalText: string,
+    options?: { isSeed?: boolean; isActive?: boolean },
+  ): Promise<Topic> {
+    const willBeActive = options?.isActive ?? true;
+    if (willBeActive) {
+      const limit = await this.getActiveTopicLimit(userId);
+      const activeCount = await this.countActiveTopics(userId);
+      this.assertActiveTopicLimit(activeCount + 1, limit);
+    }
+    const topic = await this.repository.create(userId, originalText, {
+      isSeed: options?.isSeed ?? false,
+      isActive: options?.isActive ?? true,
+    });
     return topic;
   }
 
@@ -71,6 +83,46 @@ export class TopicsService {
     return updated;
   }
 
+  async generateSeedTopics(userId: string, userInsight: string): Promise<Topic[]> {
+    const trimmedInsight = (userInsight || '').trim();
+    if (!trimmedInsight) {
+      throw new BadRequestException('user_about_context is required');
+    }
+
+    const limit = await this.getActiveTopicLimit(userId);
+    const existing = await this.repository.listByUser(userId);
+    const activeCount = existing.filter((t) => t.isActive).length;
+    const availableSlots = Math.max(0, limit - activeCount);
+    if (!availableSlots) {
+      throw new BadRequestException(`You already have ${limit} active topics. Remove one to add more.`);
+    }
+
+    const suggestions = await this.llmService.generateSeedTopics(trimmedInsight);
+    const normalizedExisting = new Set(existing.map((t) => this.normalizeTopicText(t.originalText)));
+    const seen = new Set(normalizedExisting);
+    const deduped = suggestions
+      .map((suggestion) => suggestion.trim())
+      .filter(Boolean)
+      .map((suggestion) => suggestion.replace(/^["'\s]+|["'\s]+$/g, ''))
+      .filter((suggestion) => {
+        const normalized = this.normalizeTopicText(suggestion);
+        if (normalized.length <= 2 || seen.has(normalized)) {
+          return false;
+        }
+        seen.add(normalized);
+        return true;
+      });
+
+    const toCreate = deduped.slice(0, availableSlots);
+    const created: Topic[] = [];
+    for (const brief of toCreate) {
+      const topic = await this.createTopic(userId, brief, { isSeed: true, isActive: true });
+      created.push(topic);
+    }
+
+    return this.repository.listByUser(userId);
+  }
+
   private async getActiveTopicLimit(userId: string): Promise<number> {
     const entitlements = await this.entitlementsService.getEntitlements(userId);
     return entitlements.limits.maxActiveTopics;
@@ -85,5 +137,9 @@ export class TopicsService {
     if (nextActiveCount > limit) {
       throw new BadRequestException(`Your plan allows up to ${limit} active topics.`);
     }
+  }
+
+  private normalizeTopicText(text: string): string {
+    return (text || '').trim().replace(/\s+/g, ' ').toLowerCase();
   }
 }

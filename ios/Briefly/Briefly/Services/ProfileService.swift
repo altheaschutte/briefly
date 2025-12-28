@@ -18,7 +18,7 @@ final class ProfileService {
             method: .get,
             queryItems: [
                 URLQueryItem(name: "id", value: "eq.\(userId)"),
-                URLQueryItem(name: "select", value: "id,first_name,intention"),
+                URLQueryItem(name: "select", value: "id,first_name,intention,user_about_context,timezone"),
                 URLQueryItem(name: "limit", value: "1")
             ],
             headers: supabaseHeaders()

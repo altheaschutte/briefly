@@ -5,6 +5,7 @@ protocol TopicProviding {
     func createTopic(originalText: String) async throws -> Topic
     func updateTopic(_ topic: Topic) async throws -> Topic
     func deleteTopic(id: UUID) async throws
+    func seedTopics(userAboutContext: String) async throws -> [Topic]
 }
 
 final class TopicService: TopicProviding {
@@ -47,6 +48,18 @@ final class TopicService: TopicProviding {
     func deleteTopic(id: UUID) async throws {
         let endpoint = APIEndpoint(path: "/topics/\(id.uuidString)", method: .delete)
         try await apiClient.requestVoid(endpoint)
+    }
+
+    func seedTopics(userAboutContext: String) async throws -> [Topic] {
+        struct Payload: Encodable {
+            let user_about_context: String
+        }
+        let trimmed = userAboutContext.trimmingCharacters(in: .whitespacesAndNewlines)
+        let endpoint = APIEndpoint(path: "/topics/seed",
+                                   method: .post,
+                                   body: AnyEncodable(Payload(user_about_context: trimmed)))
+        let backendTopics: [BackendTopic] = try await apiClient.request(endpoint)
+        return backendTopics.map { $0.toTopic() }
     }
 }
 

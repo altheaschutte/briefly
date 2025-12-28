@@ -19,8 +19,9 @@ export class LlmService implements LlmProvider {
     sources: EpisodeSource[],
     intent: TopicIntent,
     targetDurationMinutes?: number,
+    instruction?: string,
   ): Promise<SegmentDialogueScript> {
-    return this.provider.generateSegmentScript(title, findings, sources, intent, targetDurationMinutes);
+    return this.provider.generateSegmentScript(title, findings, sources, intent, targetDurationMinutes, instruction);
   }
 
   generateEpisodeMetadata(script: string, segments: EpisodeSegment[]): Promise<EpisodeMetadata> {
@@ -29,6 +30,10 @@ export class LlmService implements LlmProvider {
 
   generateCoverMotif(title: string, topics?: string[]): Promise<string> {
     return this.provider.generateCoverMotif(title, topics);
+  }
+
+  generateSeedTopics(userInsight: string): Promise<string[]> {
+    return this.provider.generateSeedTopics(userInsight);
   }
 
   enhanceSegmentDialogueForElevenV3(script: SegmentDialogueScript): Promise<SegmentDialogueScript> {

@@ -74,7 +74,11 @@ export class SupabaseTopicsRepository implements TopicsRepository {
     return this.mapRow(data as TopicRow);
   }
 
-  async create(userId: string, originalText: string): Promise<Topic> {
+  async create(
+    userId: string,
+    originalText: string,
+    options?: { isSeed?: boolean; isActive?: boolean },
+  ): Promise<Topic> {
     const now = new Date().toISOString();
     const nextOrderIndex = await this.getNextOrderIndex(userId);
     const payload: TopicRow = {
@@ -82,8 +86,8 @@ export class SupabaseTopicsRepository implements TopicsRepository {
       user_id: userId,
       original_text: originalText,
       order_index: nextOrderIndex,
-      is_active: true,
-      is_seed: false,
+      is_active: options?.isActive ?? true,
+      is_seed: options?.isSeed ?? false,
       created_at: now,
       updated_at: now,
     };

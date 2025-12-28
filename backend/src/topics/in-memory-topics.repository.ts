@@ -20,7 +20,11 @@ export class InMemoryTopicsRepository implements TopicsRepository {
     return this.store.getTopics(userId).find((t) => t.id === topicId);
   }
 
-  async create(userId: string, originalText: string): Promise<Topic> {
+  async create(
+    userId: string,
+    originalText: string,
+    options?: { isSeed?: boolean; isActive?: boolean },
+  ): Promise<Topic> {
     const now = new Date();
     const existing = await this.listByUser(userId);
     const nextOrder = existing.length ? Math.max(...existing.map((t) => t.orderIndex)) + 1 : 0;
@@ -29,8 +33,8 @@ export class InMemoryTopicsRepository implements TopicsRepository {
       userId,
       originalText,
       orderIndex: nextOrder,
-      isActive: true,
-      isSeed: false,
+      isActive: options?.isActive ?? true,
+      isSeed: options?.isSeed ?? false,
       createdAt: now,
       updatedAt: now,
     };

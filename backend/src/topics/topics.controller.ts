@@ -58,6 +58,12 @@ export class TopicsController {
     return this.topicsService.createTopic(userId, originalText);
   }
 
+  @Post('seed')
+  async seedTopics(@Req() req: Request, @Body('user_about_context') userAboutContext: string) {
+    const userId = (req as any).user?.id as string;
+    return this.topicsService.generateSeedTopics(userId, userAboutContext);
+  }
+
   @Patch(':id')
   async updateTopic(
     @Req() req: Request,

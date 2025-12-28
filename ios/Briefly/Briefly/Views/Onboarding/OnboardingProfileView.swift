@@ -14,6 +14,7 @@ struct OnboardingProfileView: View {
             VStack(alignment: .leading, spacing: 24) {
                 header
                 nameField
+                aboutField
                 intentionsGrid
                 if showsOtherField {
                     otherField
@@ -38,6 +39,11 @@ struct OnboardingProfileView: View {
                 viewModel.applySuggestedName(name)
             }
         }
+        .overlay {
+            if appViewModel.isSeedingTopics {
+                PersonalizationLoadingView()
+            }
+        }
     }
 
     private var header: some View {
@@ -49,8 +55,7 @@ struct OnboardingProfileView: View {
             Text("Tell us about you")
                 .font(.largeTitle.weight(.bold))
                 .foregroundColor(.white)
-            Text("We use this once to tune your Briefly experience.")
-                .foregroundColor(.brieflyTextMuted)
+         
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -63,6 +68,22 @@ struct OnboardingProfileView: View {
             TextField("", text: $viewModel.firstName)
                 .textContentType(.givenName)
                 .submitLabel(.done)
+                .inputFieldStyle()
+                .foregroundColor(.white)
+        }
+    }
+
+    private var aboutField: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Tell me about yourself")
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(.white)
+            Text("What do you want to know about?")
+            .font(.subheadline)
+            .foregroundColor(.brieflyTextMuted)
+            TextEditor(text: $viewModel.aboutContext)
+                .frame(minHeight: 140)
+                .scrollContentBackground(.hidden)
                 .inputFieldStyle()
                 .foregroundColor(.white)
         }
@@ -160,6 +181,6 @@ struct OnboardingProfileView: View {
             .cornerRadius(14)
         }
         .buttonStyle(.plain)
-        .disabled(viewModel.isSaving)
+        .disabled(viewModel.isSaving || appViewModel.isSeedingTopics)
     }
 }

@@ -10,38 +10,56 @@ export class CoverImageService {
   private readonly logger = new Logger(CoverImageService.name);
   private client: OpenAI | null = null;
   private readonly fallbackMotifs = ['interlocking waves', 'orbiting rings'];
+  private readonly provider: ProviderName;
+  private readonly apiKeyConfigKeys: string[];
+  private readonly baseUrlConfigKeys: string[];
+  private readonly modelConfigKeys: string[];
 
   constructor(
     private readonly configService: ConfigService,
     private readonly storageService: StorageService,
     private readonly llmService: LlmService,
-  ) {}
+  ) {
+    this.provider = resolveImageProvider(configService.get<string>('COVER_IMAGE_PROVIDER') ?? 'openai');
+    this.apiKeyConfigKeys =
+      this.provider === 'openai'
+        ? ['COVER_IMAGE_OPENAI_API_KEY', 'OPENAI_API_KEY']
+        : ['COVER_IMAGE_XAI_API_KEY', 'XAI_API_KEY'];
+    this.baseUrlConfigKeys =
+      this.provider === 'openai'
+        ? ['COVER_IMAGE_OPENAI_BASE_URL', 'OPENAI_BASE_URL']
+        : ['COVER_IMAGE_XAI_BASE_URL', 'XAI_BASE_URL'];
+    this.modelConfigKeys =
+      this.provider === 'openai'
+        ? ['COVER_IMAGE_OPENAI_MODEL', 'COVER_IMAGE_MODEL', 'OPENAI_IMAGE_MODEL']
+        : ['COVER_IMAGE_XAI_MODEL', 'COVER_IMAGE_MODEL', 'XAI_IMAGE_MODEL'];
+  }
 
   async buildPrompt(title?: string, segments: EpisodeSegment[] = []): Promise<string> {
     const STYLE =
-      'Premium podcast cover art. Modern editorial illustration. ' +
-      'Soft matte finish, subtle paper/gouache texture, pastel tones, clean shapes. ' +
-      'Favor softened takes on the Briefly palette (midnight #132a3b, slate #1f3a4e, apricot #ffa563, teals #2a7997/#37a8ae/#93c8c2) blended with complementary hues for variety. ' +
-      'Minimalist, calm, contemporary. ' +
-      'No text, no logos, no watermarks. Avoid photorealism. ';
+      'Modern editorial podcast cover. Matte texture, pastel palette, clean flat shapes. ' +
+      'Briefly colors (midnight #132a3b, slate #1f3a4e, apricot #ffa563, teals #2a7997/#37a8ae/#93c8c2). ' +
+      'Minimal, calm. Full-bleed; no borders or drop shadows. No text/logos/watermarks. Avoid photorealism. ';
 
     const hero = this.pickHeroSegment(segments);
     const heroText = [title, hero?.title].filter(Boolean).join(' — ');
     const visualStyle = this.motifFromText(heroText || title || '');
     const motif = await this.buildMotif(title, segments);
     const motifLine =
-      `Main line motif: Minimal abstract poster; single continuous line forming ${motif}; ` +
-      'geometric backdrop; subtle texture; 3–5 colors; no text/letters/faces. ';
+      `Motif: single-line drawing of ${motif}; simple geom backdrop; subtle texture; 3–5 colors; no text/faces. `;
 
     const prompt =
       STYLE +
       motifLine +
       `Color palette: ${visualStyle.palette}. ` +
       `Composition: ${visualStyle.composition}. ` +
-      'Keep it stylized, flat shapes, gentle gradients, subtle texture. ' +
-      'High quality, cohesive, not busy.';
+      'Stylized, flat shapes, gentle gradients, subtle texture. Cohesive, not busy.';
 
     return prompt.trim();
+  }
+
+  getProvider(): ProviderName {
+    return this.provider;
   }
 
   async generateCoverImage(
@@ -50,13 +68,19 @@ export class CoverImageService {
     prompt: string,
   ): Promise<{ imageUrl: string; storageKey: string }> {
     const client = this.getClient();
-    const model = this.configService.get<string>('OPENAI_IMAGE_MODEL') || 'gpt-image-1';
-    const response = await client.images.generate({
+    const model =
+      this.getFirstConfigValue(this.modelConfigKeys) ||
+      (this.provider === 'xai' ? 'grok-image-1' : 'gpt-image-1');
+    const request: Parameters<OpenAI['images']['generate']>[0] = {
       model,
       prompt,
       n: 1,
-      size: '1024x1024',
-    });
+    };
+    // xAI image generation does not support the OpenAI-style size parameter
+    if (this.provider !== 'xai') {
+      request.size = '1024x1024';
+    }
+    const response = await client.images.generate(request);
     const first = response.data?.[0] as any;
     const imageBase64: string | undefined = first?.b64_json || first?.b64Json;
     if (!imageBase64) {
@@ -70,16 +94,32 @@ export class CoverImageService {
 
   private getClient(): OpenAI {
     if (!this.client) {
-      const apiKey = this.configService.get<string>('OPENAI_API_KEY');
+      const apiKey = this.getFirstConfigValue(this.apiKeyConfigKeys);
       if (!apiKey) {
-        throw new Error('OPENAI_API_KEY must be set for cover image generation');
+        throw new Error(`${this.apiKeyConfigKeys[0]} must be set for cover image generation`);
       }
       this.client = new OpenAI({
         apiKey,
-        baseURL: this.configService.get<string>('OPENAI_BASE_URL') || undefined,
+        baseURL: this.getFirstConfigValue(this.baseUrlConfigKeys) || undefined,
       });
     }
     return this.client;
+  }
+
+  private getFirstConfigValue(keys: string[]): string | undefined {
+    for (const key of keys) {
+      const value = this.configService.get<string>(key);
+      if (!value) {
+        continue;
+      }
+      const trimmed = value.trim();
+      // Skip unresolved placeholders like ${XAI_API_KEY}
+      if (/^\$\{[^}]+\}$/.test(trimmed)) {
+        continue;
+      }
+      return trimmed;
+    }
+    return undefined;
   }
 
   private async buildMotif(title?: string, segments: EpisodeSegment[] = []): Promise<string> {
@@ -286,4 +326,17 @@ if (t.match(/learn|education|explain|how to|guide|lesson|history/)) {
       "asymmetrical layout with one dominant shape and supporting secondary forms",
 };
   }
+}
+
+type ProviderName = 'openai' | 'xai';
+
+function resolveImageProvider(raw: string): ProviderName {
+  const normalized = (raw || '').toLowerCase();
+  if (normalized === 'openai') {
+    return 'openai';
+  }
+  if (normalized === 'xai' || normalized === 'grok') {
+    return 'xai';
+  }
+  throw new Error(`Unsupported cover image provider: ${raw}`);
 }

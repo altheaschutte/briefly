@@ -5,24 +5,64 @@ import UserNotifications
 import UIKit
 #endif
 
+private struct NotificationPreference {
+    private let storageKey = "notifications_enabled_preference"
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    var value: Bool {
+        get {
+            guard defaults.object(forKey: storageKey) != nil else { return true }
+            return defaults.bool(forKey: storageKey)
+        }
+        set {
+            defaults.set(newValue, forKey: storageKey)
+        }
+    }
+}
+
 @MainActor
 final class PushNotificationManager: NSObject, ObservableObject {
     private let notificationService: NotificationService
     private let log = OSLog(subsystem: "com.briefly.app", category: "Push")
     private let storedTokenKey = "push_device_token"
+    private var notificationPreference = NotificationPreference()
+
+    var userPreferenceAllowsNotifications: Bool {
+        get { notificationPreference.value }
+        set { notificationPreference.value = newValue }
+    }
 
     init(notificationService: NotificationService) {
         self.notificationService = notificationService
     }
 
     func registerForPushNotifications() async {
+        guard userPreferenceAllowsNotifications else {
+            os_log("Push registration skipped; user disabled notifications in settings", log: log, type: .info)
+            return
+        }
+
         let center = UNUserNotificationCenter.current()
         let settings = await center.notificationSettings()
 
+        let needsAuthorizationRequest: Bool
         switch settings.authorizationStatus {
-        case .notDetermined:
+        case .authorized, .provisional, .ephemeral:
+            needsAuthorizationRequest = false
+        case .notDetermined, .denied:
+            needsAuthorizationRequest = true
+        @unknown default:
+            needsAuthorizationRequest = true
+        }
+
+        if needsAuthorizationRequest {
             do {
                 let granted = try await center.requestAuthorization(options: [.alert, .badge, .sound])
+                userPreferenceAllowsNotifications = granted
                 guard granted else {
                     os_log("Push permission not granted", log: log, type: .info)
                     return
@@ -31,15 +71,30 @@ final class PushNotificationManager: NSObject, ObservableObject {
                 os_log("Push permission request failed: %{public}@", log: log, type: .error, error.localizedDescription)
                 return
             }
-        case .denied:
-            os_log("Push permission denied", log: log, type: .info)
-            return
-        default:
-            break
+        } else {
+            userPreferenceAllowsNotifications = true
         }
 
         #if os(iOS)
         UIApplication.shared.registerForRemoteNotifications()
+        #endif
+    }
+
+    func isSystemAuthorizedForPush() async -> Bool {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        switch settings.authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            return true
+        default:
+            return false
+        }
+    }
+
+    func disablePushNotifications() async {
+        userPreferenceAllowsNotifications = false
+        await unregisterCurrentDevice()
+        #if os(iOS)
+        UIApplication.shared.unregisterForRemoteNotifications()
         #endif
     }
 
@@ -54,6 +109,7 @@ final class PushNotificationManager: NSObject, ObservableObject {
     }
 
     func didRegisterForRemoteNotifications(deviceToken: Data) {
+        guard userPreferenceAllowsNotifications else { return }
         let token = deviceToken.map { String(format: "%02x", $0) }.joined()
         Task { await registerDeviceTokenWithBackend(token) }
     }
@@ -64,6 +120,7 @@ final class PushNotificationManager: NSObject, ObservableObject {
 
     func registerDeviceTokenWithBackend(_ token: String) async {
         guard token.isEmpty == false else { return }
+        guard userPreferenceAllowsNotifications else { return }
         do {
             try await notificationService.registerDevice(token: token, platform: "ios")
             storedToken = token

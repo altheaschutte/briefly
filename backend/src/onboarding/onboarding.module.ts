@@ -3,6 +3,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { InMemoryStoreService } from '../common/in-memory-store.service';
 import { LlmModule } from '../llm/llm.module';
 import { TopicsModule } from '../topics/topics.module';
+import { ProfilesModule } from '../profiles/profiles.module';
+import { SchedulesModule } from '../schedules/schedules.module';
 import { InMemoryOnboardingRepository } from './in-memory-onboarding.repository';
 import { OnboardingController } from './onboarding.controller';
 import { OnboardingService } from './onboarding.service';
@@ -34,7 +36,7 @@ const repositoryProvider: Provider = {
 };
 
 @Module({
-  imports: [ConfigModule, TopicsModule, LlmModule],
+  imports: [ConfigModule, TopicsModule, LlmModule, ProfilesModule, SchedulesModule],
   controllers: [OnboardingController],
   providers: [OnboardingService, TranscriptionService, repositoryProvider],
   exports: [OnboardingService],

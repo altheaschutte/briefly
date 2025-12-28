@@ -10,28 +10,66 @@ final class AudioPlayerManager: NSObject, ObservableObject {
 
     private var player: AVPlayer?
     private var timeObserver: Any?
+    private var statusObserver: NSKeyValueObservation?
     private var playbackSpeed: Double = 1.0
+    private var didRetryPlayback: Bool = false
+    private let audioURLProvider: ((UUID) async -> URL?)?
 
-    override init() {
+    init(audioURLProvider: ((UUID) async -> URL?)? = nil) {
+        self.audioURLProvider = audioURLProvider
         super.init()
         configureSession()
     }
 
     func play(episode: Episode, from startTime: Double? = nil) {
-        guard let url = episode.audioURL else { return }
-        let startSeconds = max(startTime ?? 0, 0)
+        Task { [weak self] in
+            await self?.preparePlayback(episode: episode, startTime: startTime)
+        }
+    }
 
+    @MainActor
+    private func preparePlayback(episode: Episode, startTime: Double?) async {
+        var resolvedEpisode = episode
+        if resolvedEpisode.audioURL == nil, let urlProvider = audioURLProvider {
+            if let refreshed = await urlProvider(episode.id) {
+                resolvedEpisode.audioURL = refreshed
+            }
+        }
+
+        guard let url = resolvedEpisode.audioURL else {
+            isPlaying = false
+            return
+        }
+
+        let startSeconds = max(startTime ?? 0, 0)
+        startPlayback(episode: resolvedEpisode, url: url, startSeconds: startSeconds)
+    }
+
+    @MainActor
+    private func startPlayback(episode: Episode, url: URL, startSeconds: Double) {
         // Stop observing the previous player before swapping in a new instance.
-        let needsNewPlayer = currentEpisode?.id != episode.id || player == nil
+        let needsNewPlayer = currentEpisode?.id != episode.id ||
+            player == nil ||
+            currentEpisode?.audioURL != episode.audioURL
         if needsNewPlayer {
             removeTimeObserverIfNeeded()
+            removeStatusObserverIfNeeded()
             player?.pause()
 
             currentEpisode = episode
-            let newPlayer = AVPlayer(url: url)
+            let item = AVPlayerItem(url: url)
+            let newPlayer = AVPlayer(playerItem: item)
             player = newPlayer
+            didRetryPlayback = false
+            addStatusObserver(for: item, episode: episode, startSeconds: startSeconds)
             addTimeObserver()
-            durationSeconds = episode.durationSeconds ?? newPlayer.currentItem?.asset.duration.seconds ?? 0
+            if let duration = episode.durationSeconds, duration.isFinite {
+                durationSeconds = duration
+            } else if let assetDuration = newPlayer.currentItem?.asset.duration.seconds, assetDuration.isFinite {
+                durationSeconds = assetDuration
+            } else {
+                durationSeconds = 0
+            }
             progress = 0
             currentTimeSeconds = 0
         } else {
@@ -116,9 +154,45 @@ final class AudioPlayerManager: NSObject, ObservableObject {
         }
     }
 
+    private func addStatusObserver(for item: AVPlayerItem, episode: Episode, startSeconds: Double) {
+        removeStatusObserverIfNeeded()
+        statusObserver = item.observe(\.status, options: [.new]) { [weak self] observedItem, _ in
+            guard let self else { return }
+            if observedItem.status == .failed {
+                Task {
+                    await self.retryPlayback(for: episode, startSeconds: startSeconds)
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func retryPlayback(for episode: Episode, startSeconds: Double) async {
+        guard didRetryPlayback == false, let urlProvider = audioURLProvider else {
+            isPlaying = false
+            return
+        }
+        didRetryPlayback = true
+
+        if let refreshed = await urlProvider(episode.id) {
+            var refreshedEpisode = episode
+            refreshedEpisode.audioURL = refreshed
+            startPlayback(episode: refreshedEpisode, url: refreshed, startSeconds: startSeconds)
+        } else {
+            isPlaying = false
+        }
+    }
+
+    private func removeStatusObserverIfNeeded() {
+        statusObserver?.invalidate()
+        statusObserver = nil
+    }
+
     private func configureSession() {
         do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, options: [.interruptSpokenAudioAndMixWithOthers])
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.playback, mode: .spokenAudio, options: [.interruptSpokenAudioAndMixWithOthers])
+            try session.setActive(true, options: [])
         } catch {
             print("Failed to set audio session: \(error)")
         }
@@ -145,5 +219,6 @@ final class AudioPlayerManager: NSObject, ObservableObject {
 
     deinit {
         removeTimeObserverIfNeeded()
+        removeStatusObserverIfNeeded()
     }
 }

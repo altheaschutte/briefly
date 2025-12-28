@@ -63,6 +63,8 @@ struct AppRootView: View {
             Group {
                 if appViewModel.isAuthenticated == false {
                     AuthFlowView(appViewModel: appViewModel)
+                } else if appViewModel.isSeedingTopics {
+                    PersonalizationLoadingView()
                 } else if appViewModel.hasCompletedOnboarding == false {
                     OnboardingProfileView(appViewModel: appViewModel)
                 } else {

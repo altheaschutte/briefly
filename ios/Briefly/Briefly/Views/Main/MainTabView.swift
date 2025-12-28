@@ -28,8 +28,14 @@ struct MainTabView: View {
                 initialTopics: appViewModel.prefetchedTopics ?? []
             )
         )
-        _settingsViewModel = StateObject(wrappedValue: SettingsViewModel(appViewModel: appViewModel,
-                                                                         audioManager: appViewModel.audioPlayer))
+        _settingsViewModel = StateObject(
+            wrappedValue: SettingsViewModel(
+                appViewModel: appViewModel,
+                audioManager: appViewModel.audioPlayer,
+                initialEntitlements: appViewModel.prefetchedEntitlements,
+                initialSchedules: appViewModel.prefetchedSchedules ?? []
+            )
+        )
         _selection = State(initialValue: MainTabView.defaultTab(prefetchedEpisodes: appViewModel.prefetchedEpisodes))
         _hasEvaluatedInitialLanding = State(initialValue: appViewModel.prefetchedEpisodes != nil)
     }

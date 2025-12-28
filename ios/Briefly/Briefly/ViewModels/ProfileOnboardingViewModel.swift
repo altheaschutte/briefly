@@ -12,6 +12,7 @@ final class ProfileOnboardingViewModel: ObservableObject {
     @Published var firstName: String
     @Published var selectedIntentions: Set<String> = []
     @Published var otherIntention: String = ""
+    @Published var aboutContext: String = ""
     @Published var isSaving: Bool = false
     @Published var errorMessage: String?
 
@@ -50,10 +51,12 @@ final class ProfileOnboardingViewModel: ObservableObject {
 
     private let profileService: ProfileService
     private let appViewModel: AppViewModel
+    private let scheduleService: ScheduleService
 
     init(appViewModel: AppViewModel, initialFirstName: String? = nil) {
         self.appViewModel = appViewModel
         self.profileService = appViewModel.profileService
+        self.scheduleService = appViewModel.scheduleService
         self.firstName = initialFirstName ?? ""
     }
 
@@ -87,6 +90,11 @@ final class ProfileOnboardingViewModel: ObservableObject {
             errorMessage = "Tell us more about your intention."
             return
         }
+        let trimmedAbout = aboutContext.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmedAbout.isEmpty == false else {
+            errorMessage = "Tell us a bit about yourself so we can personalize topics."
+            return
+        }
         let userId: String
         if let cached = appViewModel.currentUserId {
             userId = cached
@@ -103,9 +111,17 @@ final class ProfileOnboardingViewModel: ObservableObject {
             let profile = UserProfile(
                 id: userId,
                 firstName: trimmedName,
-                intention: resolvedIntentions().joined(separator: ", ")
+                intention: resolvedIntentions().joined(separator: ", "),
+                userAboutContext: trimmedAbout,
+                timezone: TimeZone.current.identifier
             )
             _ = try await profileService.upsertProfile(profile)
+            _ = try await appViewModel.seedTopics(from: trimmedAbout)
+            try? await scheduleService.completeOnboarding(
+                timezone: TimeZone.current.identifier,
+                localTimeMinutes: 7 * 60,
+                frequency: .daily
+            )
             appViewModel.markOnboardingComplete()
         } catch {
             errorMessage = error.localizedDescription

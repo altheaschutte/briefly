@@ -6,6 +6,20 @@ import { EpisodeMetadata, LlmProvider } from './llm.provider';
 import { EpisodeSegment, EpisodeSource } from '../domain/types';
 import { DialogueTurn, SegmentDialogueScript, TopicIntent, TopicQueryPlan } from './llm.types';
 
+export interface OpenAiLlmProviderOptions {
+  apiKeyConfigKey?: string;
+  apiKeyConfigKeys?: string[];
+  baseUrlConfigKey?: string;
+  baseUrlConfigKeys?: string[];
+  defaultBaseUrl?: string;
+  defaultQueryModel?: string;
+  defaultScriptModel?: string;
+  defaultExtractionModel?: string;
+  rewriteModelConfigKeys?: string[];
+  scriptModelConfigKeys?: string[];
+  extractionModelConfigKeys?: string[];
+}
+
 @Injectable()
 export class OpenAiLlmProvider implements LlmProvider {
   private client: OpenAI | null = null;
@@ -13,11 +27,36 @@ export class OpenAiLlmProvider implements LlmProvider {
   private readonly scriptModel: string;
   private readonly transcriptExtractionModel: string;
 
-  constructor(private readonly configService: ConfigService) {
-    this.queryModel = this.configService.get<string>('LLM_PROVIDER_REWRITE_MODEL') ?? 'gpt-4.1';
-    this.scriptModel = this.configService.get<string>('LLM_PROVIDER_SCRIPT_MODEL') ?? 'gpt-4.1';
+  private readonly apiKeyConfigKeys: string[];
+  private readonly baseUrlConfigKeys: string[];
+  private readonly defaultBaseUrl?: string;
+  private readonly rewriteModelConfigKeys: string[];
+  private readonly scriptModelConfigKeys: string[];
+  private readonly extractionModelConfigKeys: string[];
+
+  constructor(private readonly configService: ConfigService, options: OpenAiLlmProviderOptions = {}) {
+    this.apiKeyConfigKeys = this.normalizeKeys(options.apiKeyConfigKeys, options.apiKeyConfigKey, 'OPENAI_API_KEY');
+    this.baseUrlConfigKeys = this.normalizeKeys(options.baseUrlConfigKeys, options.baseUrlConfigKey, 'OPENAI_BASE_URL');
+    this.rewriteModelConfigKeys = this.normalizeKeys(
+      options.rewriteModelConfigKeys,
+      undefined,
+      'LLM_PROVIDER_REWRITE_MODEL',
+    );
+    this.scriptModelConfigKeys = this.normalizeKeys(
+      options.scriptModelConfigKeys,
+      undefined,
+      'LLM_PROVIDER_SCRIPT_MODEL',
+    );
+    this.extractionModelConfigKeys = this.normalizeKeys(
+      options.extractionModelConfigKeys,
+      undefined,
+      'LLM_PROVIDER_EXTRACTION_MODEL',
+    );
+    this.defaultBaseUrl = options.defaultBaseUrl;
+    this.queryModel = this.getFirstConfigValue(this.rewriteModelConfigKeys) ?? options.defaultQueryModel ?? 'gpt-4.1';
+    this.scriptModel = this.getFirstConfigValue(this.scriptModelConfigKeys) ?? options.defaultScriptModel ?? 'gpt-4.1';
     this.transcriptExtractionModel =
-      this.configService.get<string>('LLM_PROVIDER_EXTRACTION_MODEL') ?? this.queryModel;
+      this.getFirstConfigValue(this.extractionModelConfigKeys) ?? options.defaultExtractionModel ?? this.queryModel;
   }
 
   async generateTopicQueries(topic: string, previousQueries: string[]): Promise<TopicQueryPlan> {
@@ -104,6 +143,45 @@ ${historyBlock}`,
     return topics;
   }
 
+  async generateSeedTopics(userInsight: string): Promise<string[]> {
+    const client = this.getClient();
+    const response = await client.chat.completions.create({
+      model: this.queryModel,
+      temperature: 0.55,
+      max_tokens: 320,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content: `You craft 5 personalized topic prompts for a daily AI audio briefing app called Briefly.
+
+Rules:
+- Use the user's self-description to naturally personalize when relevant.
+- If the user lists multiple interests (commas, "and", or new lines), treat them as distinct; spread topics across different interests instead of merging them into one combined prompt.
+- Each topic must be under 18 words.
+- Start with an action verb: Tell me, Update me, Share, Highlight, Reveal, Dive into, Alert me to, Explore, Uncover.
+- Keep them specific, timely (2025 energy), and curiosity-driven—breakthroughs, hopeful trends, surprising progress.
+- Avoid combining unrelated interests in one topic; keep each topic focused and crisp.
+- Avoid generic headlines or vague phrasing. No numbering or explanations.
+- Output strictly as JSON: {"topics":["topic 1","topic 2","topic 3","topic 4","topic 5"]}.`,
+        },
+        {
+          role: 'user',
+          content: `User insight: ${userInsight?.trim() || 'None provided'}`,
+        },
+      ] satisfies ChatCompletionMessageParam[],
+    });
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error('OpenAI returned empty content for seed topics');
+    }
+    const topics = this.parseList(content).slice(0, 5);
+    if (!topics.length) {
+      throw new Error('OpenAI did not return any seed topics');
+    }
+    return topics;
+  }
+
   async generateCoverMotif(title: string, topics: string[] = []): Promise<string> {
     const client = this.getClient();
     const topicHints = (topics || [])
@@ -161,6 +239,7 @@ Describe the motif only.`,
     sources: EpisodeSource[],
     intent: TopicIntent,
     targetDurationMinutes?: number,
+    instruction?: string,
   ): Promise<SegmentDialogueScript> {
     const client = this.getClient();
     const durationLabel = targetDurationMinutes ? `${targetDurationMinutes}-minute` : 'about 2 minute';
@@ -169,6 +248,9 @@ Describe the motif only.`,
         .filter((s) => Boolean(s))
         .map((s: EpisodeSource) => `- ${s.sourceTitle || s.url || 'source'} (${s.url || 'unknown'})`)
         .join('\n') || '- None provided';
+    const instructionLine = instruction?.trim()
+      ? `\nInstruction (follow strictly): ${instruction.trim()}`
+      : '';
     const messages = [
       {
         role: 'system',
@@ -214,7 +296,7 @@ Findings (must-use facts):
 ${findings}
 
 Sources (for context only):
-${sourceList}`,
+${sourceList}${instructionLine}`,
       },
     ] satisfies ChatCompletionMessageParam[];
 
@@ -355,16 +437,41 @@ SHOW NOTES RULES
 
   private getClient(): OpenAI {
     if (!this.client) {
-      const apiKey = this.configService.get<string>('OPENAI_API_KEY');
+      const apiKey = this.getFirstConfigValue(this.apiKeyConfigKeys);
       if (!apiKey) {
-        throw new Error('OPENAI_API_KEY must be set for OpenAI provider');
+        throw new Error(`${this.apiKeyConfigKeys[0]} must be set for LLM provider`);
       }
+      const baseURL = this.getFirstConfigValue(this.baseUrlConfigKeys) ?? this.defaultBaseUrl;
       this.client = new OpenAI({
         apiKey,
-        baseURL: this.configService.get<string>('OPENAI_BASE_URL') || undefined,
+        baseURL: baseURL || undefined,
       });
     }
     return this.client;
+  }
+
+  private normalizeKeys(primaryList: string[] | undefined, singleKey: string | undefined, fallback: string) {
+    const keys = [...(primaryList || [])];
+    if (singleKey) {
+      keys.push(singleKey);
+    }
+    keys.push(fallback);
+    return Array.from(new Set(keys)).filter(Boolean);
+  }
+
+  private getFirstConfigValue(keys: string[]): string | undefined {
+    for (const key of keys) {
+      const value = this.configService.get<string>(key);
+      if (!value) {
+        continue;
+      }
+      const trimmed = value.trim();
+      if (/^\$\{[^}]+\}$/.test(trimmed)) {
+        continue;
+      }
+      return trimmed;
+    }
+    return undefined;
   }
 
   private collectSources(segments: EpisodeSegment[]): string {

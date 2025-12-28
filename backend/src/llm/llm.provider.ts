@@ -15,9 +15,11 @@ export interface LlmProvider {
     sources: EpisodeSource[],
     intent: TopicIntent,
     targetDurationMinutes?: number,
+    instruction?: string,
   ): Promise<SegmentDialogueScript>;
   generateCoverMotif(title: string, topics?: string[]): Promise<string>;
   enhanceSegmentDialogueForElevenV3(script: SegmentDialogueScript): Promise<SegmentDialogueScript>;
   generateEpisodeMetadata(script: string, segments: EpisodeSegment[]): Promise<EpisodeMetadata>;
   extractTopicBriefs(transcript: string): Promise<string[]>;
+  generateSeedTopics(userInsight: string): Promise<string[]>;
 }

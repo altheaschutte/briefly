@@ -153,7 +153,7 @@ export default function OnboardingPage() {
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-tealSoft">Onboarding</p>
             <h1 className="text-3xl font-semibold text-white">Tell us about you</h1>
-            <p className="text-sm text-muted">We use this once to tune your Briefly experience.</p>
+            {/* <p className="text-sm text-muted">We use this to personalise your initial topics only.</p> */}
           </div>
         </div>
 

@@ -3,6 +3,11 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var viewModel: SettingsViewModel
     let email: String?
+    @EnvironmentObject private var pushManager: PushNotificationManager
+    @State private var showingScheduleEditor = false
+    @State private var editingSchedule: Schedule?
+    @State private var draftTimeMinutes = 7 * 60
+    @State private var draftFrequency: ScheduleFrequency = .daily
 
     var body: some View {
         List {
@@ -51,10 +56,70 @@ struct SettingsView: View {
             .listRowBackground(Color.brieflySurface)
 
             Section {
-                Text("You'll get a push on this device when a new episode is ready.")
-                    .foregroundColor(.brieflyTextMuted)
+                Toggle(isOn: Binding(get: {
+                    viewModel.notificationsEnabled
+                }, set: { isOn in
+                    viewModel.notificationsEnabled = isOn
+                    Task { await viewModel.setNotificationsEnabled(isOn, pushManager: pushManager) }
+                })) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Notify when a new episode is ready.")
+                            .foregroundColor(.brieflyTextMuted)
+                            .font(.subheadline)
+                    }
+                }
             } header: {
                 settingsHeader("Notifications")
+            }
+            .listRowBackground(Color.brieflySurface)
+
+            Section {
+                if viewModel.isLoadingSchedules {
+                    ProgressView().tint(.accentColor)
+                }
+                if let error = viewModel.scheduleError {
+                    Text(error)
+                        .foregroundColor(.red)
+                        .font(.footnote)
+                }
+                ForEach(viewModel.schedules) { schedule in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("\(viewModel.formattedTime(from: schedule.localTimeMinutes)) · \(schedule.frequency.displayName)")
+                                .font(.subheadline)
+                                .foregroundColor(.white)
+                        }
+                        Spacer()
+                        Toggle(isOn: Binding(get: {
+                            schedule.isActive
+                        }, set: { isOn in
+                            Task { await viewModel.toggleSchedule(schedule, isActive: isOn) }
+                        })) {
+                            EmptyView()
+                        }
+                        .labelsHidden()
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        startEditing(schedule)
+                    }
+                    .swipeActions {
+                        Button(role: .destructive) {
+                            Task { await viewModel.deleteSchedule(schedule) }
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
+                    }
+                }
+                if viewModel.schedules.count < 2 {
+                    Button {
+                        startEditing(nil)
+                    } label: {
+                        Label("Add schedule", systemImage: "plus")
+                    }
+                }
+            } header: {
+                settingsHeader("Schedules")
             }
             .listRowBackground(Color.brieflySurface)
 
@@ -71,12 +136,127 @@ struct SettingsView: View {
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            await viewModel.refreshEntitlements()
+            await viewModel.refreshOnAppear(pushManager: pushManager)
+        }
+        .refreshable {
+            await viewModel.refreshAll(pushManager: pushManager, showScheduleLoading: true)
         }
         .onDisappear {
             viewModel.save()
         }
         .background(Color.brieflyBackground)
+        .sheet(isPresented: $showingScheduleEditor) {
+            ScheduleEditor(
+                frequency: $draftFrequency,
+                timeMinutes: $draftTimeMinutes,
+                isPresented: $showingScheduleEditor,
+                isEditing: editingSchedule != nil,
+                onSave: { frequency, minutes in
+                    Task {
+                        await viewModel.saveSchedule(
+                            id: editingSchedule?.id,
+                            frequency: frequency,
+                            localTimeMinutes: minutes,
+                            timezone: TimeZone.current.identifier
+                        )
+                        editingSchedule = nil
+                    }
+                },
+                onDelete: {
+                    guard let schedule = editingSchedule else { return }
+                    Task {
+                        await viewModel.deleteSchedule(schedule)
+                        editingSchedule = nil
+                        showingScheduleEditor = false
+                    }
+                }
+            )
+        }
+    }
+
+    private func startEditing(_ schedule: Schedule?) {
+        editingSchedule = schedule
+        draftFrequency = schedule?.frequency ?? .daily
+        draftTimeMinutes = schedule?.localTimeMinutes ?? 7 * 60
+        showingScheduleEditor = true
+    }
+}
+
+private struct ScheduleEditor: View {
+    @Binding var frequency: ScheduleFrequency
+    @Binding var timeMinutes: Int
+    @Binding var isPresented: Bool
+    var isEditing: Bool
+    var onSave: (ScheduleFrequency, Int) -> Void
+    var onDelete: (() -> Void)?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Picker("Ready by", selection: $timeMinutes) {
+                        ForEach(Self.hourOptions, id: \.self) { minutes in
+                            Text(Self.formattedHour(minutes)).tag(minutes)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .tint(.brieflyPrimary)
+                }
+                .listRowBackground(Color.brieflySurface)
+
+                Section {
+                    Picker("Frequency", selection: $frequency) {
+                        ForEach(ScheduleFrequency.allCases) { freq in
+                            Text(freq.displayName).tag(freq)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .tint(.brieflyPrimary)
+                }
+                .listRowBackground(Color.brieflySurface)
+
+                if isEditing {
+                    Section {
+                        Button(role: .destructive) {
+                            onDelete?()
+                        } label: {
+                            Text("Delete schedule")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .listRowBackground(Color.brieflySurface)
+                }
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background(Color.brieflyBackground)
+            .navigationTitle("Schedule")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { isPresented = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        isPresented = false
+                        onSave(frequency, timeMinutes)
+                    }
+                }
+            }
+        }
+    }
+
+    private static let hourOptions: [Int] = Array(stride(from: 0, through: 23, by: 1)).map { $0 * 60 }
+
+    private static func formattedHour(_ minutes: Int) -> String {
+        let hour = minutes / 60
+        var components = DateComponents()
+        components.hour = hour
+        components.minute = 0
+        let date = Calendar.current.date(from: components) ?? Date()
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h a"
+        return formatter.string(from: date)
     }
 }
 
