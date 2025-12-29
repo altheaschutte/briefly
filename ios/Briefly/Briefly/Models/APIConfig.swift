@@ -25,7 +25,7 @@ enum APIConfig {
     static let webAppURL: URL = url(for: "APP_WEB_URL")
 
     static var manageAccountURL: URL {
-        webAppURL.appendingPathComponent("account")
+        webAppURL.appendingPathComponent("subscriptions")
     }
 
     static var supabaseRestURL: URL {
