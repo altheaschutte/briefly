@@ -4,11 +4,11 @@ import Link from "next/link";
 export default function RootPage() {
   return (
     <div className="w-full">
-      <section className="relative isolate w-full overflow-hidden px-0 py-12 md:py-56">
+      <section className="relative isolate w-full overflow-visible px-0 py-12 md:py-12">
         <div className="container relative grid items-center justify-items-center gap-12 text-center lg:grid-cols-[1.05fr_0.95fr] lg:justify-items-start lg:text-left">
           <div className="space-y-6">
             <p className="inline-flex items-center gap-2 rounded-full border border-borderSoft/70 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-tealSoft">
-            FROM PROMPT TO PODCAST
+            PROMPT TO PODCAST
             </p>
             <h1 className="text-4xl font-semibold leading-tight text-white md:text-5xl">
             Your ideas. Ready to play.
@@ -38,18 +38,16 @@ export default function RootPage() {
             </div>
           </div>
 
-          <div className="relative">
-            <div className="pointer-events-none absolute inset-[-20%] -z-10 rounded-full bg-gradient-to-br from-accent/30 via-transparent to-teal/35 blur-3xl" />
-            <div className="relative mx-auto w-full max-w-[360px] overflow-hidden rounded-[28px] border border-white/20 bg-[#0d1c2a]/85 shadow-[0_30px_120px_rgba(55,168,174,0.28)] ring-1 ring-accent/20">
-              <Image
-                src="/iphone-library-screen.jpeg"
-                alt="Briefly library on iPhone"
-                width={650}
-                height={1400}
-                className="h-auto w-full object-cover"
-                priority
-              />
-            </div>
+          <div className="relative flex w-full items-center justify-center lg:justify-end">
+            <div className="pointer-events-none absolute inset-[-30%] -z-10 rounded-full bg-gradient-to-br from-accent/30 via-transparent to-teal/35 blur-3xl" />
+            <Image
+              src="/screens-staggered.svg"
+              alt="Briefly app screens"
+              width={626}
+              height={837}
+              className="w-[340px] max-w-[620px] md:w-[520px] drop-shadow-[0_30px_120px_rgba(55,168,174,0.32)]"
+              priority
+            />
           </div>
         </div>
       </section>

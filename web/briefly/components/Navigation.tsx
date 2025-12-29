@@ -17,6 +17,7 @@ export default function Navigation() {
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingError, setBillingError] = useState<string | null>(null);
   const [firstName, setFirstName] = useState<string | null>(null);
+  const [scrolled, setScrolled] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const { session, accessToken, email, logout } = useAuth();
@@ -74,6 +75,15 @@ export default function Navigation() {
     };
   }, [session]);
 
+  useEffect(() => {
+    const onScroll = () => {
+      setScrolled(window.scrollY > 50);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   if (isLoginPage) {
     return null;
   }
@@ -81,8 +91,13 @@ export default function Navigation() {
   const primaryName = firstName ?? (email ? email.split("@")[0] : null);
 
   return (
-    <header className="sticky top-0 z-30 bg-gradient-to-b from-[#0f1d2c] via-[#0f1d2c] to-transparent">
-      <div className="container relative flex items-center justify-center py-4">
+    <header
+      className={clsx(
+        "sticky top-0 z-30 transition-colors",
+        scrolled ? "bg-gradient-to-b from-[#0f1d2c] via-[#0f1d2c] to-transparent" : "bg-transparent"
+      )}
+    >
+      <div className="container relative flex items-center justify-between py-4">
         <Link href="/" className="text-white">
           <div className="flex items-center gap-3">
           <Image
@@ -96,7 +111,7 @@ export default function Navigation() {
           </div>
         </Link>
 
-        <div className="absolute right-0 flex items-center justify-end gap-2">
+        <div className="flex items-center justify-end gap-3 pr-2">
           <nav className="hidden items-center gap-2 md:flex">
             {session ? (
               <>

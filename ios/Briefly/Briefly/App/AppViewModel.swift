@@ -57,7 +57,8 @@ final class AppViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     init() {
-        let authProvider = SupabaseAuthProvider(url: APIConfig.authBaseURL, anonKey: APIConfig.authAPIKey)
+        // Use the custom Auth domain so the OAuth sheet shows our vanity hostname instead of *.supabase.co
+        let authProvider = SupabaseAuthProvider(url: APIConfig.authCustomDomainBaseURL, anonKey: APIConfig.authAPIKey)
         let authManager = AuthManager(authProvider: authProvider,
                                       keychain: keychain)
         let apiClient = APIClient(baseURL: APIConfig.baseURL)

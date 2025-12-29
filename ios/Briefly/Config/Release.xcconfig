@@ -1,5 +1,6 @@
 SLASH = /
 SUPABASE_URL = https:$(SLASH)$(SLASH)qkykdeayckpsuyxhnirk.supabase.co
+SUPABASE_AUTH_URL = https:$(SLASH)$(SLASH)auth.brieflypodcast.app
 SUPABASE_ANON_KEY = sb_publishable_73mj1dVguJgJ98Wm2i-RYw_MyesdnTg
 API_BASE_URL = https:$(SLASH)$(SLASH)api.brieflypodcast.app
 APP_WEB_URL = https:$(SLASH)$(SLASH)brieflypodcast.app
