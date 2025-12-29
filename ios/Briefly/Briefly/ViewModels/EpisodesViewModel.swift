@@ -13,11 +13,17 @@ final class EpisodesViewModel: ObservableObject {
     @Published var isLoading: Bool = false
 
     private let episodeService: EpisodeProviding
+    private let onFatalAuthError: ((String) -> Void)?
     private var hasAppliedPrefetch = false
     private var hasLoadedOnce = false
 
-    init(episodeService: EpisodeProviding, initialEpisodes: [Episode]? = nil) {
+    init(
+        episodeService: EpisodeProviding,
+        initialEpisodes: [Episode]? = nil,
+        onFatalAuthError: ((String) -> Void)? = nil
+    ) {
         self.episodeService = episodeService
+        self.onFatalAuthError = onFatalAuthError
         if let initialEpisodes {
             applyPrefetchedEpisodes(initialEpisodes)
         }
@@ -66,22 +72,37 @@ final class EpisodesViewModel: ObservableObject {
         let shouldShowLoading = episodes.isEmpty && hasLoadedOnce == false
         isLoading = shouldShowLoading
         errorMessage = nil
+        var lastError: String?
         defer {
             isLoading = false
             hasLoadedOnce = true
         }
-        do {
-            let fetched = try await episodeService.fetchEpisodes()
-            episodes = sortAndDeduplicate(fetched)
-            hasAppliedPrefetch = true
-        } catch let apiError as APIError {
-            if case .unauthorized = apiError {
-                // AppViewModel handles logout/navigation on 401s; skip showing an overlay here.
+        for attempt in 1...3 {
+            do {
+                let fetched = try await episodeService.fetchEpisodes()
+                episodes = sortAndDeduplicate(fetched)
+                hasAppliedPrefetch = true
+                errorMessage = nil
                 return
+            } catch is CancellationError {
+                return
+            } catch let urlError as URLError where urlError.code == .cancelled {
+                return
+            } catch let apiError as APIError {
+                if case .unauthorized = apiError {
+                    // AppViewModel handles logout/navigation on 401s; skip showing an overlay here.
+                    return
+                }
+                lastError = apiError.localizedDescription
+            } catch {
+                lastError = error.localizedDescription
             }
-            errorMessage = apiError.localizedDescription
-        } catch {
-            errorMessage = error.localizedDescription
+
+            if attempt >= 3 {
+                let message = lastError ?? "Unable to reach our authentication service. Please retry or sign in again."
+                errorMessage = message
+                onFatalAuthError?(message)
+            }
         }
     }
 

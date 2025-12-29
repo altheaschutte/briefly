@@ -32,6 +32,11 @@ struct SupabaseAuthProvider: OTPAuthProviding {
         return AuthToken(session: session)
     }
 
+    func handleAuthRedirect(url: URL) async throws -> AuthToken {
+        let session = try await client.auth.session(from: url)
+        return AuthToken(session: session)
+    }
+
     func refreshSession(refreshToken: String) async throws -> AuthToken {
         let session = try await client.auth.refreshSession(
             refreshToken: refreshToken

@@ -18,7 +18,7 @@
     <g transform="translate(20 58)">
       <rect width="292" height="60" rx="14" fill="#10162E" stroke="#1E273F"/>
       <text x="16" y="28" fill="#8DA2FF" font-family="Inter, Arial, sans-serif" font-size="16" font-weight="700">Daily Digest</text>
-      <text x="16" y="48" fill="#6B7A99" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600">Ready by 7:00 AM</text>
+      <text x="16" y="48" fill="#6B7A99" font-family="Inter, Arial, sans-serif" font-size="12" font-weight="600">Generate episode at 7:00 AM</text>
       <rect x="228" y="14" width="52" height="32" rx="16" fill="#6C63FF"/>
       <circle cx="260" cy="30" r="12" fill="white"/>
     </g>

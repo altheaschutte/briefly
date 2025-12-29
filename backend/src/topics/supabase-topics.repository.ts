@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { SupabaseClient, createClient } from '@supabase/supabase-js';
 import { v4 as uuid } from 'uuid';
 import { Topic } from '../domain/types';
+import { handleSupabaseErrors } from '../common/supabase.util';
 import { TopicListFilter, TopicUpdateInput, TopicsRepository } from './topics.repository';
 import { SupabaseDatabase, TopicRow } from './topics.supabase-types';
 
@@ -30,48 +31,52 @@ export class SupabaseTopicsRepository implements TopicsRepository {
   }
 
   async listByUser(userId: string, filter?: TopicListFilter): Promise<Topic[]> {
-    let query = this.client
-      .from('topics')
-      .select('*')
-      .eq('user_id', userId);
-    if (filter?.isActive !== undefined) {
-      query = query.eq('is_active', filter.isActive);
-    }
+    return handleSupabaseErrors(this.logger, `list topics for user ${userId}`, async () => {
+      let query = this.client
+        .from('topics')
+        .select('*')
+        .eq('user_id', userId);
+      if (filter?.isActive !== undefined) {
+        query = query.eq('is_active', filter.isActive);
+      }
 
-    const { data, error } = await query
-      .order('order_index', { ascending: true })
-      .order('created_at', { ascending: true });
+      const { data, error } = await query
+        .order('order_index', { ascending: true })
+        .order('created_at', { ascending: true });
 
-    if (error) {
-      this.logger.error(`Failed to list topics for user ${userId}: ${error.message}`);
-      throw error;
-    }
+      if (error) {
+        this.logger.error(`Failed to list topics for user ${userId}: ${error.message}`);
+        throw error;
+      }
 
-    const rows = (data as TopicRow[] | null) ?? [];
-    return rows.map((row) => this.mapRow(row));
+      const rows = (data as TopicRow[] | null) ?? [];
+      return rows.map((row) => this.mapRow(row));
+    });
   }
 
   async getById(userId: string, topicId: string): Promise<Topic | undefined> {
-    const { data, error } = await this.client
-      .from('topics')
-      .select('*')
-      .eq('id', topicId)
-      .eq('user_id', userId)
-      .maybeSingle();
+    return handleSupabaseErrors(this.logger, `fetch topic ${topicId} for user ${userId}`, async () => {
+      const { data, error } = await this.client
+        .from('topics')
+        .select('*')
+        .eq('id', topicId)
+        .eq('user_id', userId)
+        .maybeSingle();
 
-    if (error) {
-      if (error.code === 'PGRST116') {
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return undefined;
+        }
+        this.logger.error(`Failed to fetch topic ${topicId} for user ${userId}: ${error.message}`);
+        throw error;
+      }
+
+      if (!data) {
         return undefined;
       }
-      this.logger.error(`Failed to fetch topic ${topicId} for user ${userId}: ${error.message}`);
-      throw error;
-    }
 
-    if (!data) {
-      return undefined;
-    }
-
-    return this.mapRow(data as TopicRow);
+      return this.mapRow(data as TopicRow);
+    });
   }
 
   async create(
@@ -79,70 +84,74 @@ export class SupabaseTopicsRepository implements TopicsRepository {
     originalText: string,
     options?: { isSeed?: boolean; isActive?: boolean },
   ): Promise<Topic> {
-    const now = new Date().toISOString();
-    const nextOrderIndex = await this.getNextOrderIndex(userId);
-    const payload: TopicRow = {
-      id: uuid(),
-      user_id: userId,
-      original_text: originalText,
-      order_index: nextOrderIndex,
-      is_active: options?.isActive ?? true,
-      is_seed: options?.isSeed ?? false,
-      created_at: now,
-      updated_at: now,
-    };
+    return handleSupabaseErrors(this.logger, `create topic for user ${userId}`, async () => {
+      const now = new Date().toISOString();
+      const nextOrderIndex = await this.getNextOrderIndex(userId);
+      const payload: TopicRow = {
+        id: uuid(),
+        user_id: userId,
+        original_text: originalText,
+        order_index: nextOrderIndex,
+        is_active: options?.isActive ?? true,
+        is_seed: options?.isSeed ?? false,
+        created_at: now,
+        updated_at: now,
+      };
 
-    const { data, error } = await this.client.from('topics').insert(payload).select().maybeSingle();
+      const { data, error } = await this.client.from('topics').insert(payload).select().maybeSingle();
 
-    if (error) {
-      this.logger.error(`Failed to create topic for user ${userId}: ${error.message}`);
-      throw error;
-    }
+      if (error) {
+        this.logger.error(`Failed to create topic for user ${userId}: ${error.message}`);
+        throw error;
+      }
 
-    if (!data) {
-      throw new Error('Supabase did not return a topic row after insert');
-    }
+      if (!data) {
+        throw new Error('Supabase did not return a topic row after insert');
+      }
 
-    return this.mapRow(data as TopicRow);
+      return this.mapRow(data as TopicRow);
+    });
   }
 
   async update(userId: string, topicId: string, updates: TopicUpdateInput): Promise<Topic | undefined> {
-    const now = new Date().toISOString();
-    const payload: Partial<TopicRow> = {
-      updated_at: now,
-    };
+    return handleSupabaseErrors(this.logger, `update topic ${topicId} for user ${userId}`, async () => {
+      const now = new Date().toISOString();
+      const payload: Partial<TopicRow> = {
+        updated_at: now,
+      };
 
-    if (updates.originalText !== undefined) {
-      payload.original_text = updates.originalText;
-    }
-    if (updates.isActive !== undefined) {
-      payload.is_active = updates.isActive;
-    }
-    if (updates.orderIndex !== undefined) {
-      payload.order_index = updates.orderIndex;
-    }
+      if (updates.originalText !== undefined) {
+        payload.original_text = updates.originalText;
+      }
+      if (updates.isActive !== undefined) {
+        payload.is_active = updates.isActive;
+      }
+      if (updates.orderIndex !== undefined) {
+        payload.order_index = updates.orderIndex;
+      }
 
-    const { data, error } = await this.client
-      .from('topics')
-      .update(payload)
-      .eq('id', topicId)
-      .eq('user_id', userId)
-      .select()
-      .maybeSingle();
+      const { data, error } = await this.client
+        .from('topics')
+        .update(payload)
+        .eq('id', topicId)
+        .eq('user_id', userId)
+        .select()
+        .maybeSingle();
 
-    if (error) {
-      if (error.code === 'PGRST116') {
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return undefined;
+        }
+        this.logger.error(`Failed to update topic ${topicId} for user ${userId}: ${error.message}`);
+        throw error;
+      }
+
+      if (!data) {
         return undefined;
       }
-      this.logger.error(`Failed to update topic ${topicId} for user ${userId}: ${error.message}`);
-      throw error;
-    }
 
-    if (!data) {
-      return undefined;
-    }
-
-    return this.mapRow(data as TopicRow);
+      return this.mapRow(data as TopicRow);
+    });
   }
 
   private mapRow(row: TopicRow): Topic {

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { SupabaseClient, createClient } from '@supabase/supabase-js';
 import { BillingRepository } from './billing.repository';
 import { UsagePeriod, UserSubscription } from './billing.types';
+import { handleSupabaseErrors } from '../common/supabase.util';
 
 @Injectable()
 export class SupabaseBillingRepository implements BillingRepository {
@@ -25,133 +26,145 @@ export class SupabaseBillingRepository implements BillingRepository {
   }
 
   async getSubscription(userId: string): Promise<UserSubscription | undefined> {
-    const { data, error } = await this.client
-      .from('user_subscriptions')
-      .select('*')
-      .eq('user_id', userId)
-      .maybeSingle();
+    return handleSupabaseErrors(this.logger, `fetch subscription for user ${userId}`, async () => {
+      const { data, error } = await this.client
+        .from('user_subscriptions')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
 
-    if (error) {
-      this.logger.error(`Failed to fetch subscription for user ${userId}: ${error.message}`);
-      throw error;
-    }
-    if (!data) return undefined;
-    return this.mapSubscription(data as UserSubscriptionRow);
+      if (error) {
+        this.logger.error(`Failed to fetch subscription for user ${userId}: ${error.message}`);
+        throw error;
+      }
+      if (!data) return undefined;
+      return this.mapSubscription(data as UserSubscriptionRow);
+    });
   }
 
   async upsertSubscription(sub: UserSubscription): Promise<UserSubscription> {
-    const now = new Date().toISOString();
-    const payload: UserSubscriptionInsert = {
-      user_id: sub.userId,
-      stripe_customer_id: sub.stripeCustomerId ?? null,
-      stripe_subscription_id: sub.stripeSubscriptionId ?? null,
-      tier: sub.tier,
-      status: sub.status,
-      current_period_start: sub.currentPeriodStart?.toISOString() ?? null,
-      current_period_end: sub.currentPeriodEnd?.toISOString() ?? null,
-      cancel_at_period_end: sub.cancelAtPeriodEnd ?? false,
-      created_at: sub.updatedAt?.toISOString() ?? now,
-      updated_at: now,
-    };
+    return handleSupabaseErrors(this.logger, `upsert subscription for user ${sub.userId}`, async () => {
+      const now = new Date().toISOString();
+      const payload: UserSubscriptionInsert = {
+        user_id: sub.userId,
+        stripe_customer_id: sub.stripeCustomerId ?? null,
+        stripe_subscription_id: sub.stripeSubscriptionId ?? null,
+        tier: sub.tier,
+        status: sub.status,
+        current_period_start: sub.currentPeriodStart?.toISOString() ?? null,
+        current_period_end: sub.currentPeriodEnd?.toISOString() ?? null,
+        cancel_at_period_end: sub.cancelAtPeriodEnd ?? false,
+        created_at: sub.updatedAt?.toISOString() ?? now,
+        updated_at: now,
+      };
 
-    const { data, error } = await this.client
-      .from('user_subscriptions')
-      .upsert(payload, { onConflict: 'user_id' })
-      .select()
-      .maybeSingle();
+      const { data, error } = await this.client
+        .from('user_subscriptions')
+        .upsert(payload, { onConflict: 'user_id' })
+        .select()
+        .maybeSingle();
 
-    if (error) {
-      this.logger.error(`Failed to upsert subscription for user ${sub.userId}: ${error.message}`);
-      throw error;
-    }
-    if (!data) throw new Error('Supabase did not return subscription after upsert');
-    return this.mapSubscription(data as UserSubscriptionRow);
+      if (error) {
+        this.logger.error(`Failed to upsert subscription for user ${sub.userId}: ${error.message}`);
+        throw error;
+      }
+      if (!data) throw new Error('Supabase did not return subscription after upsert');
+      return this.mapSubscription(data as UserSubscriptionRow);
+    });
   }
 
   async findByCustomerId(customerId: string): Promise<UserSubscription | undefined> {
-    const { data, error } = await this.client
-      .from('user_subscriptions')
-      .select('*')
-      .eq('stripe_customer_id', customerId)
-      .maybeSingle();
+    return handleSupabaseErrors(this.logger, `fetch subscription by customer ${customerId}`, async () => {
+      const { data, error } = await this.client
+        .from('user_subscriptions')
+        .select('*')
+        .eq('stripe_customer_id', customerId)
+        .maybeSingle();
 
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return undefined;
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return undefined;
+        }
+        this.logger.error(`Failed to fetch subscription by customer ${customerId}: ${error.message}`);
+        throw error;
       }
-      this.logger.error(`Failed to fetch subscription by customer ${customerId}: ${error.message}`);
-      throw error;
-    }
-    if (!data) return undefined;
-    return this.mapSubscription(data as UserSubscriptionRow);
+      if (!data) return undefined;
+      return this.mapSubscription(data as UserSubscriptionRow);
+    });
   }
 
   async findBySubscriptionId(subscriptionId: string): Promise<UserSubscription | undefined> {
-    const { data, error } = await this.client
-      .from('user_subscriptions')
-      .select('*')
-      .eq('stripe_subscription_id', subscriptionId)
-      .maybeSingle();
+    return handleSupabaseErrors(this.logger, `fetch subscription by subscription id ${subscriptionId}`, async () => {
+      const { data, error } = await this.client
+        .from('user_subscriptions')
+        .select('*')
+        .eq('stripe_subscription_id', subscriptionId)
+        .maybeSingle();
 
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return undefined;
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return undefined;
+        }
+        this.logger.error(`Failed to fetch subscription by subscription id ${subscriptionId}: ${error.message}`);
+        throw error;
       }
-      this.logger.error(`Failed to fetch subscription by subscription id ${subscriptionId}: ${error.message}`);
-      throw error;
-    }
-    if (!data) return undefined;
-    return this.mapSubscription(data as UserSubscriptionRow);
+      if (!data) return undefined;
+      return this.mapSubscription(data as UserSubscriptionRow);
+    });
   }
 
   async ensureUsagePeriod(userId: string, periodStart: Date, periodEnd: Date): Promise<UsagePeriod> {
-    const existing = await this.getUsagePeriod(userId, periodStart, periodEnd);
-    if (existing) {
-      return existing;
-    }
+    return handleSupabaseErrors(this.logger, `ensure usage period for user ${userId}`, async () => {
+      const existing = await this.getUsagePeriod(userId, periodStart, periodEnd);
+      if (existing) {
+        return existing;
+      }
 
-    const payload: UsagePeriodInsert = {
-      user_id: userId,
-      period_start: periodStart.toISOString(),
-      period_end: periodEnd.toISOString(),
-      minutes_used: 0,
-      seconds_used: 0,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
+      const payload: UsagePeriodInsert = {
+        user_id: userId,
+        period_start: periodStart.toISOString(),
+        period_end: periodEnd.toISOString(),
+        minutes_used: 0,
+        seconds_used: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
 
-    const { data, error } = await this.client
-      .from('usage_periods')
-      .insert(payload)
-      .select()
-      .maybeSingle();
+      const { data, error } = await this.client
+        .from('usage_periods')
+        .insert(payload)
+        .select()
+        .maybeSingle();
 
-    if (error) {
-      this.logger.error(`Failed to ensure usage period for user ${userId}: ${error.message}`);
-      throw error;
-    }
-    if (!data) throw new Error('Supabase did not return usage period after upsert');
-    return this.mapUsage(data as UsagePeriodRow);
+      if (error) {
+        this.logger.error(`Failed to ensure usage period for user ${userId}: ${error.message}`);
+        throw error;
+      }
+      if (!data) throw new Error('Supabase did not return usage period after upsert');
+      return this.mapUsage(data as UsagePeriodRow);
+    });
   }
 
   async getUsagePeriod(userId: string, periodStart: Date, periodEnd: Date): Promise<UsagePeriod | undefined> {
-    const { data, error } = await this.client
-      .from('usage_periods')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('period_start', periodStart.toISOString())
-      .eq('period_end', periodEnd.toISOString())
-      .maybeSingle();
+    return handleSupabaseErrors(this.logger, `fetch usage period for user ${userId}`, async () => {
+      const { data, error } = await this.client
+        .from('usage_periods')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('period_start', periodStart.toISOString())
+        .eq('period_end', periodEnd.toISOString())
+        .maybeSingle();
 
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return undefined;
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return undefined;
+        }
+        this.logger.error(`Failed to fetch usage period for user ${userId}: ${error.message}`);
+        throw error;
       }
-      this.logger.error(`Failed to fetch usage period for user ${userId}: ${error.message}`);
-      throw error;
-    }
-    if (!data) return undefined;
-    return this.mapUsage(data as UsagePeriodRow);
+      if (!data) return undefined;
+      return this.mapUsage(data as UsagePeriodRow);
+    });
   }
 
   async setUsageTotals(
@@ -160,25 +173,27 @@ export class SupabaseBillingRepository implements BillingRepository {
     periodEnd: Date,
     secondsUsed: number,
   ): Promise<UsagePeriod> {
-    const { data, error } = await this.client
-      .from('usage_periods')
-      .update({
-        seconds_used: secondsUsed,
-        minutes_used: secondsUsed / 60,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('user_id', userId)
-      .eq('period_start', periodStart.toISOString())
-      .eq('period_end', periodEnd.toISOString())
-      .select()
-      .maybeSingle();
+    return handleSupabaseErrors(this.logger, `update usage for user ${userId}`, async () => {
+      const { data, error } = await this.client
+        .from('usage_periods')
+        .update({
+          seconds_used: secondsUsed,
+          minutes_used: secondsUsed / 60,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', userId)
+        .eq('period_start', periodStart.toISOString())
+        .eq('period_end', periodEnd.toISOString())
+        .select()
+        .maybeSingle();
 
-    if (error) {
-      this.logger.error(`Failed to update usage for user ${userId}: ${error.message}`);
-      throw error;
-    }
-    if (!data) throw new Error('Supabase did not return usage period after update');
-    return this.mapUsage(data as UsagePeriodRow);
+      if (error) {
+        this.logger.error(`Failed to update usage for user ${userId}: ${error.message}`);
+        throw error;
+      }
+      if (!data) throw new Error('Supabase did not return usage period after update');
+      return this.mapUsage(data as UsagePeriodRow);
+    });
   }
 
   private mapSubscription(row: UserSubscriptionRow): UserSubscription {

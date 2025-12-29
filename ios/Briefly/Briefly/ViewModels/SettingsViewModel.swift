@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 struct TargetDurationPreference {
@@ -35,13 +36,13 @@ struct TargetDurationPreference {
 final class SettingsViewModel: ObservableObject {
     @Published var autoPlayNextEpisode: Bool {
         didSet {
-            defaults.set(autoPlayNextEpisode, forKey: Self.autoPlayNextKey)
+            playbackPreferences.autoPlayNextEpisode = autoPlayNextEpisode
         }
     }
     @Published var playbackSpeed: Double {
         didSet {
             audioManager?.setPlaybackSpeed(playbackSpeed)
-            defaults.set(playbackSpeed, forKey: Self.playbackSpeedKey)
+            playbackPreferences.playbackSpeed = playbackSpeed
         }
     }
     @Published var entitlements: Entitlements?
@@ -59,11 +60,10 @@ final class SettingsViewModel: ObservableObject {
     private weak var audioManager: AudioPlayerManager?
     private let defaults = UserDefaults.standard
     private var targetPreference = TargetDurationPreference()
+    private var playbackPreferences = PlaybackPreferences()
     private let scheduleService: ScheduleService
     private var hasLoadedSchedulesOnce: Bool
-    private static let playbackSpeedKey = "playbackSpeed"
-    private static let autoPlayNextKey = "autoPlayNextEpisode"
-    private static let legacyAutoPlayLatestKey = "autoPlayLatest"
+    private var cancellables = Set<AnyCancellable>()
 
     init(appViewModel: AppViewModel,
          audioManager: AudioPlayerManager,
@@ -72,13 +72,8 @@ final class SettingsViewModel: ObservableObject {
         self.appViewModel = appViewModel
         self.audioManager = audioManager
         self.scheduleService = appViewModel.scheduleService
-        let savedSpeed = defaults.double(forKey: Self.playbackSpeedKey)
-        let initialSpeed = savedSpeed == 0 ? 1.0 : savedSpeed
-        let hasNewAutoPlayPreference = defaults.object(forKey: Self.autoPlayNextKey) != nil
-        let resolvedAutoPlay = hasNewAutoPlayPreference
-            ? defaults.bool(forKey: Self.autoPlayNextKey)
-            : defaults.bool(forKey: Self.legacyAutoPlayLatestKey)
-        autoPlayNextEpisode = resolvedAutoPlay
+        let initialSpeed = playbackPreferences.playbackSpeed
+        autoPlayNextEpisode = playbackPreferences.autoPlayNextEpisode
         targetDurationMinutes = targetPreference.value
         playbackSpeed = initialSpeed
         audioManager.setPlaybackSpeed(initialSpeed)
@@ -86,11 +81,12 @@ final class SettingsViewModel: ObservableObject {
         let sortedSchedules = initialSchedules.sorted { $0.localTimeMinutes < $1.localTimeMinutes }
         schedules = sortedSchedules
         hasLoadedSchedulesOnce = sortedSchedules.isEmpty == false
+        bindPlaybackSpeedUpdates()
     }
 
     func save() {
-        defaults.set(autoPlayNextEpisode, forKey: Self.autoPlayNextKey)
-        defaults.set(playbackSpeed, forKey: Self.playbackSpeedKey)
+        playbackPreferences.autoPlayNextEpisode = autoPlayNextEpisode
+        playbackPreferences.playbackSpeed = playbackSpeed
         defaults.set(targetDurationMinutes, forKey: "targetDurationMinutes")
     }
 
@@ -109,6 +105,17 @@ final class SettingsViewModel: ObservableObject {
 
     var durationOptions: [Int] {
         targetPreference.options(maxMinutes: entitlements?.limits.maxEpisodeMinutes)
+    }
+
+    private func bindPlaybackSpeedUpdates() {
+        audioManager?.$playbackSpeed
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] speed in
+                guard let self else { return }
+                guard abs(self.playbackSpeed - speed) > 0.0001 else { return }
+                self.playbackSpeed = speed
+            }
+            .store(in: &cancellables)
     }
 
     private func clampTargetDurationIfNeeded() {

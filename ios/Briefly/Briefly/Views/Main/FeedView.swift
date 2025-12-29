@@ -69,6 +69,7 @@ struct FeedView: View {
             }
         }
         .padding()
+        .padding(.bottom, 140) // extra space so the player bar doesn't cover the last row
     }
 
     private var playerBarOverlay: some View {

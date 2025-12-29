@@ -16,6 +16,7 @@ final class TopicsViewModel: ObservableObject {
 
     private let topicService: TopicProviding
     private let entitlementsService: EntitlementsProviding?
+    private let onFatalAuthError: ((String) -> Void)?
     private var originalTopics: [Topic] = []
     private var topicsVersion: Int = 0
 
@@ -35,9 +36,15 @@ final class TopicsViewModel: ObservableObject {
         entitlements?.limits.maxActiveTopics ?? defaultMaxActiveTopics
     }
 
-    init(topicService: TopicProviding, entitlementsService: EntitlementsProviding? = nil, initialTopics: [Topic] = []) {
+    init(
+        topicService: TopicProviding,
+        entitlementsService: EntitlementsProviding? = nil,
+        initialTopics: [Topic] = [],
+        onFatalAuthError: ((String) -> Void)? = nil
+    ) {
         self.topicService = topicService
         self.entitlementsService = entitlementsService
+        self.onFatalAuthError = onFatalAuthError
         applyPrefetchedTopics(initialTopics)
     }
 
@@ -45,17 +52,34 @@ final class TopicsViewModel: ObservableObject {
         let requestVersion = topicsVersion
         isLoading = true
         errorMessage = nil
+        var lastError: String?
         defer { isLoading = false }
-        do {
-            await refreshEntitlements()
-            let fetched = try await topicService.fetchTopics()
-            let sorted = fetched.sorted { $0.orderIndex < $1.orderIndex }
-            guard requestVersion == topicsVersion else { return } // Drop stale responses when local edits occurred mid-request.
-            originalTopics = sorted
-            topics = sorted
-            hasChanges = false
-        } catch {
-            errorMessage = error.localizedDescription
+        for attempt in 1...3 {
+            do {
+                await refreshEntitlements()
+                let fetched = try await topicService.fetchTopics()
+                let sorted = fetched.sorted { $0.orderIndex < $1.orderIndex }
+                guard requestVersion == topicsVersion else { return } // Drop stale responses when local edits occurred mid-request.
+                originalTopics = sorted
+                topics = sorted
+                hasChanges = false
+                errorMessage = nil
+                return
+            } catch let apiError as APIError {
+                if case .unauthorized = apiError {
+                    // AppViewModel handles logout/navigation on 401s; skip showing an overlay here.
+                    return
+                }
+                lastError = apiError.localizedDescription
+            } catch {
+                lastError = error.localizedDescription
+            }
+
+            if attempt >= 3 {
+                let message = lastError ?? "Unable to reach our authentication service. Please retry or sign in again."
+                errorMessage = message
+                onFatalAuthError?(message)
+            }
         }
     }
 

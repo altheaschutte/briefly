@@ -16,6 +16,8 @@ final class AppViewModel: ObservableObject {
     @Published var prefetchedEntitlements: Entitlements?
     @Published var prefetchedSchedules: [Schedule]?
     @Published var isSeedingTopics: Bool = false
+    @Published var isHandlingAuthRedirect: Bool = false
+    @Published var snackbarMessage: String?
 
     let apiClient: APIClient
     let authManager: AuthManager
@@ -26,14 +28,32 @@ final class AppViewModel: ObservableObject {
     let supabaseUserService: SupabaseUserService
     let scheduleService: ScheduleService
     lazy var audioPlayer: AudioPlayerManager = {
-        AudioPlayerManager(audioURLProvider: { [weak self] episodeId in
+        let manager = AudioPlayerManager(audioURLProvider: { [weak self] episodeId in
             guard let self else { return nil }
             return await self.episodeService.fetchSignedAudioURL(for: episodeId)
         })
+        manager.nextEpisodeResolver = { [weak self] currentEpisode in
+            guard let self else { return nil }
+            do {
+                let episodes = try await self.episodeService.fetchEpisodes()
+                let readyEpisodes = episodes.filter { $0.isReady }
+                guard readyEpisodes.isEmpty == false else { return nil }
+                if let currentIndex = readyEpisodes.firstIndex(where: { $0.id == currentEpisode.id }) {
+                    let nextIndex = readyEpisodes.index(after: currentIndex)
+                    return nextIndex < readyEpisodes.count ? readyEpisodes[nextIndex] : nil
+                }
+                return readyEpisodes.first
+            } catch {
+                os_log("Auto-play resolver fetch failed: %{public}@", log: self.playbackLog, type: .error, error.localizedDescription)
+                return nil
+            }
+        }
+        return manager
     }()
 
     private let keychain = KeychainStore()
     private let authLog = OSLog(subsystem: "com.briefly.app", category: "Auth")
+    private let playbackLog = OSLog(subsystem: "com.briefly.app", category: "Playback")
     private var cancellables = Set<AnyCancellable>()
 
     init() {
@@ -58,9 +78,14 @@ final class AppViewModel: ObservableObject {
         })
         self.scheduleService = ScheduleService(apiClient: apiClient)
 
-        self.apiClient.unauthorizedHandler = { [weak self] in
+        self.apiClient.unauthorizedHandler = { [weak self] message in
             Task { @MainActor in
                 guard let self else { return }
+                if let message, message.lowercased().contains("authentication service") {
+                    self.showSnackbar(message)
+                    await self.logout()
+                    return
+                }
                 await self.authManager.refreshSessionIfNeeded(force: true)
                 if self.authManager.currentToken != nil {
                     self.apiClient.tokenProvider = { [weak authManager] in
@@ -68,6 +93,7 @@ final class AppViewModel: ObservableObject {
                     }
                     return
                 }
+                self.showSnackbar(message ?? "Session expired. Please sign in again.")
                 await self.logout()
             }
         }
@@ -108,6 +134,33 @@ final class AppViewModel: ObservableObject {
         os_log("AppViewModel authenticated=%{public}@ for email: %{public}@", log: authLog, type: .info, isAuthenticated.description, email)
     }
 
+    func handleAuthRedirect(_ url: URL) async {
+        guard isHandlingAuthRedirect == false else { return }
+        isHandlingAuthRedirect = true
+        defer { isHandlingAuthRedirect = false }
+        do {
+            let token = try await authManager.handleAuthRedirect(url: url)
+            apiClient.tokenProvider = { [weak authManager] in
+                authManager?.currentToken?.accessToken
+            }
+            currentUserEmail = authManager.currentUserEmail
+            await refreshUserAndProfile()
+            async let topics = preloadTopics()
+            async let episodes = preloadEpisodes()
+            async let entitlements = preloadEntitlements()
+            async let schedules = preloadSchedules()
+            _ = await (topics, episodes, entitlements, schedules)
+            isAuthenticated = token.accessToken.isEmpty == false
+            os_log("AppViewModel handled auth redirect authenticated=%{public}@ email=%{public}@",
+                   log: authLog,
+                   type: .info,
+                   isAuthenticated.description,
+                   currentUserEmail ?? "unknown")
+        } catch {
+            os_log("AppViewModel auth redirect failed: %{public}@", log: authLog, type: .error, error.localizedDescription)
+        }
+    }
+
     func signInWithGoogle() async throws {
         os_log("AppViewModel starting Google sign-in", log: authLog, type: .info)
         let token = try await authManager.signInWithGoogle()
@@ -144,6 +197,21 @@ final class AppViewModel: ObservableObject {
         prefetchedEntitlements = nil
         prefetchedSchedules = nil
         isSeedingTopics = false
+    }
+
+    func showSnackbar(_ message: String, duration: TimeInterval = 3.5) {
+        snackbarMessage = message
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+            if self.snackbarMessage == message {
+                self.snackbarMessage = nil
+            }
+        }
+    }
+
+    func forceLogoutWithSnackbar(_ message: String = "Unable to reach our authentication service. Please retry or sign in again.") async {
+        showSnackbar(message)
+        await logout()
     }
 
     func markOnboardingComplete() {

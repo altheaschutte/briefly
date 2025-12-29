@@ -4,6 +4,7 @@ import { SupabaseClient, createClient } from '@supabase/supabase-js';
 import { EpisodeSegment } from '../domain/types';
 import { EpisodeSegmentRow, SupabaseDatabase } from './episodes.supabase-types';
 import { EpisodeSegmentsRepository } from './episode-segments.repository';
+import { handleSupabaseErrors } from '../common/supabase.util';
 
 @Injectable()
 export class SupabaseEpisodeSegmentsRepository implements EpisodeSegmentsRepository {
@@ -29,53 +30,57 @@ export class SupabaseEpisodeSegmentsRepository implements EpisodeSegmentsReposit
   }
 
   async replaceForEpisode(episodeId: string, segments: EpisodeSegment[]): Promise<EpisodeSegment[]> {
-    const { error: deleteError } = await this.client.from('episode_segments').delete().eq('episode_id', episodeId);
-    if (deleteError) {
-      this.logger.error(`Failed to clear segments for episode ${episodeId}: ${deleteError.message}`);
-      throw deleteError;
-    }
+    return handleSupabaseErrors(this.logger, `replace segments for episode ${episodeId}`, async () => {
+      const { error: deleteError } = await this.client.from('episode_segments').delete().eq('episode_id', episodeId);
+      if (deleteError) {
+        this.logger.error(`Failed to clear segments for episode ${episodeId}: ${deleteError.message}`);
+        throw deleteError;
+      }
 
-    if (!segments.length) {
-      return [];
-    }
+      if (!segments.length) {
+        return [];
+      }
 
-    const now = new Date().toISOString();
-    const payload: EpisodeSegmentRow[] = segments.map((segment) => ({
-      id: segment.id,
-      episode_id: episodeId,
-      order_index: segment.orderIndex,
-      title: segment.title ?? null,
-      raw_content: segment.rawContent,
-      raw_sources: segment.rawSources ?? null,
-      script: segment.script ?? null,
-      audio_url: segment.audioUrl ?? null,
-      start_time_seconds: segment.startTimeSeconds ?? null,
-      duration_seconds: segment.durationSeconds ?? null,
-      created_at: now,
-    }));
+      const now = new Date().toISOString();
+      const payload: EpisodeSegmentRow[] = segments.map((segment) => ({
+        id: segment.id,
+        episode_id: episodeId,
+        order_index: segment.orderIndex,
+        title: segment.title ?? null,
+        raw_content: segment.rawContent,
+        raw_sources: segment.rawSources ?? null,
+        script: segment.script ?? null,
+        audio_url: segment.audioUrl ?? null,
+        start_time_seconds: segment.startTimeSeconds ?? null,
+        duration_seconds: segment.durationSeconds ?? null,
+        created_at: now,
+      }));
 
-    const { data, error } = await this.client.from('episode_segments').insert(payload).select();
-    if (error) {
-      this.logger.error(`Failed to insert segments for episode ${episodeId}: ${error.message}`);
-      throw error;
-    }
-    const rows = (data as EpisodeSegmentRow[] | null) ?? [];
-    return rows.map((row) => this.mapRow(row));
+      const { data, error } = await this.client.from('episode_segments').insert(payload).select();
+      if (error) {
+        this.logger.error(`Failed to insert segments for episode ${episodeId}: ${error.message}`);
+        throw error;
+      }
+      const rows = (data as EpisodeSegmentRow[] | null) ?? [];
+      return rows.map((row) => this.mapRow(row));
+    });
   }
 
   async listForEpisode(episodeId: string): Promise<EpisodeSegment[]> {
-    const { data, error } = await this.client
-      .from('episode_segments')
-      .select('*')
-      .eq('episode_id', episodeId)
-      .order('order_index', { ascending: true });
+    return handleSupabaseErrors(this.logger, `list segments for episode ${episodeId}`, async () => {
+      const { data, error } = await this.client
+        .from('episode_segments')
+        .select('*')
+        .eq('episode_id', episodeId)
+        .order('order_index', { ascending: true });
 
-    if (error) {
-      this.logger.error(`Failed to fetch segments for episode ${episodeId}: ${error.message}`);
-      throw error;
-    }
-    const rows = (data as EpisodeSegmentRow[] | null) ?? [];
-    return rows.map((row) => this.mapRow(row));
+      if (error) {
+        this.logger.error(`Failed to fetch segments for episode ${episodeId}: ${error.message}`);
+        throw error;
+      }
+      const rows = (data as EpisodeSegmentRow[] | null) ?? [];
+      return rows.map((row) => this.mapRow(row));
+    });
   }
 
   private mapRow(row: EpisodeSegmentRow): EpisodeSegment {

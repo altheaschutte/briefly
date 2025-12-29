@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>You're invited to Briefly</title>
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
+  <style>
+    :root {
+      color-scheme: light dark;
+      supported-color-schemes: light dark;
+    }
+    @media (prefers-color-scheme: dark) {
+      body, table.body-bg { background-color:#132a3b !important; color:#ffffff !important; }
+      .card { background-color:#1f3a4e !important; border:none !important; box-shadow:0 10px 22px rgba(0,0,0,0.18) !important; }
+      .heading { color:#ffffff !important; }
+      .body-text, .muted { color:#dfeaf3 !important; }
+      .button { background-color:#ffa563 !important; color:#132a3b !important; border-color:#ffa563 !important; }
+      .link { color:#ffa563 !important; }
+      .footer, .footer a { color:#b6c5d4 !important; letter-spacing:0.3px; }
+    }
+    @media (prefers-color-scheme: light) {
+      body, table.body-bg { background-color:#f5f7fa !important; color:#0c1824 !important; }
+      .card { background-color:#ffffff !important; border:1px solid #e6eef5 !important; box-shadow:0 8px 18px rgba(0,0,0,0.08) !important; }
+      .heading { color:#0c1824 !important; }
+      .body-text { color:#1f3a4e !important; }
+      .muted { color:#6b7a8e !important; }
+      .link { color:#2a7997 !important; }
+      .footer, .footer a { color:#6b7a8e !important; letter-spacing:0.3px; }
+    }
+  </style>
+</head>
+<body style="margin:0; padding:0; background-color:#f5f7fa; font-family:'Helvetica Neue', Arial, sans-serif; color:#0c1824;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" class="body-bg" style="padding:24px 16px; background-color:#f5f7fa;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" class="card" style="max-width:460px; background-color:#ffffff; border:1px solid #e6eef5; border-radius:16px; padding:0 32px 32px; box-shadow:0 8px 18px rgba(0,0,0,0.08);">
+          <tr>
+            <td align="left" style="padding:32px 0 20px;">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="width:64px; height:64px; background-color:#132a3b; border-radius:14px;">
+                <tr>
+                  <td align="center" valign="middle">
+                    <img src="https://brieflypodcast.app/briefly-logo.png" alt="Briefly" width="42" height="42" style="display:block; border:0; outline:none; text-decoration:none;">
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td align="left" style="padding:0 12px 12px 0;">
+              <h1 class="heading" style="margin:0; font-size:24px; line-height:32px; font-weight:700; color:#0c1824;">You're invited to Briefly</h1>
+            </td>
+          </tr>
+          <tr>
+            <td align="left" style="padding:0 16px 24px 0;">
+              <p class="body-text" style="margin:12px 0 0; font-size:16px; line-height:24px; color:#1f3a4e;">You’ve been invited to test Briefly (Beta). Click the button below to accept your invite.</p>
+            </td>
+          </tr>
+          <tr>
+            <td align="left" style="padding:0 0 24px;">
+              <a class="button" href="{{ .ConfirmationURL }}" style="display:inline-block; padding:14px 28px; background-color:#ffa563; color:#132a3b; border-radius:999px; font-size:16px; font-weight:700; text-decoration:none; border:1px solid #ffa563; text-align:center;">Accept invite</a>
+            </td>
+          </tr>
+          <tr>
+            <td class="muted" style="padding:0 0 12px 0; color:#1f3a4e; font-size:14px; line-height:22px;">
+              <p style="margin:0 0 8px;">If the button doesn’t work, paste this link into your browser:</p>
+              <p style="margin:0; word-break:break-all;">
+                <a class="link" href="{{ .ConfirmationURL }}" style="color:#2a7997; text-decoration:none;">{{ .ConfirmationURL }}</a>
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="height:16px;"></td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td align="center" class="footer" style="padding-top:12px; font-size:12px; line-height:20px; color:#6b7a8e; letter-spacing:0.3px;">
+        <a href="https://brieflypodcast.app" style="color:#6b7a8e; text-decoration:none; letter-spacing:0.3px;">brieflypodcast.app</a>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

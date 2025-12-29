@@ -4,7 +4,7 @@ const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ||
   "http://127.0.0.1:3344";
 
-type UnauthorizedHandler = () => void;
+type UnauthorizedHandler = (message?: string) => void;
 
 let unauthorizedHandler: UnauthorizedHandler | null = null;
 
@@ -20,27 +20,47 @@ async function apiRequest<T>(
   token?: string,
   body?: Record<string, unknown>
 ): Promise<T> {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {})
-    },
-    body: body ? JSON.stringify(body) : undefined,
-    credentials: "include"
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      credentials: "include"
+    });
+  } catch (err: any) {
+    const message = err?.message ?? "Network error";
+    throw new Error(`Could not reach Briefly API: ${message}`);
+  }
+
+  const parseErrorMessage = async () => {
+    const text = await res.text();
+    try {
+      const parsed = JSON.parse(text);
+      if (typeof parsed === "string") return parsed;
+      return parsed?.message ?? parsed?.error ?? text;
+    } catch {
+      return text;
+    }
+  };
 
   if (res.status === 401) {
-    const message = await res.text();
-    if (unauthorizedHandler) unauthorizedHandler();
+    const message = await parseErrorMessage();
+    if (unauthorizedHandler) unauthorizedHandler(message || "Session expired. Please sign in again.");
     const err = new Error(message || "unauthorized");
     (err as any).code = "unauthorized";
     throw err;
   }
 
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || `Request failed: ${res.status}`);
+    const message = await parseErrorMessage();
+    if (res.status === 503 && message?.toLowerCase().includes("authentication service")) {
+      if (unauthorizedHandler) unauthorizedHandler(message);
+    }
+    throw new Error(message || `Request failed: ${res.status}`);
   }
 
   if (res.status === 204) {
@@ -112,6 +132,10 @@ export async function fetchTopics(token: string): Promise<Topic[]> {
 export async function fetchEpisodeById(token: string, id: string): Promise<Episode> {
   const data = await apiRequest<any>(`/episodes/${id}`, "GET", token);
   return normalizeEpisode(data);
+}
+
+export async function deleteEpisode(token: string, id: string): Promise<void> {
+  await apiRequest<void>(`/episodes/${id}`, "DELETE", token);
 }
 
 export async function createTopic(token: string, originalText: string): Promise<Topic> {

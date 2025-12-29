@@ -35,6 +35,10 @@ private final class MockOTPProvider: OTPAuthProviding {
         return verifyResult ?? AuthToken(accessToken: "token", refreshToken: nil, expiresAt: nil)
     }
 
+    func handleAuthRedirect(url: URL) async throws -> AuthToken {
+        return verifyResult ?? AuthToken(accessToken: "token", refreshToken: nil, expiresAt: nil)
+    }
+
     func refreshSession(refreshToken: String) async throws -> AuthToken {
         return refreshResult ?? AuthToken(accessToken: "refreshed", refreshToken: nil, expiresAt: nil)
     }

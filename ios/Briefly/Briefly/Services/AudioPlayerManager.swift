@@ -11,20 +11,26 @@ final class AudioPlayerManager: NSObject, ObservableObject {
     @Published var progress: Double = 0
     @Published var currentTimeSeconds: Double = 0
     @Published var durationSeconds: Double = 0
+    @Published private(set) var playbackSpeed: Double = PlaybackPreferences.defaultPlaybackSpeed
 
     private var player: AVPlayer?
     private var timeObserver: Any?
     private var statusObserver: NSKeyValueObservation?
-    private var playbackSpeed: Double = 1.0
+    private var playbackEndObserver: NSObjectProtocol?
     private var didRetryPlayback: Bool = false
+    private var hasFinishedCurrentItem: Bool = false
     private let audioURLProvider: ((UUID) async -> URL?)?
     private var nowPlayingInfo: [String: Any] = [:]
     private var artworkCache: [URL: MPMediaItemArtwork] = [:]
     private var artworkFetchTasks: [URL: Task<MPMediaItemArtwork?, Never>] = [:]
+    private var playbackPreferences = PlaybackPreferences()
     private let audioLog = OSLog(subsystem: "com.briefly.app", category: "Audio")
+
+    var nextEpisodeResolver: ((Episode) async -> Episode?)?
 
     init(audioURLProvider: ((UUID) async -> URL?)? = nil) {
         self.audioURLProvider = audioURLProvider
+        playbackSpeed = playbackPreferences.playbackSpeed
         super.init()
         configureSession()
         configureRemoteCommands()
@@ -55,6 +61,7 @@ final class AudioPlayerManager: NSObject, ObservableObject {
     }
 
     private func startPlayback(episode: Episode, url: URL, startSeconds: Double) {
+        hasFinishedCurrentItem = false
         // Stop observing the previous player before swapping in a new instance.
         let needsNewPlayer = currentEpisode?.id != episode.id ||
             player == nil ||
@@ -62,6 +69,7 @@ final class AudioPlayerManager: NSObject, ObservableObject {
         if needsNewPlayer {
             removeTimeObserverIfNeeded()
             removeStatusObserverIfNeeded()
+            removePlaybackEndObserverIfNeeded()
             player?.pause()
 
             currentEpisode = episode
@@ -70,6 +78,7 @@ final class AudioPlayerManager: NSObject, ObservableObject {
             player = newPlayer
             didRetryPlayback = false
             addStatusObserver(for: item, episode: episode, startSeconds: startSeconds)
+            addPlaybackEndObserver(for: item, episode: episode)
             addTimeObserver()
             if let duration = episode.durationSeconds, duration.isFinite {
                 durationSeconds = duration
@@ -84,6 +93,9 @@ final class AudioPlayerManager: NSObject, ObservableObject {
             os_log("Started new playback item. url=%{public}@ startSeconds=%{public}.2f duration=%{public}.2f", log: audioLog, type: .info, url.absoluteString, startSeconds, durationSeconds)
         } else {
             currentEpisode = episode
+            if playbackEndObserver == nil, let currentItem = player?.currentItem {
+                addPlaybackEndObserver(for: currentItem, episode: episode)
+            }
         }
 
         activateAudioSessionIfNeeded()
@@ -97,9 +109,18 @@ final class AudioPlayerManager: NSObject, ObservableObject {
     }
 
     func resume() {
+        guard let player else { return }
+        if playbackEndObserver == nil, let item = player.currentItem, let episode = currentEpisode {
+            addPlaybackEndObserver(for: item, episode: episode)
+        }
+        if hasFinishedCurrentItem || isAtEndOfItem(player) {
+            hasFinishedCurrentItem = false
+            seek(toSeconds: 0, autoPlay: true)
+            return
+        }
         activateAudioSessionIfNeeded()
-        player?.play()
-        player?.rate = Float(playbackSpeed)
+        player.play()
+        player.rate = Float(playbackSpeed)
         isPlaying = true
         updateNowPlayingInfo(for: currentEpisode, elapsed: currentTimeSeconds, duration: durationSeconds, rate: Float(playbackSpeed))
     }
@@ -125,6 +146,7 @@ final class AudioPlayerManager: NSObject, ObservableObject {
 
     func seek(toSeconds seconds: Double, autoPlay: Bool? = nil) {
         guard let player else { return }
+        hasFinishedCurrentItem = false
         let duration = player.currentItem?.duration.seconds
         let validDuration = (duration?.isFinite == true && (duration ?? 0) > 0) ? duration : nil
         let clampedSeconds = max(0, min(seconds, validDuration ?? seconds))
@@ -151,10 +173,17 @@ final class AudioPlayerManager: NSObject, ObservableObject {
     }
 
     func setPlaybackSpeed(_ speed: Double) {
-        playbackSpeed = max(0.5, min(speed, 2.0))
+        let clamped = max(0.5, min(speed, 2.0))
+        playbackPreferences.playbackSpeed = clamped
+        guard abs(clamped - playbackSpeed) > 0.0001 else { return }
+        playbackSpeed = clamped
         if isPlaying {
-            player?.rate = Float(playbackSpeed)
+            player?.rate = Float(clamped)
         }
+        updateNowPlayingInfo(for: currentEpisode,
+                             elapsed: currentTimeSeconds,
+                             duration: durationSeconds,
+                             rate: isPlaying ? Float(clamped) : 0)
     }
 
     /// Refresh the current episode metadata with a freshly fetched list.
@@ -216,9 +245,9 @@ final class AudioPlayerManager: NSObject, ObservableObject {
     private func configureSession() {
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.playback, mode: .spokenAudio, options: [.interruptSpokenAudioAndMixWithOthers])
+            try session.setCategory(.playback, mode: .default, options: [])
             try session.setActive(true, options: [])
-            os_log("Audio session configured for playback", log: audioLog, type: .info)
+            os_log("Audio session configured for playback (mode=default, no mix)", log: audioLog, type: .info)
         } catch {
             os_log("Failed to set audio session: %{public}@", log: audioLog, type: .error, error.localizedDescription)
         }
@@ -264,6 +293,38 @@ final class AudioPlayerManager: NSObject, ObservableObject {
             return .success
         }
         os_log("Remote command center configured", log: audioLog, type: .info)
+    }
+
+    private func addPlaybackEndObserver(for item: AVPlayerItem, episode: Episode) {
+        removePlaybackEndObserverIfNeeded()
+        playbackEndObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: item,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handlePlaybackFinished(for: episode)
+        }
+    }
+
+    private func handlePlaybackFinished(for episode: Episode) {
+        hasFinishedCurrentItem = true
+        isPlaying = false
+        if durationSeconds.isFinite && durationSeconds > 0 {
+            progress = 1
+            currentTimeSeconds = durationSeconds
+        }
+        updateNowPlayingInfo(for: episode, elapsed: durationSeconds, duration: durationSeconds, rate: 0)
+
+        guard playbackPreferences.autoPlayNextEpisode else { return }
+        guard let resolveNext = nextEpisodeResolver else { return }
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            guard self.playbackPreferences.autoPlayNextEpisode else { return }
+            guard self.currentEpisode?.id == episode.id else { return }
+            guard let next = await resolveNext(episode), next.id != episode.id else { return }
+            await self.preparePlayback(episode: next, startTime: 0)
+        }
     }
 
     @MainActor
@@ -360,11 +421,25 @@ final class AudioPlayerManager: NSObject, ObservableObject {
         }
     }
 
+    private func removePlaybackEndObserverIfNeeded() {
+        if let observer = playbackEndObserver {
+            NotificationCenter.default.removeObserver(observer)
+            playbackEndObserver = nil
+        }
+    }
+
     deinit {
         Task { @MainActor [weak self] in
             guard let self else { return }
             self.removeTimeObserverIfNeeded()
             self.removeStatusObserverIfNeeded()
+            self.removePlaybackEndObserverIfNeeded()
         }
+    }
+
+    private func isAtEndOfItem(_ player: AVPlayer) -> Bool {
+        guard let duration = player.currentItem?.duration.seconds, duration.isFinite, duration > 0 else { return false }
+        let epsilon = 0.5
+        return player.currentTime().seconds >= duration - epsilon
     }
 }

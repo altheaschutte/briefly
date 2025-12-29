@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Session } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
 import { setUnauthorizedHandler } from "@/lib/api";
+import { showErrorSnackbar } from "@/lib/snackbar";
 
 type AuthState = {
   session: Session | null;
@@ -40,7 +41,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsReady(true);
     });
 
-    setUnauthorizedHandler(() => {
+    setUnauthorizedHandler((message) => {
+      showErrorSnackbar(message || "Session expired. Please sign in again.");
       supabase.auth.signOut();
       router.replace("/login");
     });

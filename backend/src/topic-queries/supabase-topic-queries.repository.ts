@@ -5,6 +5,7 @@ import { v4 as uuid } from 'uuid';
 import { TopicQuery } from '../domain/types';
 import { TopicQueriesRepository, TopicQueryCreateInput } from './topic-queries.repository';
 import { SupabaseDatabase, TopicQueryRow } from './topic-queries.supabase-types';
+import { handleSupabaseErrors } from '../common/supabase.util';
 
 @Injectable()
 export class SupabaseTopicQueriesRepository implements TopicQueriesRepository {
@@ -32,64 +33,78 @@ export class SupabaseTopicQueriesRepository implements TopicQueriesRepository {
   }
 
   async listByTopic(userId: string, topicId: string): Promise<TopicQuery[]> {
-    const { data, error } = await this.client
-      .from('topic_queries')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('topic_id', topicId)
-      .order('created_at', { ascending: true });
+    return handleSupabaseErrors(
+      this.logger,
+      `list topic queries for topic ${topicId} user ${userId}`,
+      async () => {
+        const { data, error } = await this.client
+          .from('topic_queries')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('topic_id', topicId)
+          .order('created_at', { ascending: true });
 
-    if (error) {
-      this.logger.error(
-        `Failed to list topic queries for topic ${topicId} user ${userId}: ${error.message}`,
-      );
-      throw error;
-    }
-    const rows = (data as TopicQueryRow[] | null) ?? [];
-    return rows.map((row) => this.mapRow(row));
+        if (error) {
+          this.logger.error(
+            `Failed to list topic queries for topic ${topicId} user ${userId}: ${error.message}`,
+          );
+          throw error;
+        }
+        const rows = (data as TopicQueryRow[] | null) ?? [];
+        return rows.map((row) => this.mapRow(row));
+      },
+    );
   }
 
   async listByEpisode(userId: string, episodeId: string): Promise<TopicQuery[]> {
-    const { data, error } = await this.client
-      .from('topic_queries')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('episode_id', episodeId)
-      .order('created_at', { ascending: true });
+    return handleSupabaseErrors(
+      this.logger,
+      `list topic queries for episode ${episodeId} user ${userId}`,
+      async () => {
+        const { data, error } = await this.client
+          .from('topic_queries')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('episode_id', episodeId)
+          .order('created_at', { ascending: true });
 
-    if (error) {
-      this.logger.error(
-        `Failed to list topic queries for episode ${episodeId} user ${userId}: ${error.message}`,
-      );
-      throw error;
-    }
-    const rows = (data as TopicQueryRow[] | null) ?? [];
-    return rows.map((row) => this.mapRow(row));
+        if (error) {
+          this.logger.error(
+            `Failed to list topic queries for episode ${episodeId} user ${userId}: ${error.message}`,
+          );
+          throw error;
+        }
+        const rows = (data as TopicQueryRow[] | null) ?? [];
+        return rows.map((row) => this.mapRow(row));
+      },
+    );
   }
 
   async createMany(userId: string, inputs: TopicQueryCreateInput[]): Promise<TopicQuery[]> {
-    const now = new Date().toISOString();
-    const payload: TopicQueryRow[] = inputs.map((input) => ({
-      id: uuid(),
-      user_id: userId,
-      topic_id: input.topicId,
-      episode_id: input.episodeId,
-      query: input.query,
-      answer: input.answer,
-      citations: input.citations ?? [],
-      order_index: input.orderIndex,
-      created_at: now,
-      updated_at: now,
-    }));
+    return handleSupabaseErrors(this.logger, `create topic queries for user ${userId}`, async () => {
+      const now = new Date().toISOString();
+      const payload: TopicQueryRow[] = inputs.map((input) => ({
+        id: uuid(),
+        user_id: userId,
+        topic_id: input.topicId,
+        episode_id: input.episodeId,
+        query: input.query,
+        answer: input.answer,
+        citations: input.citations ?? [],
+        order_index: input.orderIndex,
+        created_at: now,
+        updated_at: now,
+      }));
 
-    const { data, error } = await this.client.from('topic_queries').insert(payload).select();
+      const { data, error } = await this.client.from('topic_queries').insert(payload).select();
 
-    if (error) {
-      this.logger.error(`Failed to create topic queries for user ${userId}: ${error.message}`);
-      throw error;
-    }
-    const rows = (data as TopicQueryRow[] | null) ?? [];
-    return rows.map((row) => this.mapRow(row));
+      if (error) {
+        this.logger.error(`Failed to create topic queries for user ${userId}: ${error.message}`);
+        throw error;
+      }
+      const rows = (data as TopicQueryRow[] | null) ?? [];
+      return rows.map((row) => this.mapRow(row));
+    });
   }
 
   private mapRow(row: TopicQueryRow): TopicQuery {

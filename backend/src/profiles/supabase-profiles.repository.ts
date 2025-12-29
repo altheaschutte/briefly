@@ -4,6 +4,7 @@ import { SupabaseClient, createClient } from '@supabase/supabase-js';
 import { UserProfile } from '../domain/types';
 import { ProfilesRepository } from './profiles.repository';
 import { ProfilesDatabase, ProfileRow } from './profiles.supabase-types';
+import { handleSupabaseErrors } from '../common/supabase.util';
 
 @Injectable()
 export class SupabaseProfilesRepository implements ProfilesRepository {
@@ -29,78 +30,84 @@ export class SupabaseProfilesRepository implements ProfilesRepository {
   }
 
   async getByUserId(userId: string): Promise<UserProfile | undefined> {
-    const { data, error } = await this.client
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
+    return handleSupabaseErrors(this.logger, `fetch profile for user ${userId}`, async () => {
+      const { data, error } = await this.client
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
 
-    if (error) {
-      if (error.code === 'PGRST116') {
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return undefined;
+        }
+        this.logger.error(`Failed to fetch profile for user ${userId}: ${error.message}`);
+        throw error;
+      }
+      if (!data) {
         return undefined;
       }
-      this.logger.error(`Failed to fetch profile for user ${userId}: ${error.message}`);
-      throw error;
-    }
-    if (!data) {
-      return undefined;
-    }
-    return this.mapRow(data as ProfileRow);
+      return this.mapRow(data as ProfileRow);
+    });
   }
 
   async upsertProfile(profile: UserProfile): Promise<UserProfile> {
-    const payload: ProfileRow = {
-      id: profile.id,
-      first_name: profile.firstName,
-      intention: profile.intention,
-      user_about_context: profile.userAboutContext,
-      timezone: profile.timezone,
-      created_at: profile.createdAt.toISOString(),
-      updated_at: profile.updatedAt.toISOString(),
-    };
+    return handleSupabaseErrors(this.logger, `upsert profile for user ${profile.id}`, async () => {
+      const payload: ProfileRow = {
+        id: profile.id,
+        first_name: profile.firstName,
+        intention: profile.intention,
+        user_about_context: profile.userAboutContext,
+        timezone: profile.timezone,
+        created_at: profile.createdAt.toISOString(),
+        updated_at: profile.updatedAt.toISOString(),
+      };
 
-    const { data, error } = await this.client
-      .from('profiles')
-      .upsert(payload, { onConflict: 'id' })
-      .select()
-      .maybeSingle();
+      const { data, error } = await this.client
+        .from('profiles')
+        .upsert(payload, { onConflict: 'id' })
+        .select()
+        .maybeSingle();
 
-    if (error) {
-      this.logger.error(`Failed to upsert profile for user ${profile.id}: ${error.message}`);
-      throw error;
-    }
-    if (!data) {
-      throw new Error('Supabase did not return a profile row after upsert');
-    }
-    return this.mapRow(data as ProfileRow);
+      if (error) {
+        this.logger.error(`Failed to upsert profile for user ${profile.id}: ${error.message}`);
+        throw error;
+      }
+      if (!data) {
+        throw new Error('Supabase did not return a profile row after upsert');
+      }
+      return this.mapRow(data as ProfileRow);
+    });
   }
 
   async updateTimezone(userId: string, timezone: string): Promise<UserProfile | undefined> {
-    const existing = await this.getByUserId(userId);
-    if (!existing) {
-      const fallback: UserProfile = {
-        id: userId,
-        firstName: 'Friend',
-        intention: 'Not provided',
-        userAboutContext: 'Not provided',
-        timezone,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-      return this.upsertProfile(fallback);
-    }
-    const { data, error } = await this.client
-      .from('profiles')
-      .update({ timezone, updated_at: new Date().toISOString() })
-      .eq('id', userId)
-      .select()
-      .maybeSingle();
-    if (error) {
-      this.logger.error(`Failed to update profile timezone for user ${userId}: ${error.message}`);
-      throw error;
-    }
-    if (!data) return undefined;
-    return this.mapRow(data as ProfileRow);
+    return handleSupabaseErrors(this.logger, `update profile timezone for user ${userId}`, async () => {
+      const existing = await this.getByUserId(userId);
+      if (!existing) {
+        const fallback: UserProfile = {
+          id: userId,
+          firstName: 'Friend',
+          intention: 'Not provided',
+          userAboutContext: 'Not provided',
+          timezone,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        return this.upsertProfile(fallback);
+      }
+      const { data, error } = await this.client
+        .from('profiles')
+        .update({ timezone, updated_at: new Date().toISOString() })
+        .eq('id', userId)
+        .select()
+        .maybeSingle();
+      if (error) {
+        this.logger.error(`Failed to update profile timezone for user ${userId}: ${error.message}`);
+        throw error;
+      }
+      if (!data) return undefined;
+      return this.mapRow(data as ProfileRow);
+    });
   }
 
   private mapRow(row: ProfileRow): UserProfile {

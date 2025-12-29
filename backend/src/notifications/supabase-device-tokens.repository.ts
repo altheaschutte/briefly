@@ -4,6 +4,7 @@ import { SupabaseClient, createClient } from '@supabase/supabase-js';
 import { v4 as uuid } from 'uuid';
 import { DeviceToken, DeviceTokensRepository } from './device-tokens.repository';
 import { DeviceTokenRow, SupabaseDatabase } from './device-tokens.supabase-types';
+import { handleSupabaseErrors } from '../common/supabase.util';
 
 @Injectable()
 export class SupabaseDeviceTokensRepository implements DeviceTokensRepository {
@@ -29,50 +30,56 @@ export class SupabaseDeviceTokensRepository implements DeviceTokensRepository {
   }
 
   async upsert(userId: string, token: string, platform: string): Promise<DeviceToken> {
-    const normalizedPlatform = platform.trim().toLowerCase() || 'unknown';
-    const now = new Date().toISOString();
-    const payload: DeviceTokenRow = {
-      id: uuid(),
-      user_id: userId,
-      platform: normalizedPlatform,
-      token,
-      last_seen_at: now,
-      created_at: now,
-      updated_at: now,
-    };
+    return handleSupabaseErrors(this.logger, `upsert device token for user ${userId}`, async () => {
+      const normalizedPlatform = platform.trim().toLowerCase() || 'unknown';
+      const now = new Date().toISOString();
+      const payload: DeviceTokenRow = {
+        id: uuid(),
+        user_id: userId,
+        platform: normalizedPlatform,
+        token,
+        last_seen_at: now,
+        created_at: now,
+        updated_at: now,
+      };
 
-    const { data, error } = await this.client
-      .from('device_tokens')
-      .upsert(payload, { onConflict: 'token' })
-      .select()
-      .maybeSingle();
+      const { data, error } = await this.client
+        .from('device_tokens')
+        .upsert(payload, { onConflict: 'token' })
+        .select()
+        .maybeSingle();
 
-    if (error) {
-      this.logger.error(`Failed to upsert device token for user ${userId}: ${error.message}`);
-      throw error;
-    }
-    if (!data) {
-      throw new Error('Supabase did not return a device token row after upsert');
-    }
-    return this.mapRow(data as DeviceTokenRow);
+      if (error) {
+        this.logger.error(`Failed to upsert device token for user ${userId}: ${error.message}`);
+        throw error;
+      }
+      if (!data) {
+        throw new Error('Supabase did not return a device token row after upsert');
+      }
+      return this.mapRow(data as DeviceTokenRow);
+    });
   }
 
   async listByUser(userId: string): Promise<DeviceToken[]> {
-    const { data, error } = await this.client.from('device_tokens').select('*').eq('user_id', userId);
-    if (error) {
-      this.logger.error(`Failed to list device tokens for user ${userId}: ${error.message}`);
-      throw error;
-    }
-    const rows = (data as DeviceTokenRow[] | null) ?? [];
-    return rows.map((row) => this.mapRow(row));
+    return handleSupabaseErrors(this.logger, `list device tokens for user ${userId}`, async () => {
+      const { data, error } = await this.client.from('device_tokens').select('*').eq('user_id', userId);
+      if (error) {
+        this.logger.error(`Failed to list device tokens for user ${userId}: ${error.message}`);
+        throw error;
+      }
+      const rows = (data as DeviceTokenRow[] | null) ?? [];
+      return rows.map((row) => this.mapRow(row));
+    });
   }
 
   async delete(userId: string, token: string): Promise<void> {
-    const { error } = await this.client.from('device_tokens').delete().eq('user_id', userId).eq('token', token);
-    if (error) {
-      this.logger.error(`Failed to delete device token for user ${userId}: ${error.message}`);
-      throw error;
-    }
+    return handleSupabaseErrors(this.logger, `delete device token for user ${userId}`, async () => {
+      const { error } = await this.client.from('device_tokens').delete().eq('user_id', userId).eq('token', token);
+      if (error) {
+        this.logger.error(`Failed to delete device token for user ${userId}: ${error.message}`);
+        throw error;
+      }
+    });
   }
 
   private mapRow(row: DeviceTokenRow): DeviceToken {

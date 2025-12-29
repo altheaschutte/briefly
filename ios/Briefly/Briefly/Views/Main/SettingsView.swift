@@ -5,6 +5,7 @@ struct SettingsView: View {
     let email: String?
     @EnvironmentObject private var pushManager: PushNotificationManager
     @State private var showingScheduleEditor = false
+    @State private var showingSpeedSheet = false
     @State private var editingSchedule: Schedule?
     @State private var draftTimeMinutes = 7 * 60
     @State private var draftFrequency: ScheduleFrequency = .daily
@@ -23,17 +24,25 @@ struct SettingsView: View {
 //                        Text("\(minutes) minutes").tag(minutes)
 //                    }
 //                }
-            } header: {
-                settingsHeader("Account")
             }
-            .listRowBackground(Color.brieflySurface)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
 
             Section {
-                Picker("Speed", selection: $viewModel.playbackSpeed) {
-                    ForEach([0.8, 1.0, 1.2, 1.5, 2.0], id: \.self) { speed in
-                        Text("\(String(format: "%.1fx", speed))").tag(speed)
+                Button {
+                    showingSpeedSheet = true
+                } label: {
+                    HStack {
+                        Text("Playback speed")
+                            .foregroundColor(.white)
+                        Spacer()
+                        Text(viewModel.playbackSpeed.playbackSpeedLabel)
+                            .font(.body.weight(.semibold))
+                            .foregroundColor(.brieflyTextMuted)
                     }
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
                 Toggle("Auto-play next episode", isOn: $viewModel.autoPlayNextEpisode)
             } header: {
                 settingsHeader("Playback")
@@ -57,8 +66,8 @@ struct SettingsView: View {
                 })) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Notify when a new episode is ready.")
-                            .foregroundColor(.brieflyTextMuted)
-                            .font(.subheadline)
+                            .foregroundColor(.white)
+                            .font(.body)
                     }
                 }
             } header: {
@@ -79,7 +88,7 @@ struct SettingsView: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("\(viewModel.formattedTime(from: schedule.localTimeMinutes)) · \(schedule.frequency.displayName)")
-                                .font(.subheadline)
+                                .font(.body)
                                 .foregroundColor(.white)
                         }
                         Spacer()
@@ -104,24 +113,44 @@ struct SettingsView: View {
                         }
                     }
                 }
-                if viewModel.schedules.count < 2 {
-                    Button {
-                        startEditing(nil)
-                    } label: {
-                        Label("Add schedule", systemImage: "plus")
+            } header: {
+                settingsHeader("Schedules") {
+                    if viewModel.schedules.count < 2 {
+                        Button {
+                            startEditing(nil)
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 14, weight: .semibold))
+                                Text("Add schedule")
+                                    .font(.subheadline.weight(.semibold))
+                            }
+                        }
+                        .foregroundColor(.brieflyPrimary)
+                        .buttonStyle(.plain)
                     }
                 }
-            } header: {
-                settingsHeader("Schedules")
+            } footer: {
+                Color.clear
+                    .frame(height: 12)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
             }
             .listRowBackground(Color.brieflySurface)
 
             Section {
                 Button(role: .destructive, action: viewModel.logout) {
-                    Text("Logout")
+                    Label("Logout", systemImage: "rectangle.portrait.and.arrow.right")
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, 10)
+                        .foregroundColor(.white)
+                        .background(Color.brieflySurface)
+                        .cornerRadius(10)
                 }
+                .buttonStyle(.plain)
             }
-            .listRowBackground(Color.brieflySurface)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
@@ -138,6 +167,15 @@ struct SettingsView: View {
             viewModel.save()
         }
         .background(Color.brieflyBackground)
+        .sheet(isPresented: $showingSpeedSheet) {
+            PlaybackSpeedSheet(selectedSpeed: viewModel.playbackSpeed) { speed in
+                viewModel.playbackSpeed = speed
+            }
+            .presentationDetents([.medium, .large])
+            .presentationCornerRadius(26)
+            .presentationBackground(Color.brieflySurface)
+            .presentationDragIndicator(.visible)
+        }
         .sheet(isPresented: $showingScheduleEditor) {
             ScheduleEditor(
                 frequency: $draftFrequency,
@@ -187,7 +225,7 @@ private struct ScheduleEditor: View {
         NavigationStack {
             List {
                 Section {
-                    Picker("Ready by", selection: $timeMinutes) {
+                    Picker("Generate episode at", selection: $timeMinutes) {
                         ForEach(Self.hourOptions, id: \.self) { minutes in
                             Text(Self.formattedHour(minutes)).tag(minutes)
                         }
@@ -262,8 +300,7 @@ private struct PlanSummaryView: View {
                 .font(.headline)
             Text(usageLine)
                 .foregroundColor(.brieflyTextMuted)
-            Text(limitsLine)
-                .foregroundColor(.brieflyTextMuted)
+            UsageProgressView(progress: usageProgressFraction)
             Text("Subscriptions can't be purchased in the app. Visit brieflypodcast.app to manage your account.")
                 .font(.footnote)
                 .foregroundColor(.brieflyTextMuted)
@@ -285,28 +322,50 @@ private struct PlanSummaryView: View {
         return "\(used) minutes used this period"
     }
 
-    private var limitsLine: String {
-        guard let entitlements else { return "Max 5 active topics" }
-        return "Max \(entitlements.limits.maxActiveTopics) active topics"
+    private var usageProgressFraction: Double {
+        guard let usedSeconds = entitlements?.secondsUsed, let limitSeconds = entitlements?.secondsLimit, limitSeconds > 0 else {
+            return 0
+        }
+        let fraction = usedSeconds / limitSeconds
+        return min(max(fraction, 0), 1)
     }
 }
 
-private struct SettingsSectionHeader: View {
-    let title: String
+private struct UsageProgressView: View {
+    let progress: Double
 
     var body: some View {
-        Text(title)
-            .font(.subheadline.weight(.semibold))
-            .foregroundColor(.brieflyTextMuted)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 8)
+        ProgressView(value: progress)
+            .progressViewStyle(.linear)
+            .tint(.brieflyPrimary)
     }
 }
 
-private func settingsHeader(_ title: String) -> some View {
+private struct SettingsSectionHeader<Trailing: View>: View {
+    let title: String
+    let trailing: Trailing
+
+    init(title: String, @ViewBuilder trailing: () -> Trailing) {
+        self.title = title
+        self.trailing = trailing()
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(.brieflyTextMuted)
+            Spacer()
+            trailing
+        }
+        .padding(.vertical, 8)
+    }
+}
+
+private func settingsHeader<Trailing: View>(_ title: String, @ViewBuilder trailing: () -> Trailing = { EmptyView() }) -> some View {
     ZStack {
         Color.brieflyBackground
-        SettingsSectionHeader(title: title)
+        SettingsSectionHeader(title: title, trailing: trailing)
             .padding(.horizontal)
             .padding(.vertical, 6)
     }

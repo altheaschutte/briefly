@@ -31,6 +31,15 @@ final class AuthManager: ObservableObject {
         return token
     }
 
+    func handleAuthRedirect(url: URL) async throws -> AuthToken {
+        os_log("AuthManager handling auth redirect: %{public}@", log: authLog, type: .debug, url.absoluteString)
+        let token = try await authProvider.handleAuthRedirect(url: url)
+        let email = token.userEmail ?? currentUserEmail ?? ""
+        persist(token: token, email: email)
+        os_log("AuthManager auth redirect succeeded for email: %{public}@", log: authLog, type: .info, email)
+        return token
+    }
+
     func signInWithGoogle() async throws -> AuthToken {
         os_log("AuthManager starting Google sign-in", log: authLog, type: .info)
         let token = try await authProvider.signInWithGoogle()

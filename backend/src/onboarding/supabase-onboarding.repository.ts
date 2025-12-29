@@ -8,6 +8,7 @@ import {
   OnboardingTranscriptsRepository,
 } from './onboarding.repository';
 import { OnboardingTranscriptRow, SupabaseDatabase } from './onboarding.supabase-types';
+import { handleSupabaseErrors } from '../common/supabase.util';
 
 @Injectable()
 export class SupabaseOnboardingRepository implements OnboardingTranscriptsRepository {
@@ -33,34 +34,36 @@ export class SupabaseOnboardingRepository implements OnboardingTranscriptsReposi
   }
 
   async create(userId: string, transcript = ''): Promise<OnboardingTranscript> {
-    const now = new Date().toISOString();
-    const payload: OnboardingTranscriptRow = {
-      id: uuid(),
-      user_id: userId,
-      transcript,
-      status: 'in_progress',
-      extracted_topics: [],
-      error_message: null,
-      created_at: now,
-      updated_at: now,
-    };
+    return handleSupabaseErrors(this.logger, `create onboarding transcript for user ${userId}`, async () => {
+      const now = new Date().toISOString();
+      const payload: OnboardingTranscriptRow = {
+        id: uuid(),
+        user_id: userId,
+        transcript,
+        status: 'in_progress',
+        extracted_topics: [],
+        error_message: null,
+        created_at: now,
+        updated_at: now,
+      };
 
-    const { data, error } = await this.client
-      .from('onboarding_transcripts')
-      .insert(payload)
-      .select()
-      .maybeSingle();
+      const { data, error } = await this.client
+        .from('onboarding_transcripts')
+        .insert(payload)
+        .select()
+        .maybeSingle();
 
-    if (error) {
-      this.logger.error(`Failed to create onboarding transcript for user ${userId}: ${error.message}`);
-      throw error;
-    }
+      if (error) {
+        this.logger.error(`Failed to create onboarding transcript for user ${userId}: ${error.message}`);
+        throw error;
+      }
 
-    if (!data) {
-      throw new Error('Supabase did not return a transcript row after insert');
-    }
+      if (!data) {
+        throw new Error('Supabase did not return a transcript row after insert');
+      }
 
-    return this.mapRow(data as OnboardingTranscriptRow);
+      return this.mapRow(data as OnboardingTranscriptRow);
+    });
   }
 
   async update(
@@ -68,87 +71,93 @@ export class SupabaseOnboardingRepository implements OnboardingTranscriptsReposi
     recordId: string,
     updates: OnboardingTranscriptUpdateInput,
   ): Promise<OnboardingTranscript | undefined> {
-    const now = new Date().toISOString();
-    const payload: Partial<OnboardingTranscriptRow> = {
-      updated_at: now,
-    };
+    return handleSupabaseErrors(this.logger, `update onboarding transcript ${recordId} for user ${userId}`, async () => {
+      const now = new Date().toISOString();
+      const payload: Partial<OnboardingTranscriptRow> = {
+        updated_at: now,
+      };
 
-    if (updates.transcript !== undefined) {
-      payload.transcript = updates.transcript;
-    }
-    if (updates.status !== undefined) {
-      payload.status = updates.status;
-    }
-    if (updates.extractedTopics !== undefined) {
-      payload.extracted_topics = updates.extractedTopics;
-    }
-    if (updates.errorMessage !== undefined) {
-      payload.error_message = updates.errorMessage;
-    }
+      if (updates.transcript !== undefined) {
+        payload.transcript = updates.transcript;
+      }
+      if (updates.status !== undefined) {
+        payload.status = updates.status;
+      }
+      if (updates.extractedTopics !== undefined) {
+        payload.extracted_topics = updates.extractedTopics;
+      }
+      if (updates.errorMessage !== undefined) {
+        payload.error_message = updates.errorMessage;
+      }
 
-    const { data, error } = await this.client
-      .from('onboarding_transcripts')
-      .update(payload)
-      .eq('id', recordId)
-      .eq('user_id', userId)
-      .select()
-      .maybeSingle();
+      const { data, error } = await this.client
+        .from('onboarding_transcripts')
+        .update(payload)
+        .eq('id', recordId)
+        .eq('user_id', userId)
+        .select()
+        .maybeSingle();
 
-    if (error) {
-      if (error.code === 'PGRST116') {
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return undefined;
+        }
+        this.logger.error(
+          `Failed to update onboarding transcript ${recordId} for user ${userId}: ${error.message}`,
+        );
+        throw error;
+      }
+
+      if (!data) {
         return undefined;
       }
-      this.logger.error(
-        `Failed to update onboarding transcript ${recordId} for user ${userId}: ${error.message}`,
-      );
-      throw error;
-    }
 
-    if (!data) {
-      return undefined;
-    }
-
-    return this.mapRow(data as OnboardingTranscriptRow);
+      return this.mapRow(data as OnboardingTranscriptRow);
+    });
   }
 
   async getById(userId: string, recordId: string): Promise<OnboardingTranscript | undefined> {
-    const { data, error } = await this.client
-      .from('onboarding_transcripts')
-      .select('*')
-      .eq('id', recordId)
-      .eq('user_id', userId)
-      .maybeSingle();
+    return handleSupabaseErrors(this.logger, `fetch onboarding transcript ${recordId} for user ${userId}`, async () => {
+      const { data, error } = await this.client
+        .from('onboarding_transcripts')
+        .select('*')
+        .eq('id', recordId)
+        .eq('user_id', userId)
+        .maybeSingle();
 
-    if (error) {
-      if (error.code === 'PGRST116') {
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return undefined;
+        }
+        this.logger.error(
+          `Failed to fetch onboarding transcript ${recordId} for user ${userId}: ${error.message}`,
+        );
+        throw error;
+      }
+
+      if (!data) {
         return undefined;
       }
-      this.logger.error(
-        `Failed to fetch onboarding transcript ${recordId} for user ${userId}: ${error.message}`,
-      );
-      throw error;
-    }
 
-    if (!data) {
-      return undefined;
-    }
-
-    return this.mapRow(data as OnboardingTranscriptRow);
+      return this.mapRow(data as OnboardingTranscriptRow);
+    });
   }
 
   async delete(userId: string, recordId: string): Promise<void> {
-    const { error } = await this.client
-      .from('onboarding_transcripts')
-      .delete()
-      .eq('id', recordId)
-      .eq('user_id', userId);
+    return handleSupabaseErrors(this.logger, `delete onboarding transcript ${recordId} for user ${userId}`, async () => {
+      const { error } = await this.client
+        .from('onboarding_transcripts')
+        .delete()
+        .eq('id', recordId)
+        .eq('user_id', userId);
 
-    if (error) {
-      this.logger.error(
-        `Failed to delete onboarding transcript ${recordId} for user ${userId}: ${error.message}`,
-      );
-      throw error;
-    }
+      if (error) {
+        this.logger.error(
+          `Failed to delete onboarding transcript ${recordId} for user ${userId}: ${error.message}`,
+        );
+        throw error;
+      }
+    });
   }
 
   private mapRow(row: OnboardingTranscriptRow): OnboardingTranscript {

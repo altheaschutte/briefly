@@ -2,6 +2,7 @@ import SwiftUI
 
 struct AuthFlowView: View {
     @StateObject private var viewModel: AuthViewModel
+    @EnvironmentObject private var appViewModel: AppViewModel
 
     init(appViewModel: AppViewModel) {
         _viewModel = StateObject(wrappedValue: AuthViewModel(appViewModel: appViewModel))
@@ -50,7 +51,7 @@ struct AuthFlowView: View {
                                         .stroke(Color.brieflyBorder, lineWidth: 1)
                                 )
                             }
-                            .disabled(viewModel.isLoading)
+                            .disabled(viewModel.isLoading || appViewModel.isHandlingAuthRedirect)
 
                             DividerWithLabel(label: "Or")
 
@@ -69,7 +70,7 @@ struct AuthFlowView: View {
                                     .keyboardType(.emailAddress)
                                     .textContentType(.username)
                                     .disableAutocorrection(true)
-                                    .disabled(viewModel.codeSent)
+                                    .disabled(viewModel.codeSent || appViewModel.isHandlingAuthRedirect)
                                     .inputFieldStyle()
                                     .foregroundColor(.white)
                             }
@@ -91,6 +92,7 @@ struct AuthFlowView: View {
                                         .onChange(of: viewModel.code) { newValue in
                                             viewModel.handleCodeChange(newValue)
                                         }
+                                        .disabled(appViewModel.isHandlingAuthRedirect)
                                         .inputFieldStyle()
                                         .foregroundColor(.white)
                                 }
@@ -129,12 +131,28 @@ struct AuthFlowView: View {
                                 .foregroundColor(.white)
                                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                             }
+                            .disabled(viewModel.isLoading || appViewModel.isHandlingAuthRedirect)
                         }
                         .frame(maxWidth: 420)
                     }
                     .padding(.horizontal, 24)
 
                     Spacer()
+                }
+                if appViewModel.isHandlingAuthRedirect {
+                    Color.black.opacity(0.55)
+                        .ignoresSafeArea()
+                    VStack(spacing: 12) {
+                        ProgressView()
+                            .tint(.white)
+                        Text("Signing you in...")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+                    .padding(24)
+                    .frame(maxWidth: .infinity)
                 }
             }
             .toolbar(.hidden, for: .navigationBar)

@@ -23,10 +23,11 @@ export default function LoginPage() {
     if (isReady && session) {
       getProfile(supabase, session.user.id)
         .then((profile) => {
-          router.replace(profile ? "/" : "/onboarding");
+          const hasAbout = Boolean(profile?.user_about_context && profile.user_about_context.trim());
+          router.replace(hasAbout ? "/subscription" : "/onboarding");
         })
         .catch(() => {
-          router.replace("/");
+          router.replace("/subscription");
         });
     }
   }, [isReady, session, router]);
@@ -62,9 +63,10 @@ export default function LoginPage() {
       const userId = userData.user?.id;
       if (userId) {
         const profile = await getProfile(supabase, userId);
-        router.replace(profile ? "/" : "/onboarding");
+        const hasAbout = Boolean(profile?.user_about_context && profile.user_about_context.trim());
+        router.replace(hasAbout ? "/subscription" : "/onboarding");
       } else {
-        router.replace("/");
+        router.replace("/subscription");
       }
     } catch (err: any) {
       setError(err?.message ?? "Invalid or expired code");

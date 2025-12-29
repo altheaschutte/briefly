@@ -58,7 +58,7 @@ struct AnyEncodable: Encodable {
 final class APIClient {
     let baseURL: URL
     var tokenProvider: (() -> String?)?
-    var unauthorizedHandler: (() -> Void)?
+    var unauthorizedHandler: ((String?) -> Void)?
     private let session: URLSession
 
     init(baseURL: URL, session: URLSession = .shared, tokenProvider: (() -> String?)? = nil) {
@@ -99,12 +99,17 @@ final class APIClient {
             throw APIError.invalidResponse
         }
 
+        let errorMessage = APIClient.extractErrorMessage(from: data)
+
         switch httpResponse.statusCode {
         case 200..<300:
             return data
         case 401:
-            unauthorizedHandler?()
+            unauthorizedHandler?(errorMessage)
             throw APIError.unauthorized
+        case 503 where errorMessage?.lowercased().contains("authentication service") == true:
+            unauthorizedHandler?(errorMessage)
+            throw APIError.statusCode(httpResponse.statusCode)
         default:
             throw APIError.statusCode(httpResponse.statusCode)
         }
@@ -138,6 +143,18 @@ final class APIClient {
         }
 
         return request
+    }
+
+    private static func extractErrorMessage(from data: Data) -> String? {
+        guard data.isEmpty == false else { return nil }
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let message = json["message"] as? String ?? json["error"] as? String {
+            return message
+        }
+        if let string = String(data: data, encoding: .utf8), string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+            return string
+        }
+        return nil
     }
 }
 

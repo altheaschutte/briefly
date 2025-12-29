@@ -42,11 +42,13 @@ export default function OnboardingPage() {
   const router = useRouter();
   const supabase = getSupabaseBrowserClient();
   const [firstName, setFirstName] = useState("");
+  const [aboutContext, setAboutContext] = useState("");
   const [intentions, setIntentions] = useState<IntentionTitle[]>([]);
   const [otherIntention, setOtherIntention] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const timezone = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC", []);
 
   useEffect(() => {
     if (!isReady) return;
@@ -57,7 +59,11 @@ export default function OnboardingPage() {
     const checkProfile = async () => {
       try {
         const profile = await getProfile(supabase, session.user.id);
-        if (profile) {
+        const hasAbout = Boolean(profile?.user_about_context && profile.user_about_context.trim());
+        if (profile?.first_name) {
+          setFirstName((prev) => prev || profile.first_name);
+        }
+        if (hasAbout) {
           router.replace("/");
           return;
         }
@@ -110,7 +116,9 @@ export default function OnboardingPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!session) return;
-    if (!firstName.trim() || resolvedIntentions.length === 0) {
+    const trimmedName = firstName.trim();
+    const trimmedAbout = aboutContext.trim();
+    if (!trimmedName || resolvedIntentions.length === 0) {
       setError("First name and at least one intention are required.");
       return;
     }
@@ -118,13 +126,19 @@ export default function OnboardingPage() {
       setError("Tell us more about your intention.");
       return;
     }
+    if (!trimmedAbout) {
+      setError("Tell us a bit about yourself so we can personalize topics.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
       await upsertProfile(supabase, {
         id: session.user.id,
-        first_name: firstName.trim(),
-        intention: resolvedIntentions.join(", ")
+        first_name: trimmedName,
+        intention: resolvedIntentions.join(", "),
+        user_about_context: trimmedAbout,
+        timezone
       });
       router.replace("/");
     } catch (err: any) {
@@ -157,13 +171,26 @@ export default function OnboardingPage() {
           </div>
         </div>
 
-        <form className="space-y-8  text-muted" onSubmit={handleSubmit}>
+        <form className="space-y-8 text-muted" onSubmit={handleSubmit}>
           <label className="block space-y-1 ">
-            <span className="mb-2 text-sm">First name</span>
+            <span className="mb-2 text-sm font-semibold text-white">First name</span>
             <input
               className="w-full rounded-lg border border-transparent bg-overlay px-3 py-2 text-white outline-none focus:border-teal focus:ring-1 focus:ring-tealSoft"
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
+              required
+            />
+          </label>
+
+          <label className="block space-y-2 ">
+            <div>
+              <span className="text-sm font-semibold text-white">Tell me about yourself</span>
+              <p className="text-sm text-muted">What do you want to know about?</p>
+            </div>
+            <textarea
+              className="min-h-[140px] w-full resize-none rounded-lg border border-transparent bg-overlay px-3 py-3 text-white outline-none focus:border-teal focus:ring-1 focus:ring-tealSoft"
+              value={aboutContext}
+              onChange={(e) => setAboutContext(e.target.value)}
               required
             />
           </label>

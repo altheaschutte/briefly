@@ -126,6 +126,16 @@ export default function Navigation() {
                     
                       <div className="mt-2 flex flex-col gap-1 text-sm">
                         <button
+                          onClick={() => {
+                            setAccountOpen(false);
+                            router.push("/subscription");
+                          }}
+                          className="flex items-center gap-2 rounded-xl px-3 py-2 text-left text-white transition hover:bg-overlay/80"
+                        >
+                          <CreditCard className="h-4 w-4 text-muted" />
+                          Subscription
+                        </button>
+                        <button
                           onClick={handleManageBilling}
                           className="flex items-center gap-2 rounded-xl px-3 py-2 text-left text-white transition hover:bg-overlay/80 disabled:opacity-60"
                           disabled={billingLoading}
@@ -222,6 +232,19 @@ export default function Navigation() {
                       <CreditCard className="h-4 w-4 text-muted" />
                     )}
                     Manage billing
+                  </span>
+                  <ExternalLink className="h-3 w-3 text-muted" />
+                </button>
+                <button
+                  className="inline-flex items-center justify-between gap-2 rounded-xl bg-surface px-4 py-3 text-sm font-semibold text-white transition hover:bg-overlay/80"
+                  onClick={() => {
+                    setOpen(false);
+                    router.push("/subscription");
+                  }}
+                >
+                  <span className="flex items-center gap-2">
+                    <CreditCard className="h-4 w-4 text-muted" />
+                    Subscription
                   </span>
                   <ExternalLink className="h-3 w-3 text-muted" />
                 </button>

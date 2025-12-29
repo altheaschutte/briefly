@@ -71,6 +71,16 @@ struct AppRootView: View {
                     MainTabView(appViewModel: appViewModel)
                 }
             }
+            .overlay(alignment: .bottom) {
+                if let message = appViewModel.snackbarMessage {
+                    SnackbarView(message: message) {
+                        appViewModel.snackbarMessage = nil
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .animation(.easeInOut(duration: 0.2), value: appViewModel.snackbarMessage)
+                    .padding(.bottom, 20)
+                }
+            }
         }
         .onAppear {
             appViewModel.bootstrap()
@@ -89,6 +99,10 @@ struct AppRootView: View {
             if phase == .active {
                 Task { await appViewModel.authManager.refreshSessionIfNeeded(force: true) }
             }
+        }
+        .onOpenURL { url in
+            guard url.scheme == "io.supabase.gotrue" else { return }
+            Task { await appViewModel.handleAuthRedirect(url) }
         }
     }
 }

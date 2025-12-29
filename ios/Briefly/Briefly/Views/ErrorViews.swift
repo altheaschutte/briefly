@@ -114,3 +114,41 @@ struct FullScreenErrorView: View {
         }
     }
 }
+
+struct SnackbarView: View {
+    let message: String
+    var onDismiss: (() -> Void)?
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.circle.fill")
+                .foregroundColor(.white)
+                .font(.headline)
+
+            Text(message)
+                .foregroundColor(.white)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+
+            Spacer(minLength: 8)
+
+            if let onDismiss {
+                Button {
+                    onDismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .foregroundColor(.white.opacity(0.9))
+                        .font(.caption.weight(.bold))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 14)
+        .background(Color.black.opacity(0.9))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .shadow(color: Color.black.opacity(0.24), radius: 12, y: 6)
+        .padding(.horizontal, 18)
+    }
+}

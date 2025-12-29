@@ -15,17 +15,24 @@ struct MainTabView: View {
 
     init(appViewModel: AppViewModel) {
         self.appViewModel = appViewModel
+        let fatalAuthHandler: (String) -> Void = { [weak appViewModel] message in
+            Task { @MainActor in
+                await appViewModel?.forceLogoutWithSnackbar(message)
+            }
+        }
         _feedViewModel = StateObject(
             wrappedValue: EpisodesViewModel(
                 episodeService: appViewModel.episodeService,
-                initialEpisodes: appViewModel.prefetchedEpisodes
+                initialEpisodes: appViewModel.prefetchedEpisodes,
+                onFatalAuthError: fatalAuthHandler
             )
         )
         _topicsViewModel = StateObject(
             wrappedValue: TopicsViewModel(
                 topicService: appViewModel.topicService,
                 entitlementsService: appViewModel.entitlementsService,
-                initialTopics: appViewModel.prefetchedTopics ?? []
+                initialTopics: appViewModel.prefetchedTopics ?? [],
+                onFatalAuthError: fatalAuthHandler
             )
         )
         _settingsViewModel = StateObject(

@@ -20,7 +20,8 @@ export function useRequireAuth() {
     const enforceProfile = async () => {
       try {
         const profile = await getProfile(supabase, session.user.id);
-        if (!profile) {
+        const hasAbout = Boolean(profile?.user_about_context && profile.user_about_context.trim());
+        if (!hasAbout) {
           router.replace("/onboarding");
         }
       } catch (err) {

@@ -6,6 +6,8 @@ struct EpisodeDetailView: View {
     let onCreateEpisode: (() -> Void)?
     @EnvironmentObject private var appViewModel: AppViewModel
     @EnvironmentObject private var audioManager: AudioPlayerManager
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @State private var detailedEpisode: Episode
     @State private var segments: [EpisodeSegment]
     @State private var sources: [EpisodeSource]
@@ -14,6 +16,15 @@ struct EpisodeDetailView: View {
     @State private var errorMessage: String?
     @State private var hasLoaded: Bool = false
     @State private var isSummaryExpanded: Bool = false
+    @State private var isShowingShareSheet: Bool = false
+    @State private var shareItems: [Any] = []
+    @State private var isDownloading: Bool = false
+    @State private var showDeleteConfirmation: Bool = false
+    @State private var actionAlert: ActionAlert?
+    @State private var isDeleting: Bool = false
+    @State private var scrollToScript: Bool = false
+    @State private var showActionsSheet: Bool = false
+    @State private var showSpeedSheet: Bool = false
 
     init(episode: Episode, onCreateEpisode: (() -> Void)? = nil) {
         self.episode = episode
@@ -24,46 +35,52 @@ struct EpisodeDetailView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                header
-                playbackControls
-//                actionRow
-                if let notes = detailedEpisode.showNotes?.trimmingCharacters(in: .whitespacesAndNewlines),
-                   notes.isEmpty == false {
-                    showNotesSection(notes)
-                }
-            if let topics = detailedEpisode.topics, topics.isEmpty == false {
-                topicsSection(topics)
-            }
-            segmentsSection
-            if let errorMessage {
-                InlineErrorText(message: errorMessage)
-                    .padding(.top, 4)
-                Button("Retry") {
-                    Task { await loadDetailsIfNeeded(force: true) }
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    header
+                    playbackControls
+//                    actionRow
+                    if let script = scriptContent {
+                        scriptSection(title: script.title, body: script.body)
+                            .padding(.top, 8)
+                            .id(scriptSectionID)
                     }
-                    .font(.footnote.weight(.semibold))
-                    .padding(.top, 2)
+                    if let topics = detailedEpisode.topics, topics.isEmpty == false {
+                        topicsSection(topics)
+                    }
+                    segmentsSection
+                    if let errorMessage {
+                        InlineErrorText(message: errorMessage)
+                            .padding(.top, 4)
+                        Button("Retry") {
+                            Task { await loadDetailsIfNeeded(force: true) }
+                        }
+                        .font(.footnote.weight(.semibold))
+                        .padding(.top, 2)
+                    }
                 }
+                .padding()
             }
-            .padding()
+            .onChange(of: scrollToScript) { target in
+                guard target else { return }
+                withAnimation {
+                    proxy.scrollTo(scriptSectionID, anchor: .top)
+                }
+                scrollToScript = false
+            }
         }
         .background(Color.brieflyBackground)
         .navigationTitle("Episode")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                if let onCreateEpisode {
-                    Button(action: onCreateEpisode) {
-                        Label("Create", systemImage: "sparkles")
-                            .labelStyle(.iconOnly)
-                    }
-                    .accessibilityLabel("Create episode")
-                } else {
-                    Button(action: { audioManager.play(episode: detailedEpisode) }) {
-                        Image(systemName: "play.circle")
-                    }
+                Button {
+                    showActionsSheet = true
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .imageScale(.large)
+                        .accessibilityLabel("More actions")
                 }
             }
         }
@@ -72,6 +89,40 @@ struct EpisodeDetailView: View {
         }
         .safeAreaInset(edge: .bottom) {
             playerBarInset
+        }
+        .sheet(isPresented: $showSpeedSheet) {
+            PlaybackSpeedSheet(selectedSpeed: audioManager.playbackSpeed) { speed in
+                audioManager.setPlaybackSpeed(speed)
+            }
+            .presentationDetents([.medium, .large])
+            .presentationCornerRadius(26)
+            .presentationBackground(Color.brieflySurface)
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $isShowingShareSheet) {
+            ShareSheet(activityItems: shareItems)
+        }
+        .sheet(isPresented: $showActionsSheet) {
+            actionsSheet
+                .presentationDetents([.medium, .large])
+                .presentationCornerRadius(26)
+                .presentationBackground(Color.brieflySurface)
+                .presentationDragIndicator(.visible)
+        }
+        .alert(item: $actionAlert) { alert in
+            Alert(
+                title: Text(alert.title),
+                message: Text(alert.message),
+                dismissButton: .default(Text("OK"))
+            )
+        }
+        .confirmationDialog("Delete this episode?", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                Task { await deleteEpisode() }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This will remove the episode and stop playback if it's playing.")
         }
     }
 }
@@ -147,6 +198,108 @@ private extension EpisodeDetailView {
                 .foregroundColor(Color.brieflySecondary)
     }
 
+    private var actionsSheet: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            actionsHeader
+
+            Divider()
+                .overlay(Color.brieflyBorder)
+
+            VStack(spacing: 10) {
+                ForEach(actionItems) { item in
+                    actionRow(item)
+                }
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 18)
+        .padding(.top, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.brieflySurface)
+    }
+
+    private var actionsHeader: some View {
+        HStack(alignment: .center, spacing: 12) {
+            coverArtwork
+                .frame(width: 64, height: 64)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color.brieflyBorder, lineWidth: 1)
+                )
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(detailedEpisode.displayTitle)
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .lineLimit(2)
+                Text(detailedEpisode.subtitle)
+                    .font(.subheadline)
+                    .foregroundColor(.brieflyTextMuted)
+                    .lineLimit(2)
+            }
+            Spacer()
+        }
+    }
+
+    private func actionRow(_ item: EpisodeActionItem) -> some View {
+        Button(role: item.role) {
+            performActionAndDismiss(item.action)
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: item.icon)
+                    .font(.system(size: 18, weight: .semibold))
+                    .frame(width: 32, height: 32)
+                    .foregroundColor(item.role == .destructive ? Color.brieflyDestructive : .white)
+                    .background(
+                        Circle()
+                            .fill(Color.white.opacity(0.06))
+                    )
+                Text(item.title)
+                    .font(.body.weight(.semibold))
+                    .foregroundColor(item.role == .destructive ? Color.brieflyDestructive : .white)
+                Spacer()
+            }
+            .padding(.vertical, 10)
+            .padding(.horizontal, 12)
+            .background(Color.white.opacity(0.04))
+            .cornerRadius(12)
+        }
+        .buttonStyle(.plain)
+        .disabled(item.isDisabled)
+        .opacity(item.isDisabled ? 0.55 : 1)
+    }
+
+    private var actionItems: [EpisodeActionItem] {
+        [
+            EpisodeActionItem(id: "share", title: "Share episode", icon: "square.and.arrow.up", role: nil, isDisabled: false) {
+                shareEpisode()
+            },
+            EpisodeActionItem(id: "download", title: isDownloading ? "Downloading…" : "Download", icon: "arrow.down.circle", role: nil, isDisabled: isDownloading || detailedEpisode.audioURL == nil) {
+                downloadEpisode()
+            },
+            EpisodeActionItem(id: "script", title: "View script", icon: "doc.text", role: nil, isDisabled: scriptContent == nil) {
+                viewScript()
+            },
+            EpisodeActionItem(id: "feedback", title: "Feedback", icon: "ellipsis.bubble", role: nil, isDisabled: false) {
+                sendFeedback()
+            },
+            EpisodeActionItem(id: "report", title: "Report", icon: "exclamationmark.bubble", role: nil, isDisabled: false) {
+                reportEpisode()
+            },
+            EpisodeActionItem(id: "delete", title: "Delete", icon: "trash", role: .destructive, isDisabled: isDeleting) {
+                showDeleteConfirmation = true
+            }
+        ]
+    }
+
+    private func performActionAndDismiss(_ action: @escaping () -> Void) {
+        showActionsSheet = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+            action()
+        }
+    }
+
 //    var actionRow: some View {
 //        HStack(spacing: 12) {
 //            secondaryActionButton(systemName: "note.text") // transcript
@@ -174,10 +327,25 @@ private extension EpisodeDetailView {
         .buttonStyle(.plain)
     }
 
+    private var speedButton: some View {
+        Button {
+            showSpeedSheet = true
+        } label: {
+            Text(audioManager.playbackSpeed.playbackSpeedLabel)
+                .font(.system(size: 18, weight: .medium))
+                .foregroundColor(.white)
+                .frame(width: 44, height: 48)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Playback speed")
+        .accessibilityValue(audioManager.playbackSpeed.playbackSpeedLabel)
+    }
+
     var playbackControls: some View {
         VStack(spacing: 14) {
             playbackScrubber
-            HStack(spacing: 28) {
+            HStack(spacing: 24) {
+                speedButton
                 skipButton(icon: "gobackward.10", direction: -10)
                 primaryPlayButton
                 skipButton(icon: "goforward.10", direction: 10)
@@ -189,15 +357,14 @@ private extension EpisodeDetailView {
     private var playbackScrubber: some View {
         VStack(spacing: 6) {
             Slider(value: Binding(
-                get: { max(0, min(audioManager.progress, 1)) },
-                set: { newValue in audioManager.seek(to: newValue) }
+                get: { displayedProgress },
+                set: { newValue in seek(toProgress: newValue) }
             ))
             .tint(.brieflyPrimary)
-
             HStack {
-                Text(timeString(audioManager.currentTimeSeconds))
+                Text(timeString(displayedCurrentTime))
                 Spacer()
-                Text(timeString(audioManager.durationSeconds))
+                Text(timeString(displayedDuration))
             }
             .font(.caption2)
             .foregroundColor(.brieflyTextMuted)
@@ -219,8 +386,19 @@ private extension EpisodeDetailView {
     }
 
     private func skip(seconds: Double) {
-        let target = audioManager.currentTimeSeconds + seconds
-        audioManager.seek(toSeconds: target)
+        let duration = displayedDuration
+        let base = isDetailEpisodeCurrent ? audioManager.currentTimeSeconds : 0
+        let clampedTarget: Double
+        if duration > 0 {
+            clampedTarget = max(0, min(base + seconds, duration))
+        } else {
+            clampedTarget = max(0, base + seconds)
+        }
+        if isDetailEpisodeCurrent {
+            audioManager.seek(toSeconds: clampedTarget)
+        } else {
+            audioManager.play(episode: detailedEpisode, from: clampedTarget)
+        }
     }
 
     private func secondaryActionButton(systemName: String) -> some View {
@@ -347,6 +525,20 @@ private extension EpisodeDetailView {
         )
     }
 
+    func scriptSection(title: String, body: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.headline)
+            markdownText(body)
+                .font(.body)
+                .foregroundColor(.brieflyTextMuted)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding()
+        .background(Color.brieflySurface)
+        .cornerRadius(12)
+    }
+
     func sourcesList(_ list: [EpisodeSource], isExpanded: Bool, toggle: @escaping () -> Void) -> some View {
         let displayedList = isExpanded ? list : Array(list.prefix(3))
 
@@ -467,6 +659,49 @@ private extension EpisodeDetailView {
         audioManager.currentEpisode?.id == detailedEpisode.id && audioManager.isPlaying
     }
 
+    private var isDetailEpisodeCurrent: Bool {
+        audioManager.currentEpisode?.id == detailedEpisode.id
+    }
+
+    private var displayedDuration: Double {
+        if isDetailEpisodeCurrent {
+            let duration = audioManager.durationSeconds
+            if duration.isFinite && duration > 0 {
+                return duration
+            }
+        }
+        return detailedEpisode.durationDisplaySeconds ?? 0
+    }
+
+    private var displayedCurrentTime: Double {
+        if isDetailEpisodeCurrent {
+            let current = audioManager.currentTimeSeconds
+            return current.isFinite ? current : 0
+        }
+        return 0
+    }
+
+    private var displayedProgress: Double {
+        let duration = displayedDuration
+        guard duration > 0 else { return 0 }
+        return max(0, min(displayedCurrentTime / duration, 1))
+    }
+
+    private func seek(toProgress progress: Double) {
+        let duration = displayedDuration
+        guard duration > 0 else {
+            audioManager.play(episode: detailedEpisode)
+            return
+        }
+        let clamped = max(0, min(progress, 1))
+        let targetSeconds = clamped * duration
+        if isDetailEpisodeCurrent {
+            audioManager.seek(toSeconds: targetSeconds)
+        } else {
+            audioManager.play(episode: detailedEpisode, from: targetSeconds)
+        }
+    }
+
     func timeString(_ seconds: Double?) -> String {
         guard let seconds, seconds.isFinite else { return "--:--" }
         let minutes = Int(seconds) / 60
@@ -512,6 +747,123 @@ private extension EpisodeDetailView {
         return position >= start && (segment.durationSeconds == nil || position < end)
     }
 
+    var scriptContent: (title: String, body: String)? {
+        if let notes = detailedEpisode.showNotes?.trimmingCharacters(in: .whitespacesAndNewlines),
+           notes.isEmpty == false {
+            return ("Show notes", notes)
+        }
+        if let transcript = detailedEpisode.transcript?.trimmingCharacters(in: .whitespacesAndNewlines),
+           transcript.isEmpty == false {
+            return ("Transcript", transcript)
+        }
+        return nil
+    }
+
+    func shareEpisode() {
+        var items: [Any] = []
+        if let url = detailedEpisode.audioURL {
+            items.append(url)
+        }
+        items.append(detailedEpisode.displayTitle)
+        items.append(detailedEpisode.subtitle)
+        shareItems = items
+        isShowingShareSheet = true
+    }
+
+    func downloadEpisode() {
+        guard isDownloading == false else { return }
+        isDownloading = true
+        Task {
+            defer { Task { @MainActor in isDownloading = false } }
+
+            let audioURL: URL?
+            if let direct = detailedEpisode.audioURL {
+                audioURL = direct
+            } else {
+                audioURL = await appViewModel.episodeService.fetchSignedAudioURL(for: detailedEpisode.id)
+            }
+
+            guard let resolvedURL = audioURL else {
+                await MainActor.run {
+                    actionAlert = ActionAlert(title: "Download unavailable", message: "Audio is not ready yet.")
+                }
+                return
+            }
+            do {
+                let (tempURL, _) = try await URLSession.shared.download(from: resolvedURL)
+                let sanitized = sanitizedFileName(from: detailedEpisode.displayTitle)
+                let destination = FileManager.default.temporaryDirectory.appendingPathComponent("\(sanitized).mp3")
+                try? FileManager.default.removeItem(at: destination)
+                try FileManager.default.moveItem(at: tempURL, to: destination)
+                await MainActor.run {
+                    shareItems = [destination]
+                    isShowingShareSheet = true
+                }
+            } catch {
+                await MainActor.run {
+                    actionAlert = ActionAlert(title: "Download failed", message: error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    func viewScript() {
+        guard scriptContent != nil else {
+            actionAlert = ActionAlert(title: "No script yet", message: "Script will appear once the episode is ready.")
+            return
+        }
+        scrollToScript = true
+    }
+
+    func sendFeedback() {
+        let title = detailedEpisode.displayTitle
+        let subject = "Feedback on \"\(title)\""
+        openMail(subject: subject)
+    }
+
+    func reportEpisode() {
+        let title = detailedEpisode.displayTitle
+        let subject = "Report episode \"\(title)\""
+        openMail(subject: subject)
+    }
+
+    func openMail(subject: String) {
+        guard let encoded = subject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+              let url = URL(string: "mailto:support@briefly.fm?subject=\(encoded)") else {
+            actionAlert = ActionAlert(title: "Could not start email", message: "Mail app is not available.")
+            return
+        }
+        openURL(url)
+    }
+
+    func deleteEpisode() async {
+        guard isDeleting == false else { return }
+        await MainActor.run { isDeleting = true }
+        do {
+            try await appViewModel.episodeService.deleteEpisode(id: detailedEpisode.id)
+            await MainActor.run {
+                if audioManager.currentEpisode?.id == detailedEpisode.id {
+                    audioManager.stop()
+                }
+                appViewModel.prefetchedEpisodes?.removeAll { $0.id == detailedEpisode.id }
+                isDeleting = false
+                dismiss()
+            }
+        } catch {
+            await MainActor.run {
+                isDeleting = false
+                actionAlert = ActionAlert(title: "Delete failed", message: error.localizedDescription)
+            }
+        }
+    }
+
+    func sanitizedFileName(from title: String) -> String {
+        let invalid = CharacterSet.alphanumerics.union(.init(charactersIn: " _-")).inverted
+        let cleaned = title.components(separatedBy: invalid).joined(separator: " ").replacingOccurrences(of: "  ", with: " ")
+        return cleaned.isEmpty ? "episode" : cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var scriptSectionID: String { "script-section" }
 }
 
 private extension EpisodeDetailView {
@@ -601,6 +953,31 @@ private extension String {
         let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
+}
+
+private struct EpisodeActionItem: Identifiable {
+    let id: String
+    let title: String
+    let icon: String
+    let role: ButtonRole?
+    let isDisabled: Bool
+    let action: () -> Void
+}
+
+struct ActionAlert: Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+}
+
+struct ShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) { }
 }
 
 // Lightweight shared image cache so artwork doesn't re-download across screens.
