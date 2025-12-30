@@ -268,12 +268,17 @@ Hard rules:
 - Do NOT include speaker labels, turn markers, titles, headings, bullets, or JSON.
 - Do NOT include bracketed audio direction tags (no [pause], [excited], etc.).
 - Avoid meta commentary (no “in this segment”, “coming up”, “let’s dive in”, “today we’ll…”).
+- Avoid corny/overdramatic openers. Do NOT start with “Imagine…”, “Picture this…”, “Close your eyes…”, or “What if…”.
+- Avoid second-person narration (“you”, “your”) unless the Findings explicitly require it.
 
 Style:
 - Warm, curious, grounded.
 - Tight, vivid, and concrete.
 - Use short paragraphs (1–3 sentences each). Aim for 5–9 paragraphs.
 - Open with a compelling hook; end with a memorable close that ties back to why it matters.
+Hook guidance:
+- Start with a concrete detail from the Findings in the first 1–2 sentences (a person, place, event, or specific fact).
+- Prefer straightforward scene-setting over hype. No melodrama, no grand claims.
 
 Target length:
 - Aim for a ${durationLabel} narration at ~150 words/minute.
@@ -315,7 +320,7 @@ ${sourceList}${instructionLine}`,
         throw error;
       }
 
-      const cleaned = this.sanitizeNarrationScript(content || '');
+      const cleaned = (content || '').trim();
       if (!cleaned) {
         if (attempt < maxAttempts) {
           const snippet = this.truncateForLogs(content || '');
@@ -673,40 +678,6 @@ SHOW NOTES RULES
       ? this.stripAudioDirectionTags(withoutSpeakerLabels)
       : withoutSpeakerLabels;
     return withoutAudioTags.replace(/\s{2,}/g, ' ').trim();
-  }
-
-  private sanitizeNarrationScript(raw: string): string {
-    const normalized = (raw || '')
-      .replace(/\u0000/g, '')
-      .trim();
-    if (!normalized) {
-      return '';
-    }
-
-    const unfenced = normalized.replace(/```(?:json|text|markdown)?\s*([\s\S]*?)```/gi, '$1').replace(/\r/g, '').trim();
-    const blocks = unfenced
-      .split(/\n\s*\n+/)
-      .map((block) => block.trim())
-      .filter(Boolean);
-
-    const paragraphs = blocks
-      .filter((block) => !/^(title|script|narration)\s*[:\-]/i.test(block))
-      .map((block) =>
-        block
-          .split('\n')
-          .map((line) => line.trim())
-          .filter(Boolean)
-          .join(' ')
-          .trim(),
-      )
-      .map((paragraph) => paragraph.replace(/^(?:SPEAKER[_ ]?1|HOST)\s*:\s*/i, '').trim())
-      .filter(Boolean);
-
-    const joined = paragraphs.join('\n\n').trim();
-    const withoutSpeakerLabels = joined.replace(/\bSPEAKER[_ ]?1\b:?/gi, '').replace(/\bSPEAKER[_ ]?2\b:?/gi, '').trim();
-    const withoutAudioTags = this.stripAudioDirectionTags(withoutSpeakerLabels);
-
-    return withoutAudioTags.replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
   }
 
   private stripAudioDirectionTags(text: string): string {
