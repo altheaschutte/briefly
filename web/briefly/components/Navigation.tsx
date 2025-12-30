@@ -88,7 +88,7 @@ export default function Navigation() {
     return null;
   }
 
-  const primaryName = firstName ?? (email ? email.split("@")[0] : null);
+  const primaryName = firstName ?? email ?? null;
 
   return (
     <header
@@ -129,7 +129,7 @@ export default function Navigation() {
                     aria-expanded={accountOpen}
                   >
                     <CircleUser className="h-5 w-5" />
-                    <span className="hidden lg:inline">{email ?? "Account"}</span>
+                    <span className="hidden lg:inline">{primaryName ?? "Account"}</span>
                   </button>
                   <div
                     className={clsx(
@@ -147,7 +147,7 @@ export default function Navigation() {
                           }}
                           className="flex items-center gap-2 rounded-xl px-3 py-2 text-left text-white transition hover:bg-overlay/80"
                         >
-                          <CreditCard className="h-4 w-4 text-muted" />
+                          <CircleUser className="h-4 w-4 text-muted" />
                           Subscription
                         </button>
                         <button
@@ -258,7 +258,7 @@ export default function Navigation() {
                   }}
                 >
                   <span className="flex items-center gap-2">
-                    <CreditCard className="h-4 w-4 text-muted" />
+                    <CircleUser className="h-4 w-4 text-muted" />
                     Subscription
                   </span>
                   <ExternalLink className="h-3 w-3 text-muted" />

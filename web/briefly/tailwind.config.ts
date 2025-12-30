@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import typography from "@tailwindcss/typography";
 
 const config: Config = {
   content: [
@@ -22,7 +23,7 @@ const config: Config = {
         tealSoft: "#93c8c2",
         muted: "#c7d9e7",
         ink: "#0c1824",
-        borderSoft: "rgba(147,200,194,0.28)"
+        borderSoft: "#93c8c226"
       },
       fontFamily: {
         display: ["var(--font-display)", "sans-serif"],
@@ -59,7 +60,7 @@ const config: Config = {
       }
     }
   },
-  plugins: []
+  plugins: [typography]
 };
 
 export default config;

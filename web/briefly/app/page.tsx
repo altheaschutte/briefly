@@ -39,7 +39,7 @@ export default function RootPage() {
           </div>
 
           <div className="relative flex w-full items-center justify-center lg:justify-end">
-            <div className="pointer-events-none absolute inset-[-30%] -z-10 rounded-full bg-gradient-to-br from-accent/30 via-transparent to-teal/35 blur-3xl" />
+            <div className="pointer-events-none absolute inset-0 -z-10 rounded-full bg-gradient-to-br from-accent/30 via-transparent to-teal/35 blur-3xl" />
             <Image
               src="/screens-staggered.svg"
               alt="Briefly app screens"

@@ -108,6 +108,7 @@ export class BillingService {
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: `${this.appWebUrl}/billing/success`,
       cancel_url: `${this.appWebUrl}/billing/canceled`,
+      allow_promotion_codes: true,
       client_reference_id: userId,
       subscription_data: {
         metadata: { user_id: userId, tier },

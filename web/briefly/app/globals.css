@@ -36,3 +36,27 @@ body {
 .section-subtitle {
   @apply text-base text-muted;
 }
+
+.prose {
+  @apply text-muted;
+}
+
+.prose :where(h1, h2, h3, h4, h5, h6):not(:where([class~="not-prose"] *)) {
+  @apply text-white;
+}
+
+.prose a {
+  @apply text-accent no-underline;
+}
+
+.prose a:hover {
+  @apply underline;
+}
+
+.prose strong {
+  @apply text-white;
+}
+
+.prose blockquote {
+  @apply border-l-4 border-accent/40 text-muted;
+}

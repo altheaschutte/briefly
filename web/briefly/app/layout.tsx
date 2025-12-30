@@ -41,7 +41,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AuthProvider>
           <div className="flex min-h-screen flex-col">
             <Navigation />
-            <main className="flex-1 pb-20 pt-8 md:pt-12 flex flex-col items-center justify-center">{children}</main>
+            <main className="flex flex-1 flex-col items-center justify-center pb-20 pt-8 md:pt-12">{children}</main>
             <Footer />
           </div>
         </AuthProvider>

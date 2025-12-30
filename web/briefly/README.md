@@ -5,7 +5,7 @@ Next.js + Tailwind build of the Briefly iOS experience for the web. Focused on t
 ## Commands
 
 - `npm install` — install dependencies
-- `npm run dev` — start the dev server at `http://localhost:3000`
+- `npm run dev` — start the dev server at `http://localhost:3001`
 - `npm run build` — build the production bundle
 - `npm run start` — serve the production build
 - `npm run lint` — lint with Next.js config
