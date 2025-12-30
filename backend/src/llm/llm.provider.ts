@@ -1,5 +1,5 @@
 import { EpisodeSegment, EpisodeSource } from '../domain/types';
-import { SegmentDialogueScript, TopicQueryPlan, TopicIntent } from './llm.types';
+import { TopicQueryPlan } from './llm.types';
 
 export interface EpisodeMetadata {
   title: string;
@@ -13,12 +13,10 @@ export interface LlmProvider {
     title: string,
     findings: string,
     sources: EpisodeSource[],
-    intent: TopicIntent,
     targetDurationMinutes?: number,
     instruction?: string,
-  ): Promise<SegmentDialogueScript>;
+  ): Promise<string>;
   generateCoverMotif(title: string, topics?: string[]): Promise<string>;
-  enhanceSegmentDialogueForElevenV3(script: SegmentDialogueScript): Promise<SegmentDialogueScript>;
   generateEpisodeMetadata(script: string, segments: EpisodeSegment[]): Promise<EpisodeMetadata>;
   extractTopicBriefs(transcript: string): Promise<string[]>;
   generateSeedTopics(userInsight: string): Promise<string[]>;

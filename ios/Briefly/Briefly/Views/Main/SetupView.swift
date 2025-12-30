@@ -529,6 +529,7 @@ final class EpisodeCreationViewModel: ObservableObject {
         errorMessage = nil
         isAtGenerationLimit = false
         isGenerating = true
+        inProgressEpisode = nil
         pollTask?.cancel()
 
         do {

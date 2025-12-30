@@ -36,31 +36,27 @@ type ProviderName = 'openai' | 'xai' | 'grok';
         };
 
         return {
-          generateTopicQueries: (...args) => {
+          generateTopicQueries: (...args: Parameters<LlmProvider['generateTopicQueries']>) => {
             logCall(`rewrite:${rewriteProviderName}`, 'generateTopicQueries');
             return rewriteProvider.generateTopicQueries(...args);
           },
-          extractTopicBriefs: (...args) => {
+          extractTopicBriefs: (...args: Parameters<LlmProvider['extractTopicBriefs']>) => {
             logCall(`rewrite:${rewriteProviderName}`, 'extractTopicBriefs');
             return rewriteProvider.extractTopicBriefs(...args);
           },
-          generateSeedTopics: (...args) => {
+          generateSeedTopics: (...args: Parameters<LlmProvider['generateSeedTopics']>) => {
             logCall(`rewrite:${rewriteProviderName}`, 'generateSeedTopics');
             return rewriteProvider.generateSeedTopics(...args);
           },
-          generateCoverMotif: (...args) => {
+          generateCoverMotif: (...args: Parameters<LlmProvider['generateCoverMotif']>) => {
             logCall(`rewrite:${rewriteProviderName}`, 'generateCoverMotif');
             return rewriteProvider.generateCoverMotif(...args);
           },
-          generateSegmentScript: (...args) => {
+          generateSegmentScript: (...args: Parameters<LlmProvider['generateSegmentScript']>) => {
             logCall(`script:${scriptProviderName}`, 'generateSegmentScript');
             return scriptProvider.generateSegmentScript(...args);
           },
-          enhanceSegmentDialogueForElevenV3: (...args) => {
-            logCall(`script:${scriptProviderName}`, 'enhanceSegmentDialogueForElevenV3');
-            return scriptProvider.enhanceSegmentDialogueForElevenV3(...args);
-          },
-          generateEpisodeMetadata: (...args) => {
+          generateEpisodeMetadata: (...args: Parameters<LlmProvider['generateEpisodeMetadata']>) => {
             logCall(`script:${scriptProviderName}`, 'generateEpisodeMetadata');
             return scriptProvider.generateEpisodeMetadata(...args);
           },

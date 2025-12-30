@@ -13,7 +13,7 @@ export interface DialogueTurn {
 }
 
 export interface SegmentDialogueScript {
-  title: string;
-  intent: TopicIntent;
+  title?: string;
+  intent?: TopicIntent;
   turns: DialogueTurn[];
 }

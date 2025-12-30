@@ -25,11 +25,13 @@ import {
   buildEpisodeSources,
   buildSegmentContent,
   combineDialogueScripts,
+  coerceTextToDialogue,
   estimateDurationSeconds,
   renderDialogueScript,
   selectFreshQueries,
 } from './episode-script.utils';
 import { EpisodeSegmentsService } from './episode-segments.service';
+import { SegmentDialogueScript } from '../llm/llm.types';
 
 @Injectable()
 export class EpisodeProcessorService {
@@ -74,8 +76,6 @@ export class EpisodeProcessorService {
         this.logger.log(`API_TEST_MODE enabled: limiting episode ${episodeId} to ${topics.length} segment(s)`);
       }
       const perSegmentTargetMinutes = Math.max(1, Math.round(targetDuration / activeTopics.length));
-      const ttsProvider = (this.configService.get<string>('TTS_PROVIDER') || 'elevenlabs').toLowerCase();
-      const enhanceDialogueForVoiceTags = ttsProvider !== 'openai'; // OpenAI TTS cannot handle bracketed voice cues
 
       stage = 'status:retrieving_content';
       await this.markEpisodeStatus(userId, episodeId, 'retrieving_content');
@@ -124,24 +124,19 @@ export class EpisodeProcessorService {
           previousSegmentTitle !== null
             ? `This continues immediately after the previous segment on "${previousSegmentTitle}".`
             : undefined;
-        let segmentDialogue = await this.llmService.generateSegmentScript(
+        const segmentScript = await this.llmService.generateSegmentScript(
           topic.originalText,
           segmentContent,
           segmentSources,
-          topicIntent,
           perSegmentTargetMinutes,
           instruction,
         );
-        if (enhanceDialogueForVoiceTags) {
-          try {
-            stage = `topic:${index}:enhance_dialogue`;
-            segmentDialogue = await this.llmService.enhanceSegmentDialogueForElevenV3(segmentDialogue);
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            this.logger.warn(`Dialogue enhancement failed for topic ${topic.id}: ${message}`);
-          }
-        }
-        const segmentTitle = segmentDialogue.title?.trim() || topic.originalText;
+        const segmentDialogue: SegmentDialogueScript = {
+          title: topic.originalText,
+          intent: undefined,
+          turns: coerceTextToDialogue(segmentScript),
+        };
+        const segmentTitle = topic.originalText;
         const segmentScriptText = renderDialogueScript(segmentDialogue);
         stage = `topic:${index}:tts`;
         const segmentTtsResult = await this.ttsService.synthesize(segmentDialogue, { voiceA, voiceB });

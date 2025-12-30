@@ -9,6 +9,8 @@ struct OnboardingIntentionOption: Identifiable, Hashable {
 
 @MainActor
 final class ProfileOnboardingViewModel: ObservableObject {
+    private static let shouldAutoSeedInitialTopics = false
+
     @Published var firstName: String
     @Published var selectedIntentions: Set<String> = []
     @Published var otherIntention: String = ""
@@ -116,7 +118,9 @@ final class ProfileOnboardingViewModel: ObservableObject {
                 timezone: TimeZone.current.identifier
             )
             _ = try await profileService.upsertProfile(profile)
-            _ = try await appViewModel.seedTopics(from: trimmedAbout)
+            if Self.shouldAutoSeedInitialTopics {
+                _ = try await appViewModel.seedTopics(from: trimmedAbout)
+            }
             try? await scheduleService.completeOnboarding(
                 timezone: TimeZone.current.identifier,
                 localTimeMinutes: 7 * 60,

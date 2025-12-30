@@ -141,23 +141,29 @@ export function combineDialogueScripts(segments: EpisodeSegment[]): SegmentDialo
 }
 
 export function renderDialogueScript(script: SegmentDialogueScript): string {
-  const rendered = (script?.turns || [])
-    .map((turn) => `${turn.speaker}: ${turn.text}`)
-    .filter((line) => line.trim().length > 0)
-    .join('\n\n')
-    .trim();
-  return rendered || script.title || '';
+  const turns = (script?.turns || []).filter((turn) => Boolean(turn?.text?.trim()));
+  if (!turns.length) {
+    return script?.title || '';
+  }
+
+  const speakers = new Set(turns.map((turn) => turn.speaker));
+  const singleSpeaker = speakers.size === 1;
+  const rendered = singleSpeaker
+    ? turns.map((turn) => turn.text.trim()).join('\n\n')
+    : turns.map((turn) => `${turn.speaker}: ${turn.text}`).join('\n\n');
+  return rendered.trim();
 }
 
 export function coerceTextToDialogue(text: string): SegmentDialogueScript['turns'] {
   if (!text?.trim()) {
     return [];
   }
-  return text
-    .split(/\n+/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => ({ speaker: 'SPEAKER_1' as Speaker, text: line }));
+  const normalized = text.replace(/\r/g, '').trim();
+  const paragraphs = normalized
+    .split(/\n\s*\n+/)
+    .map((chunk) => chunk.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+  return paragraphs.map((paragraph) => ({ speaker: 'SPEAKER_1' as Speaker, text: paragraph }));
 }
 
 export function estimateDurationSeconds(script: string): number {

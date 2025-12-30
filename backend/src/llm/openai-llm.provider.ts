@@ -79,9 +79,10 @@ First, infer the topic intent:
 
 Rules:
 - Output between 1 and 5 queries.
-- Default to 1 query for "single_story".
+- Default to 1 query for "single_story" or multiple for a more indepth longer segment.
+- Consider the assumed knowledge of the user if the query implies existing knowledge.
 - Use 3-5 queries only for "multi_item" topics OR if the topic contains multiple sub-areas that truly require separate queries.
-- If "single_story", write ONE query designed to return a single richly detailed result. Add modifiers like: longform, feature, narrative, oral history, investigation, biography.
+- If "single_story", write queries designed to return richly detailed results covering different aspects of the topic or diving deeper into the topic. Add modifiers like: longform, feature, narrative, oral history, investigation, biography.
 - If "multi_item", cover distinct angles and avoid overlaps.
 - Do not repeat, lightly rephrase, or overlap with any previous queries supplied.
 - Keep each query lean, disambiguated (entities, locations, timeframes), and ready for direct use.
@@ -241,12 +242,10 @@ Describe the motif only.`,
     title: string,
     findings: string,
     sources: EpisodeSource[],
-    intent: TopicIntent,
     targetDurationMinutes?: number,
     instruction?: string,
-  ): Promise<SegmentDialogueScript> {
+  ): Promise<string> {
     const client = this.getClient();
-    const durationLabel = targetDurationMinutes ? `${targetDurationMinutes}-minute` : 'about 2 minute';
     const sourceList =
       sources
         .filter((s) => Boolean(s))
@@ -255,47 +254,36 @@ Describe the motif only.`,
     const instructionLine = instruction?.trim()
       ? `\nInstruction (follow strictly): ${instruction.trim()}`
       : '';
+    const durationLabel = targetDurationMinutes ? `${targetDurationMinutes}-minute` : 'about 2 minute';
     const messages = [
       {
         role: 'system',
-        content: `You are an expert podcast segment writer. Output a SINGLE-HOST narration for ElevenLabs v3 Dialogue (single speaker).
+        content: `You are an expert podcast segment writer. Write a high-quality SINGLE-HOST narration for TTS.
 
-Host:
-- SPEAKER_1 (Australian male): warm, curious, grounded. No other speakers or guests.
-
-Non-negotiable rules (single host only):
+Hard rules:
 - Use ONLY the provided Findings. Do not invent facts, names, numbers, dates, or quotes.
-- If Findings contain multiple possible stories and intent is "single_story", choose ONE most compelling/most detailed story and ignore the rest.
+- If Findings are thin or uncertain, say so plainly and stick to what is known.
 - No URLs spoken aloud.
 - Spell out numbers and dates.
-- Create a fresh segment title for this script (see rules below).
-- Keep lines short and speakable. Natural rhythm, 1–3 sentences per turn. Vary cadence without filler.
-- Do NOT include speaker names or name cues inside any turn text. Rely on the speaker labels only.
-- No audio direction tags or bracketed stage directions. Do NOT use cues like [excited], [pause], [whispers]; write the tone into the words instead.
-- Do NOT summarize or preview the topic sections; jump straight into the story/findings without meta commentary.
-- Do NOT write dialogue, banter, or acknowledgements to another host. Avoid lead-ins like "absolutely," "that's right," or "as you mentioned."
-- Every turn must use SPEAKER_1 only. There is no co-host or interviewee.
+- Do NOT include speaker labels, turn markers, titles, headings, bullets, or JSON.
+- Do NOT include bracketed audio direction tags (no [pause], [excited], etc.).
+- Avoid meta commentary (no “in this segment”, “coming up”, “let’s dive in”, “today we’ll…”).
 
-Segment title rules:
-- 4–10 words, descriptive, and specific to this segment.
-- Must include at least one concrete detail from the Findings (entity, place, event, fact, or number spelled out).
-- Do NOT simply repeat the provided topic prompt verbatim.
-- No quotes or trailing punctuation.
-
-Intent handling:
-- "single_story": tell ONE cohesive story only. Structure: Hook → Setup → What happened (chronological) → Why it matters → Memorable close.
-- "multi_item": cover up to FOUR distinct updates max. Each update must include: one key fact + one why-it-matters line. Use quick transitions.
+Style:
+- Warm, curious, grounded.
+- Tight, vivid, and concrete.
+- Use short paragraphs (1–3 sentences each). Aim for 5–9 paragraphs.
+- Open with a compelling hook; end with a memorable close that ties back to why it matters.
 
 Target length:
-- Aim for a ${durationLabel} segment at ~150 words per minute total spoken words.
+- Aim for a ${durationLabel} narration at ~150 words/minute.
 
-Output JSON only, exactly this shape:
-{"title": string, "intent": "single_story"|"multi_item", "turns":[{"speaker":"SPEAKER_1","text":string}...]}`,
+Output format:
+- Plain text only.`,
       },
       {
         role: 'user',
-        content: `Intent: ${intent}
-Topic prompt (context only): ${title}
+        content: `Topic prompt (context only): ${title}
 Findings (must-use facts):
 ${findings}
 
@@ -306,107 +294,131 @@ ${sourceList}${instructionLine}`,
 
     const maxAttempts = 2;
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      const response = await client.chat.completions.create({
-        model: this.scriptModel,
-        messages,
-        temperature: 0.5,
-        max_tokens: 1100,
-        response_format: { type: 'json_object' },
-      });
-      const content = response.choices[0]?.message?.content;
-      if (!content) {
+      let content: string | null | undefined = null;
+      try {
+        const response = await client.chat.completions.create({
+          model: this.scriptModel,
+          messages,
+          temperature: 0.65,
+          max_tokens: 1200,
+        });
+        content = response.choices[0]?.message?.content;
+      } catch (error) {
+        if (this.isRetryableLlmError(error) && attempt < maxAttempts) {
+          this.logger.warn(
+            `${this.providerLabel} request failed for segment script (attempt ${attempt}/${maxAttempts}): ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+          continue;
+        }
+        throw error;
+      }
+
+      const cleaned = this.sanitizeNarrationScript(content || '');
+      if (!cleaned) {
+        if (attempt < maxAttempts) {
+          const snippet = this.truncateForLogs(content || '');
+          this.logger.warn(
+            `${this.providerLabel} returned empty/invalid narration for segment script (attempt ${attempt}/${maxAttempts}). Response snippet: ${snippet}`,
+          );
+          continue;
+        }
         throw new Error(`${this.providerLabel} returned empty content for segment script`);
       }
-      try {
-        const script = this.parseDialogueScript(content, intent, title, { stripAudioTags: true });
-        const singleSpeakerScript: SegmentDialogueScript = {
-          ...script,
-          turns: script.turns.map((turn) => ({ ...turn, speaker: 'SPEAKER_1' as const })),
-        };
-        return singleSpeakerScript;
-      } catch (error) {
-        if (error instanceof LlmProviderInvalidJsonError && attempt < maxAttempts) {
-          const snippet = this.truncateForLogs(content);
-          this.logger.warn(
-            `${this.providerLabel} returned invalid JSON for segment script (attempt ${attempt}/${maxAttempts}). Response snippet: ${snippet}`,
-          );
-          continue;
-        }
-        throw error;
-      }
+
+      return cleaned;
     }
-    throw new LlmProviderInvalidJsonError(this.providerLabel, 'dialogue script', '');
+    throw new Error(`${this.providerLabel} failed to generate a segment script`);
   }
 
-  async enhanceSegmentDialogueForElevenV3(script: SegmentDialogueScript): Promise<SegmentDialogueScript> {
-    const client = this.getClient();
-    const messages = [
-      {
-        role: 'system',
-        content: `You enhance an existing SINGLE-SPEAKER narration for ElevenLabs v3.
+//   async enhanceSegmentDialogueForElevenV3(script: SegmentDialogueScript): Promise<SegmentDialogueScript> {
+//     const client = this.getClient();
+//     const messages = [
+//       {
+//         role: 'system',
+//         content: `You enhance an existing SINGLE-SPEAKER narration for ElevenLabs v3.
 
-Primary goal:
-- Improve delivery by inserting concise audio tags in square brackets.
+// Primary goal:
+// - Improve delivery by inserting concise audio tags in square brackets.
 
-Hard rules:
-- DO NOT change, remove, or reorder any words in any turn text.
-- You may ONLY insert audio tags (auditory voice cues) and blank lines for pauses.
-- Tags must be placed immediately before or after the words they color.
-- No non-voice stage directions (no [music], [walking], etc.).
-- Do not add speaker names or name cues inside any text.
-- All turns already use SPEAKER_1. Do not introduce new speakers or change speaker labels.
-- Keep tags sparse: typically 1 tag every 2–4 turns, unless the moment clearly benefits.
+// Hard rules:
+// - DO NOT change, remove, or reorder any words in any turn text.
+// - You may ONLY insert audio tags (auditory voice cues) and blank lines for pauses.
+// - Tags must be placed immediately before or after the words they color.
+// - No non-voice stage directions (no [music], [walking], etc.).
+// - Do not add speaker names or name cues inside any text.
+// - All turns already use SPEAKER_1. Do not introduce new speakers or change speaker labels.
+// - Keep tags sparse: typically 1 tag every 2–4 turns, unless the moment clearly benefits.
 
-Return JSON only in the exact same shape:
-{"title": string, "intent": "single_story"|"multi_item", "turns":[{"speaker":"SPEAKER_1","text":string}...]}`,
-      },
-      {
-        role: 'user',
-        content: `Enhance this dialogue by adding sparse delivery tags without changing a single word. Return valid JSON.\n\n${JSON.stringify(script, null, 2)}`,
-      },
-    ] satisfies ChatCompletionMessageParam[];
+// Return JSON only in the exact same shape:
+// {"title": string, "intent": "single_story"|"multi_item", "turns":[{"speaker":"SPEAKER_1","text":string}...]}`,
+//       },
+//       {
+//         role: 'user',
+//         content: `Enhance this dialogue by adding sparse delivery tags without changing a single word. Return valid JSON.\n\n${JSON.stringify(script, null, 2)}`,
+//       },
+//     ] satisfies ChatCompletionMessageParam[];
 
-    const maxAttempts = 2;
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      const response = await client.chat.completions.create({
-        model: this.scriptModel,
-        messages,
-        temperature: 0.35,
-        max_tokens: 900,
-        response_format: { type: 'json_object' },
-      });
-      const content = response.choices[0]?.message?.content;
-      if (!content) {
-        throw new Error(`${this.providerLabel} returned empty content for dialogue enhancement`);
-      }
+//     const maxAttempts = 2;
+//     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+//       let content: string | null | undefined;
+//       try {
+//         const response = await client.chat.completions.create({
+//           model: this.scriptModel,
+//           messages,
+//           temperature: 0.35,
+//           max_tokens: 1100,
+//           response_format: { type: 'json_object' },
+//         });
+//         content = response.choices[0]?.message?.content;
+//       } catch (error) {
+//         if (this.isRetryableLlmError(error) && attempt < maxAttempts) {
+//           this.logger.warn(
+//             `${this.providerLabel} request failed for dialogue enhancement (attempt ${attempt}/${maxAttempts}): ${
+//               error instanceof Error ? error.message : String(error)
+//             }`,
+//           );
+//           continue;
+//         }
+//         throw error;
+//       }
 
-      try {
-        const enhancedParsed = this.parseDialogueScript(content, script.intent, script.title);
-        const enhanced: SegmentDialogueScript = {
-          ...enhancedParsed,
-          turns: enhancedParsed.turns.map((turn) => ({ ...turn, speaker: 'SPEAKER_1' as const })),
-        };
-        const sameLength = enhanced.turns.length === script.turns.length;
-        const sameSpeakers =
-          sameLength && enhanced.turns.every((turn, idx) => turn.speaker === script.turns[idx]?.speaker);
-        if (!sameLength || !sameSpeakers) {
-          throw new Error('Dialogue enhancement altered speaker ordering or turn count');
-        }
+//       if (!content) {
+//         if (attempt < maxAttempts) {
+//           this.logger.warn(`${this.providerLabel} returned empty content for dialogue enhancement (attempt ${attempt}/${maxAttempts})`);
+//           continue;
+//         }
+//         throw new Error(`${this.providerLabel} returned empty content for dialogue enhancement`);
+//       }
 
-        return enhanced;
-      } catch (error) {
-        if (error instanceof LlmProviderInvalidJsonError && attempt < maxAttempts) {
-          const snippet = this.truncateForLogs(content);
-          this.logger.warn(
-            `${this.providerLabel} returned invalid JSON for dialogue enhancement (attempt ${attempt}/${maxAttempts}). Response snippet: ${snippet}`,
-          );
-          continue;
-        }
-        throw error;
-      }
-    }
-    throw new LlmProviderInvalidJsonError(this.providerLabel, 'dialogue enhancement', '');
-  }
+//       try {
+//         const enhancedParsed = this.parseDialogueScript(content, script.intent, script.title);
+//         const enhanced: SegmentDialogueScript = {
+//           ...enhancedParsed,
+//           turns: enhancedParsed.turns.map((turn) => ({ ...turn, speaker: 'SPEAKER_1' as const })),
+//         };
+//         const sameLength = enhanced.turns.length === script.turns.length;
+//         const sameSpeakers =
+//           sameLength && enhanced.turns.every((turn, idx) => turn.speaker === script.turns[idx]?.speaker);
+//         if (!sameLength || !sameSpeakers) {
+//           throw new Error('Dialogue enhancement altered speaker ordering or turn count');
+//         }
+
+//         return enhanced;
+//       } catch (error) {
+//         if (error instanceof LlmProviderInvalidJsonError && attempt < maxAttempts) {
+//           const snippet = this.truncateForLogs(content);
+//           this.logger.warn(
+//             `${this.providerLabel} returned invalid JSON for dialogue enhancement (attempt ${attempt}/${maxAttempts}). Response snippet: ${snippet}`,
+//           );
+//           continue;
+//         }
+//         throw error;
+//       }
+//     }
+//     throw new LlmProviderInvalidJsonError(this.providerLabel, 'dialogue enhancement', '');
+//   }
 
   async generateEpisodeMetadata(script: string, segments: EpisodeSegment[]): Promise<EpisodeMetadata> {
     const client = this.getClient();
@@ -663,6 +675,40 @@ SHOW NOTES RULES
     return withoutAudioTags.replace(/\s{2,}/g, ' ').trim();
   }
 
+  private sanitizeNarrationScript(raw: string): string {
+    const normalized = (raw || '')
+      .replace(/\u0000/g, '')
+      .trim();
+    if (!normalized) {
+      return '';
+    }
+
+    const unfenced = normalized.replace(/```(?:json|text|markdown)?\s*([\s\S]*?)```/gi, '$1').replace(/\r/g, '').trim();
+    const blocks = unfenced
+      .split(/\n\s*\n+/)
+      .map((block) => block.trim())
+      .filter(Boolean);
+
+    const paragraphs = blocks
+      .filter((block) => !/^(title|script|narration)\s*[:\-]/i.test(block))
+      .map((block) =>
+        block
+          .split('\n')
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .join(' ')
+          .trim(),
+      )
+      .map((paragraph) => paragraph.replace(/^(?:SPEAKER[_ ]?1|HOST)\s*:\s*/i, '').trim())
+      .filter(Boolean);
+
+    const joined = paragraphs.join('\n\n').trim();
+    const withoutSpeakerLabels = joined.replace(/\bSPEAKER[_ ]?1\b:?/gi, '').replace(/\bSPEAKER[_ ]?2\b:?/gi, '').trim();
+    const withoutAudioTags = this.stripAudioDirectionTags(withoutSpeakerLabels);
+
+    return withoutAudioTags.replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+  }
+
   private stripAudioDirectionTags(text: string): string {
     return text.replace(/\s*\[[^\]\n]{1,40}\]\s*/g, ' ');
   }
@@ -676,6 +722,26 @@ SHOW NOTES RULES
       return '';
     }
     return compact.length <= maxLength ? compact : `${compact.slice(0, maxLength)}…`;
+  }
+
+  private isRetryableLlmError(error: unknown): boolean {
+    if (!error) {
+      return false;
+    }
+    const err = error as any;
+    const status = err?.status ?? err?.response?.status;
+    if (typeof status === 'number' && [429, 500, 502, 503, 504].includes(status)) {
+      return true;
+    }
+    const code = err?.code ?? err?.cause?.code;
+    if (typeof code === 'string' && ['ECONNRESET', 'ETIMEDOUT', 'EAI_AGAIN', 'ENOTFOUND', 'ECONNREFUSED'].includes(code)) {
+      return true;
+    }
+    const message = typeof err?.message === 'string' ? err.message.toLowerCase() : '';
+    if (!message) {
+      return false;
+    }
+    return message.includes('socket hang up') || message.includes('timeout') || message.includes('timed out');
   }
 
   private parseList(content: string): string[] {
@@ -785,10 +851,117 @@ SHOW NOTES RULES
     return null;
   }
 
+  private extractBalancedJsonObject(content: string): string | null {
+    const start = content.indexOf('{');
+    if (start < 0) {
+      return null;
+    }
+
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let index = start; index < content.length; index += 1) {
+      const char = content[index];
+
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+        if (char === '\\') {
+          escaped = true;
+          continue;
+        }
+        if (char === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (char === '"') {
+        inString = true;
+        continue;
+      }
+
+      if (char === '{') {
+        depth += 1;
+        continue;
+      }
+
+      if (char === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          return content.slice(start, index + 1).trim();
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private repairJsonCandidate(raw: string): string {
+    const cleaned = (raw || '')
+      .replace(/^\uFEFF/, '')
+      .replace(/\u0000/g, '')
+      .replace(/[“”]/g, '"')
+      .replace(/[‘’]/g, "'")
+      .trim();
+
+    const escapedNewlines: string[] = [];
+    let inString = false;
+    let escaped = false;
+
+    for (let index = 0; index < cleaned.length; index += 1) {
+      const char = cleaned[index];
+
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+          escapedNewlines.push(char);
+          continue;
+        }
+
+        if (char === '\\') {
+          escaped = true;
+          escapedNewlines.push(char);
+          continue;
+        }
+
+        if (char === '"') {
+          inString = false;
+          escapedNewlines.push(char);
+          continue;
+        }
+
+        if (char === '\n') {
+          escapedNewlines.push('\\n');
+          continue;
+        }
+
+        if (char === '\r') {
+          escapedNewlines.push('\\r');
+          continue;
+        }
+
+        escapedNewlines.push(char);
+        continue;
+      }
+
+      if (char === '"') {
+        inString = true;
+      }
+      escapedNewlines.push(char);
+    }
+
+    return escapedNewlines.join('').replace(/,\s*([}\]])/g, '$1').trim();
+  }
+
   private parseJsonWithFallback(raw: string, contextLabel: string): any {
     const cleaned = (raw || '').replace(/\u0000/g, '').trim();
     const candidates: Array<string | null> = [
       this.extractJsonBlock(cleaned),
+      this.extractBalancedJsonObject(cleaned),
       this.extractFirstJsonObject(cleaned),
     ];
 
@@ -799,7 +972,12 @@ SHOW NOTES RULES
       try {
         return JSON.parse(candidate);
       } catch {
-        // try next candidate
+        const repaired = this.repairJsonCandidate(candidate);
+        try {
+          return JSON.parse(repaired);
+        } catch {
+          // try next candidate
+        }
       }
     }
 
