@@ -19,9 +19,10 @@ export class XaiLlmProvider extends OpenAiLlmProvider {
         'LLM_PROVIDER_EXTRACTION_MODEL',
       ],
       defaultBaseUrl: 'https://api.x.ai/v1',
-      defaultQueryModel: 'grok-2-latest',
-      defaultScriptModel: 'grok-2-latest',
-      defaultExtractionModel: 'grok-2-latest',
+      defaultQueryModel: 'grok-4-0709',
+      defaultScriptModel: 'grok-4-0709',
+      defaultExtractionModel: 'grok-4-0709',
+      providerLabel: 'XAI LLM provider',
     });
   }
 

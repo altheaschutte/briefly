@@ -140,7 +140,7 @@ export class BillingService {
 
   private describeTier(tier: BillingTier, limits: TierLimits): string {
     if (tier === 'free') {
-      return 'Free trial with 3 x 20-minute episodes.';
+      return 'Free tier with up to 120 minutes per month (≈6 × 20-minute episodes).';
     }
 
     const minutesPerMonth = limits.minutesPerMonth;

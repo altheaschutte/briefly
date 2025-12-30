@@ -25,6 +25,7 @@ struct EpisodeDetailView: View {
     @State private var scrollToScript: Bool = false
     @State private var showActionsSheet: Bool = false
     @State private var showSpeedSheet: Bool = false
+    @State private var actionsSheetDetent: PresentationDetent = .large
 
     init(episode: Episode, onCreateEpisode: (() -> Void)? = nil) {
         self.episode = episode
@@ -104,10 +105,15 @@ struct EpisodeDetailView: View {
         }
         .sheet(isPresented: $showActionsSheet) {
             actionsSheet
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.medium, .large], selection: $actionsSheetDetent)
                 .presentationCornerRadius(26)
                 .presentationBackground(Color.brieflySurface)
                 .presentationDragIndicator(.visible)
+        }
+        .onChange(of: showActionsSheet) { isShowing in
+            if isShowing {
+                actionsSheetDetent = .large
+            }
         }
         .alert(item: $actionAlert) { alert in
             Alert(
@@ -199,22 +205,24 @@ private extension EpisodeDetailView {
     }
 
     private var actionsSheet: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            actionsHeader
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                actionsHeader
 
-            Divider()
-                .overlay(Color.brieflyBorder)
+                Divider()
+                    .overlay(Color.brieflyBorder)
 
-            VStack(spacing: 10) {
-                ForEach(actionItems) { item in
-                    actionRow(item)
+                VStack(spacing: 10) {
+                    ForEach(actionItems) { item in
+                        actionRow(item)
+                    }
                 }
             }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 18)
+            .padding(.top, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 20)
-        .padding(.bottom, 18)
-        .padding(.top, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.brieflySurface)
     }
 
@@ -344,11 +352,25 @@ private extension EpisodeDetailView {
     var playbackControls: some View {
         VStack(spacing: 14) {
             playbackScrubber
-            HStack(spacing: 24) {
-                speedButton
-                skipButton(icon: "gobackward.10", direction: -10)
-                primaryPlayButton
-                skipButton(icon: "goforward.10", direction: 10)
+            if UIDevice.current.userInterfaceIdiom == .phone {
+                HStack(spacing: 24) {
+                    skipButton(icon: "gobackward.10", direction: -10)
+                    primaryPlayButton
+                    skipButton(icon: "goforward.10", direction: 10)
+                }
+                .frame(maxWidth: .infinity)
+                .overlay(alignment: .trailing) {
+                    speedButton
+                        .padding(.trailing, 4)
+                }
+            } else {
+                HStack(spacing: 24) {
+                    speedButton
+                    skipButton(icon: "gobackward.10", direction: -10)
+                    primaryPlayButton
+                    skipButton(icon: "goforward.10", direction: 10)
+                }
+                .frame(maxWidth: .infinity)
             }
         }
         .frame(maxWidth: .infinity)

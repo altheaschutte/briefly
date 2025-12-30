@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
@@ -18,6 +18,7 @@ export interface OpenAiLlmProviderOptions {
   rewriteModelConfigKeys?: string[];
   scriptModelConfigKeys?: string[];
   extractionModelConfigKeys?: string[];
+  providerLabel?: string;
 }
 
 @Injectable()
@@ -26,6 +27,8 @@ export class OpenAiLlmProvider implements LlmProvider {
   private readonly queryModel: string;
   private readonly scriptModel: string;
   private readonly transcriptExtractionModel: string;
+  private readonly logger = new Logger(OpenAiLlmProvider.name);
+  private readonly providerLabel: string;
 
   private readonly apiKeyConfigKeys: string[];
   private readonly baseUrlConfigKeys: string[];
@@ -57,6 +60,7 @@ export class OpenAiLlmProvider implements LlmProvider {
     this.scriptModel = this.getFirstConfigValue(this.scriptModelConfigKeys) ?? options.defaultScriptModel ?? 'gpt-4.1';
     this.transcriptExtractionModel =
       this.getFirstConfigValue(this.extractionModelConfigKeys) ?? options.defaultExtractionModel ?? this.queryModel;
+    this.providerLabel = options.providerLabel ?? 'OpenAI LLM provider';
   }
 
   async generateTopicQueries(topic: string, previousQueries: string[]): Promise<TopicQueryPlan> {
@@ -105,11 +109,11 @@ ${historyBlock}`,
     });
     const content = response.choices[0]?.message?.content;
     if (!content) {
-      throw new Error('OpenAI returned empty content for topic queries');
+      throw new Error(`${this.providerLabel} returned empty content for topic queries`);
     }
     const plan = this.parseTopicQueryPlan(content);
     if (!plan.queries.length) {
-      throw new Error('OpenAI did not return any topic queries');
+      throw new Error(`${this.providerLabel} did not return any topic queries`);
     }
     const queries = plan.intent === 'single_story' ? plan.queries.slice(0, 1) : plan.queries.slice(0, 5);
     return { intent: plan.intent, queries };
@@ -133,12 +137,12 @@ ${historyBlock}`,
     });
     const content = response.choices[0]?.message?.content;
     if (!content) {
-      throw new Error('OpenAI returned empty content for transcript topic extraction');
+      throw new Error(`${this.providerLabel} returned empty content for transcript topic extraction`);
     }
 
     const topics = this.parseList(content);
     if (!topics.length) {
-      throw new Error('OpenAI did not return any topics from transcript extraction');
+      throw new Error(`${this.providerLabel} did not return any topics from transcript extraction`);
     }
     return topics;
   }
@@ -173,11 +177,11 @@ Rules:
     });
     const content = response.choices[0]?.message?.content;
     if (!content) {
-      throw new Error('OpenAI returned empty content for seed topics');
+      throw new Error(`${this.providerLabel} returned empty content for seed topics`);
     }
     const topics = this.parseList(content).slice(0, 5);
     if (!topics.length) {
-      throw new Error('OpenAI did not return any seed topics');
+      throw new Error(`${this.providerLabel} did not return any seed topics`);
     }
     return topics;
   }
@@ -224,11 +228,11 @@ Describe the motif only.`,
     });
     const content = response.choices[0]?.message?.content;
     if (!content) {
-      throw new Error('OpenAI returned empty content for cover motif');
+      throw new Error(`${this.providerLabel} returned empty content for cover motif`);
     }
     const motif = this.parseMotif(content);
     if (!motif) {
-      throw new Error('OpenAI did not return a valid cover motif');
+      throw new Error(`${this.providerLabel} did not return a valid cover motif`);
     }
     return motif;
   }
@@ -300,23 +304,38 @@ ${sourceList}${instructionLine}`,
       },
     ] satisfies ChatCompletionMessageParam[];
 
-    const response = await client.chat.completions.create({
-      model: this.scriptModel,
-      messages,
-      temperature: 0.5,
-      max_tokens: 1100,
-      response_format: { type: 'json_object' },
-    });
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error('OpenAI returned empty content for segment script');
+    const maxAttempts = 2;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const response = await client.chat.completions.create({
+        model: this.scriptModel,
+        messages,
+        temperature: 0.5,
+        max_tokens: 1100,
+        response_format: { type: 'json_object' },
+      });
+      const content = response.choices[0]?.message?.content;
+      if (!content) {
+        throw new Error(`${this.providerLabel} returned empty content for segment script`);
+      }
+      try {
+        const script = this.parseDialogueScript(content, intent, title, { stripAudioTags: true });
+        const singleSpeakerScript: SegmentDialogueScript = {
+          ...script,
+          turns: script.turns.map((turn) => ({ ...turn, speaker: 'SPEAKER_1' as const })),
+        };
+        return singleSpeakerScript;
+      } catch (error) {
+        if (error instanceof LlmProviderInvalidJsonError && attempt < maxAttempts) {
+          const snippet = this.truncateForLogs(content);
+          this.logger.warn(
+            `${this.providerLabel} returned invalid JSON for segment script (attempt ${attempt}/${maxAttempts}). Response snippet: ${snippet}`,
+          );
+          continue;
+        }
+        throw error;
+      }
     }
-    const script = this.parseDialogueScript(content, intent, title, { stripAudioTags: true });
-    const singleSpeakerScript: SegmentDialogueScript = {
-      ...script,
-      turns: script.turns.map((turn) => ({ ...turn, speaker: 'SPEAKER_1' as const })),
-    };
-    return singleSpeakerScript;
+    throw new LlmProviderInvalidJsonError(this.providerLabel, 'dialogue script', '');
   }
 
   async enhanceSegmentDialogueForElevenV3(script: SegmentDialogueScript): Promise<SegmentDialogueScript> {
@@ -347,31 +366,46 @@ Return JSON only in the exact same shape:
       },
     ] satisfies ChatCompletionMessageParam[];
 
-    const response = await client.chat.completions.create({
-      model: this.scriptModel,
-      messages,
-      temperature: 0.35,
-      max_tokens: 900,
-      response_format: { type: 'json_object' },
-    });
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error('OpenAI returned empty content for dialogue enhancement');
-    }
+    const maxAttempts = 2;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      const response = await client.chat.completions.create({
+        model: this.scriptModel,
+        messages,
+        temperature: 0.35,
+        max_tokens: 900,
+        response_format: { type: 'json_object' },
+      });
+      const content = response.choices[0]?.message?.content;
+      if (!content) {
+        throw new Error(`${this.providerLabel} returned empty content for dialogue enhancement`);
+      }
 
-    const enhancedParsed = this.parseDialogueScript(content, script.intent, script.title);
-    const enhanced: SegmentDialogueScript = {
-      ...enhancedParsed,
-      turns: enhancedParsed.turns.map((turn) => ({ ...turn, speaker: 'SPEAKER_1' as const })),
-    };
-    const sameLength = enhanced.turns.length === script.turns.length;
-    const sameSpeakers =
-      sameLength && enhanced.turns.every((turn, idx) => turn.speaker === script.turns[idx]?.speaker);
-    if (!sameLength || !sameSpeakers) {
-      throw new Error('Dialogue enhancement altered speaker ordering or turn count');
-    }
+      try {
+        const enhancedParsed = this.parseDialogueScript(content, script.intent, script.title);
+        const enhanced: SegmentDialogueScript = {
+          ...enhancedParsed,
+          turns: enhancedParsed.turns.map((turn) => ({ ...turn, speaker: 'SPEAKER_1' as const })),
+        };
+        const sameLength = enhanced.turns.length === script.turns.length;
+        const sameSpeakers =
+          sameLength && enhanced.turns.every((turn, idx) => turn.speaker === script.turns[idx]?.speaker);
+        if (!sameLength || !sameSpeakers) {
+          throw new Error('Dialogue enhancement altered speaker ordering or turn count');
+        }
 
-    return enhanced;
+        return enhanced;
+      } catch (error) {
+        if (error instanceof LlmProviderInvalidJsonError && attempt < maxAttempts) {
+          const snippet = this.truncateForLogs(content);
+          this.logger.warn(
+            `${this.providerLabel} returned invalid JSON for dialogue enhancement (attempt ${attempt}/${maxAttempts}). Response snippet: ${snippet}`,
+          );
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw new LlmProviderInvalidJsonError(this.providerLabel, 'dialogue enhancement', '');
   }
 
   async generateEpisodeMetadata(script: string, segments: EpisodeSegment[]): Promise<EpisodeMetadata> {
@@ -424,12 +458,12 @@ SHOW NOTES RULES
     });
     const content = response.choices[0]?.message?.content?.trim();
     if (!content) {
-      throw new Error('OpenAI returned empty content for metadata generation');
+      throw new Error(`${this.providerLabel} returned empty content for metadata generation`);
     }
     const parsed = this.parseMetadata(content);
     const sanitizedShowNotes = this.removeSourcesFromShowNotes(parsed.showNotes);
     if (!parsed.title || !sanitizedShowNotes) {
-      throw new Error('OpenAI metadata response missing title or show notes');
+      throw new Error(`${this.providerLabel} metadata response missing title or show notes`);
     }
     const description = parsed.description?.trim() || this.deriveDescriptionFromShowNotes(sanitizedShowNotes);
     return { ...parsed, description, showNotes: sanitizedShowNotes };
@@ -593,12 +627,12 @@ SHOW NOTES RULES
       .filter((turn: DialogueTurn | null): turn is DialogueTurn => Boolean(turn));
 
     if (!turns.length) {
-      throw new Error('OpenAI did not return any dialogue turns');
+      throw new Error(`${this.providerLabel} did not return any dialogue turns`);
     }
 
     const sanitizedTurns = turns.filter((turn) => turn.text.length > 0);
     if (!sanitizedTurns.length) {
-      throw new Error('OpenAI did not return any dialogue text');
+      throw new Error(`${this.providerLabel} did not return any dialogue text`);
     }
     const speakerCounts = sanitizedTurns.reduce((acc, turn) => {
       acc[turn.speaker] = (acc[turn.speaker] || 0) + 1;
@@ -631,6 +665,17 @@ SHOW NOTES RULES
 
   private stripAudioDirectionTags(text: string): string {
     return text.replace(/\s*\[[^\]\n]{1,40}\]\s*/g, ' ');
+  }
+
+  private truncateForLogs(value: string | undefined, maxLength = 400): string {
+    if (!value) {
+      return '';
+    }
+    const compact = value.replace(/\s+/g, ' ').trim();
+    if (!compact) {
+      return '';
+    }
+    return compact.length <= maxLength ? compact : `${compact.slice(0, maxLength)}…`;
   }
 
   private parseList(content: string): string[] {
@@ -758,7 +803,7 @@ SHOW NOTES RULES
       }
     }
 
-    throw new Error(`OpenAI returned invalid JSON for ${contextLabel}`);
+    throw new LlmProviderInvalidJsonError(this.providerLabel, contextLabel, cleaned);
   }
 
   private parseMetadataJson(raw: string): EpisodeMetadata {
@@ -867,5 +912,12 @@ SHOW NOTES RULES
       .replace(/https?:\/\/\S+/gi, ''); // strip bare URLs
 
     return withoutLinks.replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+  }
+}
+
+class LlmProviderInvalidJsonError extends Error {
+  constructor(providerLabel: string, contextLabel: string, public readonly rawContent: string) {
+    super(`${providerLabel} returned invalid JSON for ${contextLabel}`);
+    this.name = 'LlmProviderInvalidJsonError';
   }
 }

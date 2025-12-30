@@ -449,19 +449,12 @@ export class EpisodeProcessorService {
     return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on';
   }
 
-  private buildErrorMessage(error: unknown, stage: string): string {
-    const err = error as any;
-    const status = err?.response?.status ?? err?.status;
-    const code = err?.code || err?.response?.data?.code;
-    const rawMessage =
-      (err?.message && typeof err.message === 'string' && err.message.trim().length ? err.message : null) ??
-      (typeof error === 'string' ? error : null) ??
-      null;
-    const base = rawMessage && rawMessage !== 'Error' ? rawMessage : 'Episode generation failed';
-    const meta = [stage ? `step ${stage}` : null, status ? `status ${status}` : null, code ? `code ${code}` : null]
-      .filter(Boolean)
-      .join(', ');
-    return meta ? `${base} (${meta})` : base;
+  private buildErrorMessage(_: unknown, stage: string): string {
+    const label = this.getUserFacingStageLabel(stage);
+    if (label) {
+      return `Episode generation failed while ${label}. Please try again soon.`;
+    }
+    return 'Episode generation failed. Please try again soon.';
   }
 
   private describeError(error: unknown): string {
@@ -488,6 +481,47 @@ export class EpisodeProcessorService {
       }
     }
     return parts.filter(Boolean).join(' | ') || String(error);
+  }
+
+  private getUserFacingStageLabel(stage: string): string | null {
+    if (!stage) {
+      return null;
+    }
+    const normalized = stage.toLowerCase();
+    if (normalized.includes('segment_script')) {
+      return 'writing this topic script';
+    }
+    if (normalized.includes('enhance_dialogue')) {
+      return 'refining the dialogue';
+    }
+    if (normalized.includes('perplexity') || normalized.includes('retrieving_content')) {
+      return 'gathering research';
+    }
+    if (normalized.includes('tts')) {
+      return 'synthesizing the audio';
+    }
+    if (normalized.includes('generating_audio') || normalized.includes('stitch_audio')) {
+      return 'assembling the audio';
+    }
+    if (normalized.includes('generate_metadata')) {
+      return 'summarizing the episode';
+    }
+    if (normalized.includes('cover_image')) {
+      return 'creating the cover art';
+    }
+    if (normalized.includes('persist_segments') || normalized.includes('persist_sources')) {
+      return 'saving the generated content';
+    }
+    if (normalized.includes('mark_ready')) {
+      return 'finalizing the episode';
+    }
+    if (normalized.includes('notify')) {
+      return 'sending an update';
+    }
+    if (normalized.includes('list_topics') || normalized.includes('init')) {
+      return 'reviewing topics';
+    }
+    return 'processing your episode';
   }
 
   private safeStringify(value: unknown, maxLength = 500): string | undefined {
