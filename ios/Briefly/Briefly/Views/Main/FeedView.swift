@@ -24,7 +24,7 @@ struct FeedView: View {
                 await refreshFeed()
             }
             .refreshable {
-                await refreshFeed()
+                await refreshFeed(force: true)
             }
             .overlay(alignment: .bottom) {
                 playerBarOverlay
@@ -85,7 +85,7 @@ struct FeedView: View {
                 message: message,
                 actionTitle: "Retry"
             ) {
-                Task { await refreshFeed() }
+                Task { await refreshFeed(force: true) }
             }
             .transition(.opacity)
         }
@@ -153,9 +153,10 @@ struct FeedView: View {
 
     private func episodeHero(_ episode: Episode) -> some View {
         let heroSize = min(UIScreen.main.bounds.width - 80, 260)
+        let maxPixelSize = Int(ceil(heroSize * UIScreen.main.scale))
 
         return VStack(alignment: .center, spacing: 10) {
-            coverImage(for: episode)
+            coverImage(for: episode, maxPixelSize: maxPixelSize)
                 .frame(width: heroSize, height: heroSize)
                 .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .shadow(color: Color.black.opacity(0.18), radius: 22, x: 0, y: 14)
@@ -184,8 +185,8 @@ struct FeedView: View {
         }
     }
 
-    private func refreshFeed() async {
-        await viewModel.load()
+    private func refreshFeed(force: Bool = false) async {
+        await viewModel.load(force: force)
         await MainActor.run {
             audioManager.syncCurrentEpisode(with: viewModel.episodes)
         }
@@ -202,7 +203,7 @@ struct FeedView: View {
             ErrorBanner(
                 message: bannerMessage,
                 actionTitle: "Retry",
-                action: { Task { await refreshFeed() } },
+                action: { Task { await refreshFeed(force: true) } },
                 onDismiss: { hideBanner(message: bannerMessage) }
             )
             .transition(.move(edge: .top).combined(with: .opacity))
@@ -241,6 +242,7 @@ struct FeedView: View {
 
 private struct EpisodeRow: View {
     let episode: Episode
+    @EnvironmentObject private var playbackHistory: PlaybackHistory
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -263,14 +265,16 @@ private struct EpisodeRow: View {
                 coverImageView
             }
 
-            durationPill
+            pillRow
         }
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var coverImageView: some View {
-        coverImage(for: episode)
+        let maxPixelSize = Int(ceil(72 * UIScreen.main.scale))
+
+        return coverImage(for: episode, maxPixelSize: maxPixelSize)
             .frame(width: 72, height: 72)
             .clipShape(RoundedRectangle(cornerRadius: 14))
             .overlay(
@@ -295,6 +299,29 @@ private struct EpisodeRow: View {
         .clipShape(Capsule())
     }
 
+    private var listenedPill: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "checkmark")
+                .font(.caption2.weight(.semibold))
+            Text("Listened")
+                .font(.caption.weight(.semibold))
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 8)
+        .background(Color.brieflyListenedBackground)
+        .foregroundColor(Color.brieflyPrimary)
+        .clipShape(Capsule())
+    }
+
+    private var pillRow: some View {
+        HStack(spacing: 8) {
+            durationPill
+            if playbackHistory.isListened(episode.id) {
+                listenedPill
+            }
+        }
+    }
+
     private func dateLabel(_ date: Date?) -> String {
         guard let date else { return "—" }
         let calendar = Calendar.current
@@ -312,12 +339,12 @@ private struct EpisodeRow: View {
 }
 
 // Shared cover image renderer so list and hero use the same artwork.
-private func coverImage(for episode: Episode) -> some View {
+private func coverImage(for episode: Episode, maxPixelSize: Int?) -> some View {
     ZStack {
         Color.brieflySurface
 
         if let url = episode.coverImageURL {
-            CachedAsyncImage(url: url) { image in
+            CachedAsyncImage(url: url, maxPixelSize: maxPixelSize) { image in
                 image
                     .resizable()
                     .scaledToFill()

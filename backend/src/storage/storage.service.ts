@@ -53,7 +53,11 @@ export class StorageService {
     return { key: objectKey, url: objectKey, localPath };
   }
 
-  async uploadImage(buffer: Buffer, key?: string): Promise<{ key: string; url: string; localPath?: string }> {
+  async uploadImage(
+    buffer: Buffer,
+    key?: string,
+    options?: { contentType?: string; cacheControl?: string },
+  ): Promise<{ key: string; url: string; localPath?: string }> {
     if (this.driver === 'local') {
       const objectKey = key ?? `images/${uuid()}.png`;
       const fullPath = await this.saveLocalCopy(objectKey, buffer);
@@ -67,7 +71,8 @@ export class StorageService {
         Bucket: bucket,
         Key: objectKey,
         Body: buffer,
-        ContentType: 'image/png',
+        ContentType: options?.contentType ?? 'image/png',
+        CacheControl: options?.cacheControl,
       }),
     );
     let localPath: string | undefined;

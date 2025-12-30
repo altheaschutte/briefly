@@ -33,7 +33,7 @@ struct EpisodesView: View {
             Task { await viewModel.load() }
         }
         .refreshable {
-            await viewModel.load()
+            await viewModel.load(force: true)
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
@@ -44,7 +44,7 @@ struct EpisodesView: View {
                     title: "Couldn't load episodes",
                     message: message,
                     actionTitle: "Retry",
-                    action: { Task { await viewModel.load() } }
+                    action: { Task { await viewModel.load(force: true) } }
                 )
                 .transition(.opacity)
             }
@@ -62,6 +62,7 @@ struct EpisodesView: View {
 
 private struct EpisodeRow: View {
     let episode: Episode
+    @EnvironmentObject private var playbackHistory: PlaybackHistory
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -84,7 +85,7 @@ private struct EpisodeRow: View {
                 artwork
             }
 
-            durationPill
+            pillRow
         }
         .padding(.vertical, 8)
     }
@@ -94,7 +95,7 @@ private struct EpisodeRow: View {
             RoundedRectangle(cornerRadius: 14)
                 .fill(Color.brieflySurface)
             if let url = episode.coverImageURL {
-                CachedAsyncImage(url: url) { image in
+                CachedAsyncImage(url: url, maxPixelSize: Int(ceil(72 * UIScreen.main.scale))) { image in
                     image
                         .resizable()
                         .scaledToFill()
@@ -138,6 +139,29 @@ private struct EpisodeRow: View {
         .clipShape(Capsule())
     }
 
+    private var listenedPill: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "checkmark")
+                .font(.caption2.weight(.semibold))
+            Text("Listened")
+                .font(.caption.weight(.semibold))
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 8)
+        .background(Color.brieflyListenedBackground)
+        .foregroundColor(Color.brieflyPrimary)
+        .clipShape(Capsule())
+    }
+
+    private var pillRow: some View {
+        HStack(spacing: 8) {
+            durationPill
+            if playbackHistory.isListened(episode.id) {
+                listenedPill
+            }
+        }
+    }
+
     private func dateLabel(_ date: Date?) -> String {
         guard let date else { return "—" }
         let calendar = Calendar.current
@@ -170,7 +194,7 @@ private extension EpisodesView {
             ErrorBanner(
                 message: bannerMessage,
                 actionTitle: "Retry",
-                action: { Task { await viewModel.load() } },
+                action: { Task { await viewModel.load(force: true) } },
                 onDismiss: { hideBanner(message: bannerMessage) }
             )
             .transition(.move(edge: .top).combined(with: .opacity))

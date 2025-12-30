@@ -16,6 +16,7 @@ final class EpisodesViewModel: ObservableObject {
     private let onFatalAuthError: ((String) -> Void)?
     private var hasAppliedPrefetch = false
     private var hasLoadedOnce = false
+    private var lastSuccessfulLoadAt: Date?
 
     init(
         episodeService: EpisodeProviding,
@@ -68,7 +69,14 @@ final class EpisodesViewModel: ObservableObject {
         return sections
     }
 
-    func load() async {
+    func load(force: Bool = false, minimumInterval: TimeInterval = 120) async {
+        if force == false,
+           episodes.isEmpty == false,
+           let lastSuccessfulLoadAt,
+           Date().timeIntervalSince(lastSuccessfulLoadAt) < minimumInterval {
+            return
+        }
+
         let shouldShowLoading = episodes.isEmpty && hasLoadedOnce == false
         isLoading = shouldShowLoading
         errorMessage = nil
@@ -82,6 +90,7 @@ final class EpisodesViewModel: ObservableObject {
                 let fetched = try await episodeService.fetchEpisodes()
                 episodes = sortAndDeduplicate(fetched)
                 hasAppliedPrefetch = true
+                lastSuccessfulLoadAt = Date()
                 errorMessage = nil
                 return
             } catch is CancellationError {
@@ -135,5 +144,6 @@ final class EpisodesViewModel: ObservableObject {
         guard episodes.isEmpty else { return }
         episodes = sortAndDeduplicate(prefetched)
         hasAppliedPrefetch = true
+        lastSuccessfulLoadAt = Date()
     }
 }

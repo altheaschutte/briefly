@@ -24,12 +24,14 @@ final class AudioPlayerManager: NSObject, ObservableObject {
     private var artworkCache: [URL: MPMediaItemArtwork] = [:]
     private var artworkFetchTasks: [URL: Task<MPMediaItemArtwork?, Never>] = [:]
     private var playbackPreferences = PlaybackPreferences()
+    private let playbackHistory: PlaybackHistory?
     private let audioLog = OSLog(subsystem: "com.briefly.app", category: "Audio")
 
     var nextEpisodeResolver: ((Episode) async -> Episode?)?
 
-    init(audioURLProvider: ((UUID) async -> URL?)? = nil) {
+    init(audioURLProvider: ((UUID) async -> URL?)? = nil, playbackHistory: PlaybackHistory? = nil) {
         self.audioURLProvider = audioURLProvider
+        self.playbackHistory = playbackHistory
         playbackSpeed = playbackPreferences.playbackSpeed
         super.init()
         configureSession()
@@ -307,6 +309,7 @@ final class AudioPlayerManager: NSObject, ObservableObject {
     }
 
     private func handlePlaybackFinished(for episode: Episode) {
+        playbackHistory?.markListened(episode.id)
         hasFinishedCurrentItem = true
         isPlaying = false
         if durationSeconds.isFinite && durationSeconds > 0 {

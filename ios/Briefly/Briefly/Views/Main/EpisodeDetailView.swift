@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import ImageIO
 
 struct EpisodeDetailView: View {
     let episode: Episode
@@ -179,11 +180,14 @@ private extension EpisodeDetailView {
     }
 
     var coverArtwork: some View {
-        ZStack {
+        let heroSize = min(UIScreen.main.bounds.width - 80, 260)
+        let maxPixelSize = Int(ceil(heroSize * UIScreen.main.scale))
+
+        return ZStack {
             Color.brieflySurface
 
             if let url = detailedEpisode.coverImageURL {
-                CachedAsyncImage(url: url) { image in
+                CachedAsyncImage(url: url, maxPixelSize: maxPixelSize) { image in
                     image
                         .resizable()
                         .scaledToFill()
@@ -1005,56 +1009,117 @@ struct ShareSheet: UIViewControllerRepresentable {
 // Lightweight shared image cache so artwork doesn't re-download across screens.
 final class SharedImageCache {
     static let shared = SharedImageCache()
-    private let cache = NSCache<NSURL, UIImage>()
+    private let cache = NSCache<NSString, UIImage>()
 
     private init() {
         cache.countLimit = 128
     }
 
-    func image(for url: URL) -> UIImage? {
-        cache.object(forKey: url as NSURL)
+    func cacheKeyString(for url: URL, maxPixelSize: Int?) -> String {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return url.absoluteString
+        }
+        components.query = nil
+        components.fragment = nil
+        let base = components.url?.absoluteString ?? url.absoluteString
+        let suffix = maxPixelSize.map { "#px=\($0)" } ?? "#px=full"
+        return "\(base)\(suffix)"
     }
 
-    func insert(_ image: UIImage, for url: URL) {
-        cache.setObject(image, forKey: url as NSURL)
+    func image(for url: URL, maxPixelSize: Int?) -> UIImage? {
+        cache.object(forKey: cacheKey(for: url, maxPixelSize: maxPixelSize))
+    }
+
+    func insert(_ image: UIImage, for url: URL, maxPixelSize: Int?) {
+        cache.setObject(image, forKey: cacheKey(for: url, maxPixelSize: maxPixelSize))
+    }
+
+    private func cacheKey(for url: URL, maxPixelSize: Int?) -> NSString {
+        cacheKeyString(for: url, maxPixelSize: maxPixelSize) as NSString
     }
 }
 
 final class ImageLoader: ObservableObject {
     @Published var image: UIImage?
     @Published var didFail = false
+    private var currentCacheKey: String?
+    private static let session: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        configuration.requestCachePolicy = .useProtocolCachePolicy
+
+        let cache = URLCache(
+            memoryCapacity: 50 * 1024 * 1024,
+            diskCapacity: 200 * 1024 * 1024,
+            diskPath: "briefly-image-cache"
+        )
+        URLCache.shared = cache
+        configuration.urlCache = cache
+
+        return URLSession(configuration: configuration)
+    }()
 
     @MainActor
-    func load(url: URL?) async {
+    func load(url: URL?, maxPixelSize: Int?) async {
+        let nextCacheKey = url.map { SharedImageCache.shared.cacheKeyString(for: $0, maxPixelSize: maxPixelSize) }
+        if nextCacheKey == currentCacheKey, image != nil || didFail {
+            return
+        }
+        currentCacheKey = nextCacheKey
         didFail = false
-        image = nil
 
         guard let url else {
+            image = nil
             return
         }
 
-        if let cached = SharedImageCache.shared.image(for: url) {
+        if let cached = SharedImageCache.shared.image(for: url, maxPixelSize: maxPixelSize) {
             image = cached
             return
         }
 
         do {
-            let (data, _) = try await URLSession.shared.data(from: url)
+            image = nil
+            var request = URLRequest(url: url)
+            request.cachePolicy = .returnCacheDataElseLoad
+            let (data, _) = try await Self.session.data(for: request)
             guard Task.isCancelled == false else { return }
-            guard let uiImage = UIImage(data: data) else {
+            guard let uiImage = Self.decodeImage(from: data, maxPixelSize: maxPixelSize) else {
                 throw URLError(.cannotDecodeContentData)
             }
-            SharedImageCache.shared.insert(uiImage, for: url)
+            SharedImageCache.shared.insert(uiImage, for: url, maxPixelSize: maxPixelSize)
             image = uiImage
         } catch {
             guard Task.isCancelled == false else { return }
             didFail = true
         }
     }
+
+    private static func decodeImage(from data: Data, maxPixelSize: Int?) -> UIImage? {
+        guard let maxPixelSize, maxPixelSize > 0 else {
+            return UIImage(data: data)
+        }
+
+        let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions) else {
+            return nil
+        }
+
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+        ]
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return nil
+        }
+        return UIImage(cgImage: cgImage)
+    }
 }
 
 struct CachedAsyncImage<Content: View, Placeholder: View, Failure: View>: View {
     let url: URL?
+    var maxPixelSize: Int? = nil
     @ViewBuilder var content: (Image) -> Content
     @ViewBuilder var placeholder: () -> Placeholder
     @ViewBuilder var failure: () -> Failure
@@ -1062,8 +1127,11 @@ struct CachedAsyncImage<Content: View, Placeholder: View, Failure: View>: View {
     @StateObject private var loader = ImageLoader()
 
     var body: some View {
+        let cached = url.flatMap { SharedImageCache.shared.image(for: $0, maxPixelSize: maxPixelSize) }
+        let taskID = url.map { SharedImageCache.shared.cacheKeyString(for: $0, maxPixelSize: maxPixelSize) } ?? "nil"
+
         Group {
-            if let uiImage = loader.image {
+            if let uiImage = loader.image ?? cached {
                 content(Image(uiImage: uiImage))
             } else if loader.didFail {
                 failure()
@@ -1071,8 +1139,8 @@ struct CachedAsyncImage<Content: View, Placeholder: View, Failure: View>: View {
                 placeholder()
             }
         }
-        .task(id: url) {
-            await loader.load(url: url)
+        .task(id: taskID) {
+            await loader.load(url: url, maxPixelSize: maxPixelSize)
         }
     }
 }

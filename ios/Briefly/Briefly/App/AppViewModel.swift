@@ -27,11 +27,12 @@ final class AppViewModel: ObservableObject {
     let profileService: ProfileService
     let supabaseUserService: SupabaseUserService
     let scheduleService: ScheduleService
+    let playbackHistory = PlaybackHistory()
     lazy var audioPlayer: AudioPlayerManager = {
         let manager = AudioPlayerManager(audioURLProvider: { [weak self] episodeId in
             guard let self else { return nil }
             return await self.episodeService.fetchSignedAudioURL(for: episodeId)
-        })
+        }, playbackHistory: playbackHistory)
         manager.nextEpisodeResolver = { [weak self] currentEpisode in
             guard let self else { return nil }
             do {

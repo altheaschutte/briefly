@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
+import crypto from 'crypto';
 import { EpisodeSegment } from '../domain/types';
 import { StorageService } from '../storage/storage.service';
 import { LlmService } from '../llm/llm.service';
@@ -71,6 +72,8 @@ export class CoverImageService {
     const model =
       this.getFirstConfigValue(this.modelConfigKeys) ||
       (this.provider === 'xai' ? 'grok-image-1' : 'gpt-image-1');
+    const supportsGptImageParams =
+      this.provider !== 'xai' && typeof model === 'string' && model.toLowerCase().includes('gpt-image-1');
     const request: Parameters<OpenAI['images']['generate']>[0] = {
       model,
       prompt,
@@ -79,6 +82,11 @@ export class CoverImageService {
     // xAI image generation does not support the OpenAI-style size parameter
     if (this.provider !== 'xai') {
       request.size = '1024x1024';
+      if (supportsGptImageParams) {
+        request.output_format = 'jpeg';
+        request.output_compression = 80;
+        request.quality = 'high';
+      }
     }
     const response = await client.images.generate(request);
     const first = response.data?.[0] as any;
@@ -87,9 +95,41 @@ export class CoverImageService {
       throw new Error('OpenAI returned an empty image payload for cover generation');
     }
     const buffer = Buffer.from(imageBase64, 'base64');
-    const key = `images/${userId}/${episodeId}.png`;
-    const upload = await this.storageService.uploadImage(buffer, key);
+    const hash = crypto.createHash('sha256').update(buffer).digest('hex').slice(0, 12);
+    const { ext, contentType } = this.detectImageFormat(buffer);
+    const key = `images/${userId}/${episodeId}-${hash}.${ext}`;
+    const upload = await this.storageService.uploadImage(buffer, key, {
+      contentType,
+      cacheControl: 'public, max-age=31536000, immutable',
+    });
     return { imageUrl: upload.url, storageKey: upload.key };
+  }
+
+  private detectImageFormat(buffer: Buffer): { ext: 'png' | 'jpg' | 'webp'; contentType: string } {
+    if (
+      buffer.length >= 8 &&
+      buffer[0] === 0x89 &&
+      buffer[1] === 0x50 &&
+      buffer[2] === 0x4e &&
+      buffer[3] === 0x47 &&
+      buffer[4] === 0x0d &&
+      buffer[5] === 0x0a &&
+      buffer[6] === 0x1a &&
+      buffer[7] === 0x0a
+    ) {
+      return { ext: 'png', contentType: 'image/png' };
+    }
+    if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xd8) {
+      return { ext: 'jpg', contentType: 'image/jpeg' };
+    }
+    if (
+      buffer.length >= 12 &&
+      buffer.toString('ascii', 0, 4) === 'RIFF' &&
+      buffer.toString('ascii', 8, 12) === 'WEBP'
+    ) {
+      return { ext: 'webp', contentType: 'image/webp' };
+    }
+    return { ext: 'png', contentType: 'image/png' };
   }
 
   private getClient(): OpenAI {
