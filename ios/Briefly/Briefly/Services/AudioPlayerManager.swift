@@ -193,16 +193,21 @@ final class AudioPlayerManager: NSObject, ObservableObject {
     func syncCurrentEpisode(with episodes: [Episode]) {
         guard let current = currentEpisode else { return }
         if let updated = episodes.first(where: { $0.id == current.id }) {
+            var merged = updated
+            if merged.diveDeeperSeeds == nil {
+                merged.diveDeeperSeeds = current.diveDeeperSeeds
+            }
             // Only update when metadata changes to avoid unnecessary publishes.
-            if updated.title != current.title ||
-                updated.episodeNumber != current.episodeNumber ||
-                updated.summary != current.summary ||
-                updated.audioURL != current.audioURL ||
-                updated.durationSeconds != current.durationSeconds ||
-                updated.status != current.status {
-                currentEpisode = updated
-                durationSeconds = updated.durationSeconds ?? durationSeconds
-                updateNowPlayingInfo(for: updated, elapsed: currentTimeSeconds, duration: durationSeconds, rate: isPlaying ? Float(playbackSpeed) : 0)
+            if merged.title != current.title ||
+                merged.episodeNumber != current.episodeNumber ||
+                merged.summary != current.summary ||
+                merged.audioURL != current.audioURL ||
+                merged.durationSeconds != current.durationSeconds ||
+                merged.status != current.status ||
+                merged.diveDeeperSeeds != current.diveDeeperSeeds {
+                currentEpisode = merged
+                durationSeconds = merged.durationSeconds ?? durationSeconds
+                updateNowPlayingInfo(for: merged, elapsed: currentTimeSeconds, duration: durationSeconds, rate: isPlaying ? Float(playbackSpeed) : 0)
             }
         } else {
             stop()

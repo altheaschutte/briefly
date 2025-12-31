@@ -28,6 +28,9 @@ import ImageIO
 	    @State private var actionsSheetDetent: PresentationDetent = .large
 	    @State private var isCreatingDiveDeeper: Bool = false
 	    @State private var creatingDiveDeeperSeedID: UUID?
+	    @State private var queuedDiveDeeperSeedID: UUID?
+	    @State private var queuedDiveDeeperTask: Task<Void, Never>?
+	    @State private var requestedDiveDeeperSeedIDs = Set<UUID>()
 	    @State private var createdDiveDeeperEpisode: Episode?
 	    @State private var navigateToDiveDeeperEpisode: Bool = false
 
@@ -59,10 +62,8 @@ import ImageIO
 	                        header
 	                        playbackControls
 //                    actionRow
-	                        if shouldShowDiveDeeperSection {
-	                            diveDeeperSection
-	                                .padding(.top, 8)
-	                        }
+	                        diveDeeperSection
+	                            .padding(.top, 8)
 	                        if let script = scriptContent {
 	                            scriptSection(title: script.title, body: script.body)
 	                                .padding(.top, 8)
@@ -109,6 +110,11 @@ import ImageIO
         }
         .task(id: episode.id) {
             await loadDetailsIfNeeded()
+        }
+        .onDisappear {
+            queuedDiveDeeperTask?.cancel()
+            queuedDiveDeeperTask = nil
+            queuedDiveDeeperSeedID = nil
         }
         .safeAreaInset(edge: .bottom) {
             playerBarInset
@@ -474,11 +480,6 @@ private extension EpisodeDetailView {
 	        }
 	    }
 
-	    private var shouldShowDiveDeeperSection: Bool {
-	        let seeds = detailedEpisode.diveDeeperSeeds ?? []
-	        return seeds.isEmpty == false
-	    }
-
 	    private struct DiveDeeperDisplayItem: Identifiable {
 	        let id: UUID
 	        let seed: SegmentDiveDeeperSeed
@@ -492,60 +493,66 @@ private extension EpisodeDetailView {
 	            HStack {
 	                Text("Dive deeper")
 	                    .font(.headline)
-	                if isCreatingDiveDeeper {
+	                if isCreatingDiveDeeper || queuedDiveDeeperSeedID != nil || (isLoading && hasLoaded == false) {
 	                    Spacer()
 	                    ProgressView()
-	                        .scaleEffect(0.85)
+	                        .scaleEffect(0.9)
 	                }
 	            }
 
-	            VStack(spacing: 10) {
-	                ForEach(items) { item in
-	                    diveDeeperRow(item)
-	                }
+	            if items.isEmpty {
+                    if isLoading && hasLoaded == false {
+                        Text("Loading dive deeper items…")
+                            .font(.footnote)
+                            .foregroundColor(.brieflyTextMuted)
+                    } else {
+                        Text("No dive deeper items yet.")
+                            .font(.footnote)
+                            .foregroundColor(.brieflyTextMuted)
+                    }
+	            } else {
+                    VStack(spacing: 12) {
+                        ForEach(items) { item in
+                            diveDeeperRow(item)
+                        }
+                    }
 	            }
 	        }
 	    }
 
 	    private func diveDeeperRow(_ item: DiveDeeperDisplayItem) -> some View {
-	        Button {
-	            guard item.isUnlocked else { return }
-	            Task { await createDiveDeeperEpisode(seed: item.seed) }
-	        } label: {
-	            HStack(alignment: .top, spacing: 12) {
-	                VStack(alignment: .leading, spacing: 4) {
-	                    Text(item.seed.title)
-	                        .font(.callout.weight(.semibold))
-	                        .foregroundColor(.primary)
-	                        .lineLimit(2)
-	                    Text(item.seed.angle)
-	                        .font(.footnote)
-	                        .foregroundColor(.brieflyTextMuted)
-	                        .lineLimit(3)
-	                    if item.isUnlocked == false, let unlockTime = item.unlockTimeSeconds {
-	                        Text("Unlocks at \(timeString(unlockTime))")
-	                            .font(.caption.weight(.semibold))
-	                            .foregroundColor(.brieflyTextMuted)
-	                    }
-	                }
-	                .frame(maxWidth: .infinity, alignment: .leading)
+            let isQueued = queuedDiveDeeperSeedID == item.seed.id
+            let isSending = creatingDiveDeeperSeedID == item.seed.id
+            let isRequested = requestedDiveDeeperSeedIDs.contains(item.seed.id)
+            let isDisabled = item.isUnlocked == false || isQueued || isSending || isRequested
 
-	                if creatingDiveDeeperSeedID == item.seed.id {
-	                    ProgressView()
-	                        .scaleEffect(0.85)
-	                }
+	        return Button {
+	            guard item.isUnlocked else { return }
+                guard isRequested == false else { return }
+                queueDiveDeeperEpisode(seed: item.seed)
+	        } label: {
+	            HStack(alignment: .center, spacing: 12) {
+                    Text(item.seed.title)
+                        .font(.callout.weight(.semibold))
+                        .foregroundColor(.brieflyPrimary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if isQueued || isSending || isRequested {
+                        ProgressView()
+                            .tint(.brieflyPrimary)
+                    } else {
+                        Image(systemName: "sparkles")
+                            .font(.callout.weight(.semibold))
+                            .foregroundColor(.brieflyPrimary)
+                    }
 	            }
-	            .padding()
-	            .background(Color.brieflySurface)
-	            .cornerRadius(12)
-	            .overlay(
-	                RoundedRectangle(cornerRadius: 12, style: .continuous)
-	                    .stroke(Color.brieflyBorder, lineWidth: 1)
-	            )
-	            .opacity(item.isUnlocked ? 1 : 0.45)
+                .contentShape(Rectangle())
 	        }
 	        .buttonStyle(.plain)
-	        .disabled(isCreatingDiveDeeper)
+	        .disabled(isDisabled)
+            .opacity(isDisabled ? 0.45 : 1)
 	    }
 
     var segmentsSection: some View {
@@ -708,7 +715,11 @@ private extension EpisodeDetailView {
         defer { isLoading = false }
         do {
             let latest = try await appViewModel.episodeService.fetchEpisode(id: episode.id)
-            detailedEpisode = latest
+            var merged = latest
+            if merged.diveDeeperSeeds == nil {
+                merged.diveDeeperSeeds = detailedEpisode.diveDeeperSeeds
+            }
+            detailedEpisode = merged
             segments = (latest.segments ?? []).sorted(by: { $0.orderIndex < $1.orderIndex })
             sources = latest.sources ?? []
             errorMessage = nil
@@ -859,12 +870,43 @@ private extension EpisodeDetailView {
                 seedID: seed.id,
                 targetDurationMinutes: nil
             )
+            requestedDiveDeeperSeedIDs.insert(seed.id)
             let created = try await appViewModel.episodeService.fetchEpisode(id: creation.episodeId)
             createdDiveDeeperEpisode = created
             navigateToDiveDeeperEpisode = true
         } catch {
             actionAlert = ActionAlert(title: "Couldn't create deep dive", message: error.localizedDescription)
         }
+    }
+
+    @MainActor
+    fileprivate func queueDiveDeeperEpisode(seed: SegmentDiveDeeperSeed) {
+        guard queuedDiveDeeperSeedID == nil else { return }
+        guard requestedDiveDeeperSeedIDs.contains(seed.id) == false else { return }
+        guard isCreatingDiveDeeper == false else { return }
+
+        queuedDiveDeeperTask?.cancel()
+        queuedDiveDeeperTask = nil
+
+        queuedDiveDeeperSeedID = seed.id
+        queuedDiveDeeperTask = Task { @MainActor in
+            do {
+                try await Task.sleep(nanoseconds: 5_000_000_000)
+            } catch {
+                return
+            }
+            guard queuedDiveDeeperSeedID == seed.id else { return }
+            queuedDiveDeeperSeedID = nil
+            queuedDiveDeeperTask = nil
+            await createDiveDeeperEpisode(seed: seed)
+        }
+    }
+
+    @MainActor
+    fileprivate func cancelQueuedDiveDeeperEpisode() {
+        queuedDiveDeeperTask?.cancel()
+        queuedDiveDeeperTask = nil
+        queuedDiveDeeperSeedID = nil
     }
 
     private func seek(toProgress progress: Double) {
@@ -1049,14 +1091,45 @@ private extension EpisodeDetailView {
 private extension EpisodeDetailView {
     @ViewBuilder
     var playerBarInset: some View {
-        if let current = audioManager.currentEpisode, current.id != detailedEpisode.id {
+        let showsDiveDeeperUndo = queuedDiveDeeperSeedID != nil
+        let showsPlayerBar = audioManager.currentEpisode?.id != nil && audioManager.currentEpisode?.id != detailedEpisode.id
+
+        if showsDiveDeeperUndo || showsPlayerBar {
             VStack(spacing: 0) {
-                PlayerBarView(onCreateEpisode: onCreateEpisode)
-                    .padding(.vertical, 8)
+                if showsDiveDeeperUndo {
+                    undoDiveDeeperButton
+                }
+                if showsPlayerBar {
+                    PlayerBarView(onCreateEpisode: onCreateEpisode)
+                        .padding(.vertical, 8)
+                }
             }
             .background(Color.brieflyBackground)
             .shadow(color: Color.black.opacity(0.08), radius: 8, y: -2)
         }
+    }
+
+    private var undoDiveDeeperButton: some View {
+        Button {
+            cancelQueuedDiveDeeperEpisode()
+        } label: {
+            HStack(spacing: 10) {
+                ProgressView()
+                    .tint(.white)
+                Text("Starting… Tap to undo")
+            }
+            .font(.headline)
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(Color.brieflySurface)
+            .foregroundColor(.white)
+            .tint(.white)
+            .cornerRadius(12)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .accessibilityLabel("Starting dive deeper. Tap to undo.")
     }
 
     func parseMarkdownBlocks(from text: String) -> [MarkdownBlock] {

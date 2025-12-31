@@ -77,6 +77,7 @@ export class OpenAiLlmProvider implements LlmProvider {
   ): Promise<TopicQueryPlan> {
     const client = this.getClient();
     const isoDate = new Date().toISOString().split('T')[0];
+    const currentYear = isoDate.slice(0, 4);
     const mode = options?.mode ?? 'standard';
     const history = (previousQueries || []).map((q) => q.trim()).filter(Boolean).slice(-12);
     const historyBlock = history.length ? history.map((q, idx) => `${idx + 1}. ${q}`).join('\n') : 'None';
@@ -89,6 +90,7 @@ export class OpenAiLlmProvider implements LlmProvider {
 
 Context:
 - The listener just finished the parent segment. This follow-up must go deeper (not a recap).
+- Today is ${isoDate} (year ${currentYear}).
 
 Rules:
 - Output between 2 and 4 queries.
@@ -99,6 +101,11 @@ Rules:
   - Any parent segment queries (avoid recap sourcing)
 - Avoid broad explainer / "what is X" queries unless a term appears in terms_to_define.
 - Keep each query lean, disambiguated (entities, locations, timeframes), and ready for direct use.
+
+Recency rules:
+- Do not anchor on older years (e.g., 2023) unless the topic/claims explicitly require that timeframe.
+- If the angle/claims imply recency (e.g., "latest", "recent", "new", "this week/month/year", "now", "today"), each query must include an explicit current timeframe (e.g., ${currentYear}, "${Number(currentYear) - 1}–${currentYear}", "past 30 days", "since ${Number(currentYear) - 1}").
+- If any seed query includes an outdated year but recency is implied, rewrite it to a current timeframe before ranking.
 
 Respond as JSON:
 {"intent":"single_story"|"multi_item","queries":["query one","query two"]}.`,
@@ -135,6 +142,8 @@ First, infer the topic intent:
 - "single_story": user wants ONE excellent, detailed item (e.g., "a story", "an interesting story", "deep dive", "profile", "tell me one story")
 - "multi_item": user wants multiple updates/items (e.g., "latest", "roundup", "updates", "events", "top", "compare", "near me", "this weekend")
 
+Today is ${isoDate} (year ${currentYear}).
+
 Rules:
 - Output between 1 and 5 queries.
 - Default to 1 query for "single_story" or multiple for a more indepth longer segment.
@@ -146,7 +155,8 @@ Rules:
 - Keep each query lean, disambiguated (entities, locations, timeframes), and ready for direct use.
 
 Recency guidance:
-- For news topics, prioritize recency (${isoDate}).
+- If the topic implies recency ("latest", "recent", "new", "today", "this week/month", "now"), each query must include an explicit current timeframe (e.g., ${currentYear}, "${Number(currentYear) - 1}–${currentYear}", "past 30 days", "since ${Number(currentYear) - 1}") and avoid outdated years unless requested.
+- For news topics, prioritize recency relative to today (${isoDate}).
 - For history/evergreen topics, do NOT force recency; prioritize authoritative sources and longform quality.
 
 Respond as JSON:
@@ -205,6 +215,8 @@ ${historyBlock}`,
     parentQueryTexts: string[];
   }): Promise<SegmentDiveDeeperSeedDraft> {
     const client = this.getClient();
+    const isoDate = new Date().toISOString().split('T')[0];
+    const currentYear = isoDate.slice(0, 4);
     const parentTopicText = input.parentTopicText?.trim() || '';
     const segmentScript = input.segmentScript?.trim() || '';
     const parentQueryTexts = (input.parentQueryTexts || []).map((q) => q.trim()).filter(Boolean).slice(0, 8);
@@ -238,6 +250,7 @@ ${historyBlock}`,
 
 Goal:
 - Propose ONE follow-up that continues deeper from the segment (not a recap).
+- Today is ${isoDate} (year ${currentYear}).
 
 Hard rules:
 - Output VALID JSON only. Do not include comments. Do not wrap in markdown fences.
@@ -259,7 +272,8 @@ Guidance:
 - The angle should make the follow-up clearly different from the segment (deeper, narrower, more investigative).
 - Avoid broad recap framing ("what happened", "overview", "explain X") unless the segment depends on defining a term.
 - Seed queries must be ready to send to a web search agent; add disambiguating entities/locations/timeframes.
- - Keep the JSON small. Do NOT include citations; they are handled elsewhere.
+- If the follow-up is about current events / recency, do not bake in outdated years (e.g., 2023); use a current timeframe in seed_queries (e.g., ${currentYear}, "past 30 days", "since ${Number(currentYear) - 1}").
+- Keep the JSON small. Do NOT include citations; they are handled elsewhere.
 `,
 	        },
         {
