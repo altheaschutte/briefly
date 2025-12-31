@@ -22,6 +22,8 @@ export class TopicsController {
     @Req() req: Request,
     @Query('status') status?: string,
     @Query('is_active') isActiveParam?: string,
+    @Query('include_system_generated') includeSystemGeneratedParam?: string,
+    @Query('segment_dive_deeper_seed_id') segmentDiveDeeperSeedId?: string,
   ) {
     const userId = (req as any).user?.id as string;
 
@@ -46,7 +48,23 @@ export class TopicsController {
       }
     }
 
-    return this.topicsService.listTopics(userId, { isActive });
+    let includeSystemGenerated: boolean | undefined = undefined;
+    if (includeSystemGeneratedParam !== undefined) {
+      const normalized = includeSystemGeneratedParam.toLowerCase();
+      if (['true', '1'].includes(normalized)) {
+        includeSystemGenerated = true;
+      } else if (['false', '0'].includes(normalized)) {
+        includeSystemGenerated = false;
+      } else {
+        throw new BadRequestException('include_system_generated must be a boolean (true/false)');
+      }
+    }
+
+    return this.topicsService.listTopics(userId, {
+      isActive,
+      includeSystemGenerated,
+      segmentDiveDeeperSeedId: segmentDiveDeeperSeedId || undefined,
+    });
   }
 
   @Post()

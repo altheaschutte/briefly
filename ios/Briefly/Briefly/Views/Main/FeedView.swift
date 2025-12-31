@@ -17,8 +17,8 @@ struct FeedView: View {
             .background(Color.brieflyBackground.ignoresSafeArea())
             .navigationTitle("Your Library")
             .navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(for: Episode.self) { episode in
-                EpisodeDetailView(episode: episode, onCreateEpisode: onCreateEpisode)
+            .navigationDestination(for: UUID.self) { episodeId in
+                EpisodeDetailView(episodeId: episodeId, onCreateEpisode: onCreateEpisode)
             }
             .task {
                 await refreshFeed()
@@ -56,7 +56,7 @@ struct FeedView: View {
                     .font(.headline)
                 VStack(spacing: 0) {
                     ForEach(Array(viewModel.previousEpisodes.enumerated()), id: \.element.id) { index, episode in
-                        NavigationLink(value: episode) {
+                        NavigationLink(value: episode.id) {
                             EpisodeRow(episode: episode)
                         }
                         .buttonStyle(.plain)
@@ -145,7 +145,7 @@ struct FeedView: View {
                         .cornerRadius(12)
                 }
 
-                NavigationLink(value: episode) {
+                NavigationLink(value: episode.id) {
                     Text("Details")
                         .frame(maxWidth: .infinity)
                         .padding()

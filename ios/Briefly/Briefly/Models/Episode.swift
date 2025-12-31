@@ -251,8 +251,15 @@ struct Episode: Codable, Identifiable, Hashable {
         segments = try? container.decodeIfPresent([EpisodeSegment].self, forKey: .segments)
         sources = try? container.decodeIfPresent([EpisodeSource].self, forKey: .sources)
         status = try? container.decodeIfPresent(String.self, forKey: .status)
-        diveDeeperSeeds = (try? container.decodeIfPresent([SegmentDiveDeeperSeed].self, forKey: .diveDeeperSeedsCamel)) ??
-            (try? container.decodeIfPresent([SegmentDiveDeeperSeed].self, forKey: .diveDeeperSeedsSnake))
+        let decodedDiveDeeperCamel = try? container.decodeIfPresent([SegmentDiveDeeperSeed].self, forKey: .diveDeeperSeedsCamel)
+        let decodedDiveDeeperSnake = try? container.decodeIfPresent([SegmentDiveDeeperSeed].self, forKey: .diveDeeperSeedsSnake)
+        if let snake = decodedDiveDeeperSnake, snake.isEmpty == false {
+            diveDeeperSeeds = snake
+        } else if let camel = decodedDiveDeeperCamel, camel.isEmpty == false {
+            diveDeeperSeeds = camel
+        } else {
+            diveDeeperSeeds = decodedDiveDeeperSnake ?? decodedDiveDeeperCamel
+        }
 
         if let number = (try? container.decodeIfPresent(Int.self, forKey: .episodeNumberSnake)) ??
             (try? container.decodeIfPresent(Int.self, forKey: .episodeNumberCamel)) {
@@ -395,14 +402,6 @@ struct Episode: Codable, Identifiable, Hashable {
                 updatedAt: Date(),
                 publishedAt: Date(),
                 topics: [Topic.placeholder])
-    }
-
-    static func == (lhs: Episode, rhs: Episode) -> Bool {
-        lhs.id == rhs.id
-    }
-
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
     }
 
     static func formatEpisodeDateLabel(_ date: Date?, relativeTo now: Date = Date(), calendar: Calendar = .current) -> String {

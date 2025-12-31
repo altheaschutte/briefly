@@ -268,7 +268,8 @@ Hard rules:
     - terms_to_define (string[], optional, 0–6 items)
 
 Guidance:
-- The title should feel tappable on iOS (imperative, curiosity-driven).
+- The title should feel tappable on iOS and lead with the concrete topic/entity (noun-forward, not a generic verb).
+- Do NOT start the title with "Uncover" or "Unravel" (or variants like "Uncovering", "Unraveling").
 - The angle should make the follow-up clearly different from the segment (deeper, narrower, more investigative).
 - Avoid broad recap framing ("what happened", "overview", "explain X") unless the segment depends on defining a term.
 - Seed queries must be ready to send to a web search agent; add disambiguating entities/locations/timeframes.
@@ -304,12 +305,15 @@ ${segmentScript || '(empty)'}`,
     const seedQueries = Array.isArray(parsed?.seed_queries) ? parsed.seed_queries.map((v: any) => String(v).trim()).filter(Boolean) : [];
     const contextBundle = (parsed?.context_bundle && typeof parsed.context_bundle === 'object') ? parsed.context_bundle : {};
 
-    if (!title || !angle) {
+    const normalizedTitle =
+      this.normalizeDiveDeeperSeedTitle(title) || this.buildDiveDeeperSeedFallbackTitle(parentTopicText);
+
+    if (!normalizedTitle || !angle) {
       throw new Error(`${this.providerLabel} did not return a valid dive deeper seed (missing title/angle)`);
     }
 
     return {
-      title,
+      title: normalizedTitle,
       angle,
       focusClaims: focusClaims.slice(0, 3),
       seedQueries: seedQueries.slice(0, 4),
@@ -774,6 +778,56 @@ SHOW NOTES RULES
         seen.add(key);
         return true;
       });
+  }
+
+  private normalizeDiveDeeperSeedTitle(rawTitle: string): string {
+    let title = (rawTitle || '').trim();
+    if (!title) {
+      return '';
+    }
+
+    const bannedPrefix = /^(uncover(?:ing)?|unravel(?:ing)?)\b[:\-–—,]*\s+/i;
+    while (bannedPrefix.test(title)) {
+      title = title.replace(bannedPrefix, '').trim();
+    }
+
+    if (!title) {
+      return '';
+    }
+
+    return title.charAt(0).toUpperCase() + title.slice(1);
+  }
+
+  private buildDiveDeeperSeedFallbackTitle(parentTopicText: string): string {
+    const cleanedTopic = this.stripLeadingTopicPromptPrefix(parentTopicText);
+    if (!cleanedTopic) {
+      return '';
+    }
+    const words = cleanedTopic.split(/\s+/).filter(Boolean).slice(0, 8);
+    return words.join(' ').trim();
+  }
+
+  private stripLeadingTopicPromptPrefix(raw: string): string {
+    const text = (raw || '').trim();
+    if (!text) {
+      return '';
+    }
+
+    const stripped = text
+      .replace(/^(tell me|update me)\b\s*/i, '')
+      .replace(/^(share|highlight|reveal|explore)\b\s*/i, '')
+      .replace(/^dive into\b\s*/i, '')
+      .replace(/^alert me to\b\s*/i, '')
+      .replace(/^(uncover(?:ing)?|unravel(?:ing)?)\b\s*/i, '')
+      .replace(/^(about|on|to)\b\s*/i, '')
+      .replace(/^[\s:–—-]+/, '')
+      .trim();
+
+    if (!stripped) {
+      return '';
+    }
+
+    return stripped.charAt(0).toUpperCase() + stripped.slice(1);
   }
 
   private parseTopicQueryPlan(content: string): TopicQueryPlan {

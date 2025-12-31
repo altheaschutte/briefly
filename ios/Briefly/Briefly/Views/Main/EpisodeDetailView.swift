@@ -3,7 +3,7 @@ import UIKit
 import ImageIO
 
 	struct EpisodeDetailView: View {
-	    let episode: Episode
+	    let episodeId: UUID
 	    let onCreateEpisode: (() -> Void)?
 	    @EnvironmentObject private var appViewModel: AppViewModel
 	    @EnvironmentObject private var audioManager: AudioPlayerManager
@@ -34,13 +34,18 @@ import ImageIO
 	    @State private var createdDiveDeeperEpisode: Episode?
 	    @State private var navigateToDiveDeeperEpisode: Bool = false
 
-    init(episode: Episode, onCreateEpisode: (() -> Void)? = nil) {
-        self.episode = episode
+    init(episodeId: UUID, initialEpisode: Episode? = nil, onCreateEpisode: (() -> Void)? = nil) {
+        self.episodeId = episodeId
         self.onCreateEpisode = onCreateEpisode
-        _detailedEpisode = State(initialValue: episode)
-        _segments = State(initialValue: episode.segments ?? [])
-        _sources = State(initialValue: episode.sources ?? [])
+        let seed = initialEpisode ?? Episode(id: episodeId, title: "Episode", summary: "")
+        _detailedEpisode = State(initialValue: seed)
+        _segments = State(initialValue: seed.segments ?? [])
+        _sources = State(initialValue: seed.sources ?? [])
 	    }
+
+    init(episode: Episode, onCreateEpisode: (() -> Void)? = nil) {
+        self.init(episodeId: episode.id, initialEpisode: episode, onCreateEpisode: onCreateEpisode)
+    }
 
 	    var body: some View {
 	        ZStack {
@@ -107,15 +112,15 @@ import ImageIO
                         .accessibilityLabel("More actions")
                 }
             }
-        }
-        .task(id: episode.id) {
-            await loadDetailsIfNeeded()
-        }
-        .onDisappear {
-            queuedDiveDeeperTask?.cancel()
-            queuedDiveDeeperTask = nil
-            queuedDiveDeeperSeedID = nil
-        }
+	        }
+	        .task(id: episodeId) {
+	            await loadDetailsIfNeeded()
+	        }
+	        .onDisappear {
+	            queuedDiveDeeperTask?.cancel()
+	            queuedDiveDeeperTask = nil
+	            queuedDiveDeeperSeedID = nil
+	        }
         .safeAreaInset(edge: .bottom) {
             playerBarInset
         }
@@ -533,7 +538,7 @@ private extension EpisodeDetailView {
 	        } label: {
 	            HStack(alignment: .center, spacing: 12) {
                     Text(item.seed.title)
-                        .font(.callout.weight(.semibold))
+                        .font(.callout.weight(.regular))
                         .foregroundColor(.brieflyPrimary)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
@@ -714,12 +719,8 @@ private extension EpisodeDetailView {
         isLoading = true
         defer { isLoading = false }
         do {
-            let latest = try await appViewModel.episodeService.fetchEpisode(id: episode.id)
-            var merged = latest
-            if merged.diveDeeperSeeds == nil {
-                merged.diveDeeperSeeds = detailedEpisode.diveDeeperSeeds
-            }
-            detailedEpisode = merged
+            let latest = try await appViewModel.episodeService.fetchEpisode(id: episodeId)
+            detailedEpisode = latest
             segments = (latest.segments ?? []).sorted(by: { $0.orderIndex < $1.orderIndex })
             sources = latest.sources ?? []
             errorMessage = nil
@@ -785,9 +786,6 @@ private extension EpisodeDetailView {
         let seeds = detailedEpisode.diveDeeperSeeds ?? []
         guard seeds.isEmpty == false else { return [] }
 
-        let listenedUnlocksAll = playbackHistory.isListened(detailedEpisode.id)
-        let currentTime = displayedCurrentTime
-
         let seedsBySegmentId: [UUID: SegmentDiveDeeperSeed] = Dictionary(
             uniqueKeysWithValues: seeds.compactMap { seed in
                 guard let segmentId = seed.segmentId else { return nil }
@@ -795,33 +793,16 @@ private extension EpisodeDetailView {
             }
         )
 
-        func unlockTimeSeconds(for segment: EpisodeSegment?) -> Double? {
-            guard let start = segment?.startTimeSeconds,
-                  let duration = segment?.durationSeconds,
-                  duration.isFinite,
-                  duration > 0 else { return nil }
-            return start + (duration * 0.5)
-        }
-
-        func isUnlocked(unlockTime: Double?) -> Bool {
-            if listenedUnlocksAll {
-                return true
-            }
-            guard let unlockTime else { return false }
-            return currentTime >= unlockTime
-        }
-
         var ordered: [DiveDeeperDisplayItem] = []
         let orderedSegments = segments.sorted(by: { $0.orderIndex < $1.orderIndex })
         for segment in orderedSegments {
             guard let seed = seedsBySegmentId[segment.id] else { continue }
-            let unlockTime = unlockTimeSeconds(for: segment)
             ordered.append(
                 DiveDeeperDisplayItem(
                     id: seed.id,
                     seed: seed,
-                    isUnlocked: isUnlocked(unlockTime: unlockTime),
-                    unlockTimeSeconds: unlockTime
+                    isUnlocked: true,
+                    unlockTimeSeconds: nil
                 )
             )
         }
@@ -840,13 +821,12 @@ private extension EpisodeDetailView {
             })
 
         for seed in remainingSeeds {
-            let unlockTime = unlockTimeSeconds(for: nil)
             ordered.append(
                 DiveDeeperDisplayItem(
                     id: seed.id,
                     seed: seed,
-                    isUnlocked: isUnlocked(unlockTime: unlockTime),
-                    unlockTimeSeconds: unlockTime
+                    isUnlocked: true,
+                    unlockTimeSeconds: nil
                 )
             )
         }

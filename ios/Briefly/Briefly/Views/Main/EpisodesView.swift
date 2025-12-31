@@ -10,7 +10,7 @@ struct EpisodesView: View {
             ForEach(viewModel.sections) { section in
                 Section(header: Text(section.title)) {
                     ForEach(section.episodes) { episode in
-                        NavigationLink(value: episode) {
+                        NavigationLink(value: episode.id) {
                             EpisodeRow(episode: episode)
                         }
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -26,8 +26,8 @@ struct EpisodesView: View {
             }
         }
         .navigationTitle("Episodes")
-        .navigationDestination(for: Episode.self) { episode in
-            EpisodeDetailView(episode: episode)
+        .navigationDestination(for: UUID.self) { episodeId in
+            EpisodeDetailView(episodeId: episodeId)
         }
         .onAppear {
             Task { await viewModel.load() }

@@ -194,9 +194,22 @@ final class AudioPlayerManager: NSObject, ObservableObject {
         guard let current = currentEpisode else { return }
         if let updated = episodes.first(where: { $0.id == current.id }) {
             var merged = updated
-            if merged.diveDeeperSeeds == nil {
-                merged.diveDeeperSeeds = current.diveDeeperSeeds
+            if merged.audioURL == nil { merged.audioURL = current.audioURL }
+            if merged.durationSeconds == nil { merged.durationSeconds = current.durationSeconds }
+            if merged.description == nil { merged.description = current.description }
+            if merged.topics == nil { merged.topics = current.topics }
+            if merged.segments == nil { merged.segments = current.segments }
+            if merged.sources == nil { merged.sources = current.sources }
+            if merged.showNotes == nil { merged.showNotes = current.showNotes }
+            if merged.transcript == nil { merged.transcript = current.transcript }
+            if merged.coverImageURL == nil { merged.coverImageURL = current.coverImageURL }
+            if merged.coverPrompt == nil { merged.coverPrompt = current.coverPrompt }
+            if (merged.diveDeeperSeeds == nil || merged.diveDeeperSeeds?.isEmpty == true),
+               let existing = current.diveDeeperSeeds,
+               existing.isEmpty == false {
+                merged.diveDeeperSeeds = existing
             }
+
             // Only update when metadata changes to avoid unnecessary publishes.
             if merged.title != current.title ||
                 merged.episodeNumber != current.episodeNumber ||
@@ -204,6 +217,7 @@ final class AudioPlayerManager: NSObject, ObservableObject {
                 merged.audioURL != current.audioURL ||
                 merged.durationSeconds != current.durationSeconds ||
                 merged.status != current.status ||
+                merged.coverImageURL != current.coverImageURL ||
                 merged.diveDeeperSeeds != current.diveDeeperSeeds {
                 currentEpisode = merged
                 durationSeconds = merged.durationSeconds ?? durationSeconds
