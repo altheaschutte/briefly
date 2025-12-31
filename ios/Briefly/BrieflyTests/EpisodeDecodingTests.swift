@@ -25,7 +25,9 @@ final class EpisodeDecodingTests: XCTestCase {
                     "angle": "Investigate the most surprising claim in this segment.",
                     "focus_claims": ["Claim A"],
                     "seed_queries": ["example query"],
-                    "context_bundle": {"segment_summary": "A short summary"}
+                    "context_bundle": {"segment_summary": "A short summary"},
+                    "created_at": "2024-02-10T12:05:00.123Z",
+                    "updated_at": "2024-02-10T12:06:00.123Z"
                 }
             ],
             "created_at": "2024-02-10T12:00:00Z",
@@ -34,7 +36,27 @@ final class EpisodeDecodingTests: XCTestCase {
         """.data(using: .utf8)!
 
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let string = try container.decode(String.self)
+
+            let withFractional = ISO8601DateFormatter()
+            withFractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = withFractional.date(from: string) {
+                return date
+            }
+
+            let basic = ISO8601DateFormatter()
+            basic.formatOptions = [.withInternetDateTime]
+            if let date = basic.date(from: string) {
+                return date
+            }
+
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Invalid date format: \(string)"
+            )
+        }
         let episode = try decoder.decode(Episode.self, from: json)
         let formatter = ISO8601DateFormatter()
 
@@ -53,6 +75,7 @@ final class EpisodeDecodingTests: XCTestCase {
         XCTAssertEqual(episode.summary, "Short summary line.")
         XCTAssertEqual(episode.diveDeeperSeeds?.count, 1)
         XCTAssertEqual(episode.diveDeeperSeeds?.first?.title, "Go deeper on this")
+        XCTAssertEqual(episode.diveDeeperSeeds?.first?.createdAt, formatter.date(from: "2024-02-10T12:05:00.123Z"))
         XCTAssertFalse(episode.title.isEmpty)
     }
 

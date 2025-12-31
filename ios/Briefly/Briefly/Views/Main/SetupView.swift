@@ -460,11 +460,15 @@ private extension SetupView {
         Button {
             creationViewModel.cancelQueuedGeneration()
         } label: {
-            Label("Starting… Tap to undo", systemImage: "arrow.uturn.backward")
+            HStack(spacing: 10) {
+                ProgressView()
+                    .tint(.white)
+                Text("Starting… Tap to undo")
+            }
                 .font(.headline)
                 .frame(maxWidth: .infinity)
                 .padding()
-                .background(Color.brieflyPrimary)
+                .background(Color.brieflySurface)
                 .foregroundColor(.white)
                 .tint(.white)
                 .cornerRadius(12)
@@ -577,7 +581,7 @@ final class EpisodeCreationViewModel: ObservableObject {
             } catch {
                 return
             }
-            await self.fireQueuedGenerationIfNeeded()
+            await self.fireQueuedGenerationIfNeeded(cancelPendingDelay: false)
         }
     }
 
@@ -592,9 +596,11 @@ final class EpisodeCreationViewModel: ObservableObject {
         queuedPreviousErrorMessage = nil
     }
 
-    func fireQueuedGenerationIfNeeded() async {
+    func fireQueuedGenerationIfNeeded(cancelPendingDelay: Bool = true) async {
         guard isGenerationQueued else { return }
-        queueTask?.cancel()
+        if cancelPendingDelay {
+            queueTask?.cancel()
+        }
         queueTask = nil
         isGenerationQueued = false
         queuedPreviousEpisode = nil

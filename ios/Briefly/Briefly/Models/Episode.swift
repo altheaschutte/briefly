@@ -26,6 +26,67 @@ struct SegmentDiveDeeperSeed: Codable, Identifiable, Hashable {
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        if let uuid = try? container.decode(UUID.self, forKey: .id) {
+            id = uuid
+        } else if let idString = try? container.decode(String.self, forKey: .id),
+                  let uuid = UUID(uuidString: idString) {
+            id = uuid
+        } else {
+            id = UUID()
+        }
+
+	        if let uuid = try? container.decodeIfPresent(UUID.self, forKey: .episodeId) {
+	            episodeId = uuid
+	        } else if let idString = try? container.decodeIfPresent(String.self, forKey: .episodeId) {
+	            episodeId = UUID(uuidString: idString)
+	        } else {
+	            episodeId = nil
+	        }
+
+	        if let uuid = try? container.decodeIfPresent(UUID.self, forKey: .segmentId) {
+	            segmentId = uuid
+	        } else if let idString = try? container.decodeIfPresent(String.self, forKey: .segmentId) {
+	            segmentId = UUID(uuidString: idString)
+	        } else {
+	            segmentId = nil
+	        }
+
+	        if let value = try? container.decodeIfPresent(Int.self, forKey: .position) {
+	            position = value
+	        } else if let string = try? container.decodeIfPresent(String.self, forKey: .position),
+	                  let parsed = Int(string) {
+	            position = parsed
+	        } else {
+	            position = nil
+	        }
+
+        title = (try? container.decode(String.self, forKey: .title)) ?? ""
+        angle = (try? container.decode(String.self, forKey: .angle)) ?? ""
+        focusClaims = try? container.decodeIfPresent([String].self, forKey: .focusClaims)
+        seedQueries = try? container.decodeIfPresent([String].self, forKey: .seedQueries)
+        contextBundle = try? container.decodeIfPresent(JSONValue.self, forKey: .contextBundle)
+        createdAt = try? container.decodeIfPresent(Date.self, forKey: .createdAt)
+        updatedAt = try? container.decodeIfPresent(Date.self, forKey: .updatedAt)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encodeIfPresent(episodeId, forKey: .episodeId)
+        try container.encodeIfPresent(segmentId, forKey: .segmentId)
+        try container.encodeIfPresent(position, forKey: .position)
+        try container.encode(title, forKey: .title)
+        try container.encode(angle, forKey: .angle)
+        try container.encodeIfPresent(focusClaims, forKey: .focusClaims)
+        try container.encodeIfPresent(seedQueries, forKey: .seedQueries)
+        try container.encodeIfPresent(contextBundle, forKey: .contextBundle)
+        try container.encodeIfPresent(createdAt, forKey: .createdAt)
+        try container.encodeIfPresent(updatedAt, forKey: .updatedAt)
+    }
 }
 
 enum JSONValue: Codable, Hashable {

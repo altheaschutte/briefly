@@ -30,7 +30,11 @@ struct GenerateEpisodeView: View {
                         .frame(maxWidth: .infinity)
                         .padding()
                 } else if isQueued {
-                    Label("Starting… Tap to undo", systemImage: "arrow.uturn.backward")
+                    HStack(spacing: 10) {
+                        ProgressView()
+                            .tint(.white)
+                        Text("Starting… Tap to undo")
+                    }
                         .frame(maxWidth: .infinity)
                         .padding()
                 } else {
@@ -39,7 +43,7 @@ struct GenerateEpisodeView: View {
                         .padding()
                 }
             }
-            .background(Color.brieflyPrimary)
+            .background(isQueued ? Color.brieflySurface : Color.brieflyPrimary)
             .foregroundColor(.white)
             .cornerRadius(12)
 
@@ -81,7 +85,7 @@ struct GenerateEpisodeView: View {
             } catch {
                 return
             }
-            await fireNowIfQueued()
+            await fireNowIfQueued(cancelPendingDelay: false)
         }
     }
 
@@ -91,9 +95,11 @@ struct GenerateEpisodeView: View {
         isQueued = false
     }
 
-    private func fireNowIfQueued() async {
+    private func fireNowIfQueued(cancelPendingDelay: Bool = true) async {
         guard isQueued else { return }
-        queueTask?.cancel()
+        if cancelPendingDelay {
+            queueTask?.cancel()
+        }
         queueTask = nil
         isQueued = false
 
