@@ -15,6 +15,19 @@ final class EpisodeDecodingTests: XCTestCase {
             "show_notes": "Short summary line.\\n\\n- point one\\n- point two",
             "cover_image_url": "https://example.com/cover.png",
             "cover_prompt": "Composition inspired by layered ideas.",
+            "dive_deeper_seeds": [
+                {
+                    "id": "11111111-1111-1111-1111-111111111111",
+                    "episode_id": "01234567-89AB-CDEF-0123-456789ABCDEF",
+                    "segment_id": "22222222-2222-2222-2222-222222222222",
+                    "position": 0,
+                    "title": "Go deeper on this",
+                    "angle": "Investigate the most surprising claim in this segment.",
+                    "focus_claims": ["Claim A"],
+                    "seed_queries": ["example query"],
+                    "context_bundle": {"segment_summary": "A short summary"}
+                }
+            ],
             "created_at": "2024-02-10T12:00:00Z",
             "updated_at": "2024-02-10T12:30:00Z"
         }
@@ -38,6 +51,23 @@ final class EpisodeDecodingTests: XCTestCase {
         XCTAssertEqual(episode.durationDisplaySeconds, 780)
         XCTAssertEqual(episode.status, "ready")
         XCTAssertEqual(episode.summary, "Short summary line.")
+        XCTAssertEqual(episode.diveDeeperSeeds?.count, 1)
+        XCTAssertEqual(episode.diveDeeperSeeds?.first?.title, "Go deeper on this")
         XCTAssertFalse(episode.title.isEmpty)
+    }
+
+    func testDisplayTitleStripsBracketedEpisodeNumberSuffix() throws {
+        let json = """
+        {
+            "id": "01234567-89AB-CDEF-0123-456789ABCDEF",
+            "title": "Morning Briefly [15]"
+        }
+        """.data(using: .utf8)!
+
+        let decoder = JSONDecoder()
+        let episode = try decoder.decode(Episode.self, from: json)
+
+        XCTAssertEqual(episode.title, "Morning Briefly [15]")
+        XCTAssertEqual(episode.displayTitle, "Morning Briefly")
     }
 }

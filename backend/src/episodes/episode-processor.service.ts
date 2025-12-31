@@ -32,6 +32,7 @@ import {
 } from './episode-script.utils';
 import { EpisodeSegmentsService } from './episode-segments.service';
 import { SegmentDialogueScript } from '../llm/llm.types';
+import { SegmentDiveDeeperSeedsService } from './segment-dive-deeper-seeds.service';
 
 @Injectable()
 export class EpisodeProcessorService {
@@ -47,6 +48,7 @@ export class EpisodeProcessorService {
     private readonly ttsService: TtsService,
     private readonly episodeSegmentsService: EpisodeSegmentsService,
     private readonly episodeSourcesService: EpisodeSourcesService,
+    private readonly segmentDiveDeeperSeedsService: SegmentDiveDeeperSeedsService,
     private readonly coverImageService: CoverImageService,
     private readonly configService: ConfigService,
     private readonly entitlementsService: EntitlementsService,
@@ -64,9 +66,9 @@ export class EpisodeProcessorService {
       stage = 'status:rewriting_queries';
       await this.markEpisodeStatus(userId, episodeId, 'rewriting_queries');
       stage = 'list_topics';
-      const activeTopics = (await this.topicsService.listTopics(userId))
-        .filter((t) => t.isActive)
-        .sort((a, b) => a.orderIndex - b.orderIndex);
+      const activeTopics = episode.diveDeeperSeedId
+        ? [await this.topicsService.getDiveDeeperTopicForSeed(userId, episode.diveDeeperSeedId)]
+        : (await this.topicsService.listTopics(userId, { isActive: true })).sort((a, b) => a.orderIndex - b.orderIndex);
       if (!activeTopics.length) {
         throw new Error('No active topics configured for user');
       }
@@ -88,10 +90,18 @@ export class EpisodeProcessorService {
         stage = `topic:${index}:previous_queries`;
         const previousQueries = await this.topicQueriesService.listByTopic(userId, topic.id);
         stage = `topic:${index}:plan_queries`;
-        const topicPlan = await this.llmService.generateTopicQueries(
-          topic.originalText,
-          previousQueries.map((q) => q.query),
-        );
+        const diveDeeperSeedId = topic.segmentDiveDeeperSeedId;
+        const diveDeeperSeed = diveDeeperSeedId ? await this.segmentDiveDeeperSeedsService.getSeedById(diveDeeperSeedId) : undefined;
+        const topicPlan = await this.llmService.generateTopicQueries(topic.originalText, previousQueries.map((q) => q.query), {
+          mode: diveDeeperSeedId ? 'dive_deeper' : 'standard',
+          seedQueries: diveDeeperSeed?.seedQueries,
+          focusClaims: diveDeeperSeed?.focusClaims,
+          angle: diveDeeperSeed?.angle,
+          contextBundle: diveDeeperSeed?.contextBundle,
+          parentQueryTexts: Array.isArray(diveDeeperSeed?.contextBundle?.parent_query_texts)
+            ? diveDeeperSeed?.contextBundle?.parent_query_texts
+            : undefined,
+        });
         const topicIntent = topicPlan.intent;
         const freshQueries = selectFreshQueries(topicPlan.queries, previousQueries);
         const fallbackQueries = selectFreshQueries([topic.originalText], previousQueries);
@@ -120,10 +130,22 @@ export class EpisodeProcessorService {
         const segmentSources = buildEpisodeSources(queryResults, episodeId, segmentId);
         const segmentContent = buildSegmentContent(topic.originalText, savedQueries);
         stage = `topic:${index}:segment_script`;
-        const instruction =
-          previousSegmentTitle !== null
-            ? `This continues immediately after the previous segment on "${previousSegmentTitle}".`
-            : undefined;
+        const instructionParts: string[] = [];
+        if (diveDeeperSeed?.contextBundle?.segment_summary) {
+          instructionParts.push(
+            `This is a Dive Deeper continuation. Assume the listener just heard: ${String(diveDeeperSeed.contextBundle.segment_summary).trim()}`,
+          );
+        }
+        if (diveDeeperSeed?.angle) {
+          instructionParts.push(`Go deeper using this angle: ${diveDeeperSeed.angle.trim()}`);
+        }
+        if (Array.isArray(diveDeeperSeed?.focusClaims) && diveDeeperSeed.focusClaims.length) {
+          instructionParts.push(`Prioritize deepening these claims: ${diveDeeperSeed.focusClaims.slice(0, 3).join(' | ')}`);
+        }
+        if (previousSegmentTitle !== null) {
+          instructionParts.push(`This continues immediately after the previous segment on "${previousSegmentTitle}".`);
+        }
+        const instruction = instructionParts.length ? instructionParts.join(' ') : undefined;
         const segmentScript = await this.llmService.generateSegmentScript(
           topic.originalText,
           segmentContent,
@@ -170,6 +192,62 @@ export class EpisodeProcessorService {
       const normalizedSources = persistedSegments.flatMap((segment) => segment.rawSources || []);
       stage = 'persist_sources';
       await this.episodeSourcesService.replaceSources(episodeId, normalizedSources);
+
+      stage = 'status:generating_dive_deeper_seeds';
+      await this.markEpisodeStatus(userId, episodeId, 'generating_dive_deeper_seeds');
+      try {
+        stage = 'generate_dive_deeper_seeds';
+        const now = new Date();
+        const results = await Promise.allSettled(
+          persistedSegments.map(async (segment) => {
+            const parentQueryTexts = this.extractParentQueryTexts(segment.rawContent);
+            const draft = await this.llmService.generateSegmentDiveDeeperSeed({
+              parentTopicText: segment.title ?? 'Segment',
+              segmentScript: segment.script ?? '',
+              segmentSources: segment.rawSources ?? [],
+              parentQueryTexts,
+            });
+            return {
+              id: uuid(),
+              episodeId,
+              segmentId: segment.id,
+              position: segment.orderIndex,
+              title: draft.title,
+              angle: draft.angle,
+              focusClaims: draft.focusClaims ?? [],
+              seedQueries: draft.seedQueries ?? [],
+              contextBundle: draft.contextBundle ?? {},
+              createdAt: now,
+              updatedAt: now,
+            };
+          }),
+        );
+        const seeds = results
+          .filter((result): result is PromiseFulfilledResult<any> => result.status === 'fulfilled')
+          .map((result) => result.value);
+        const failures = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+        for (const failure of failures) {
+          const error = failure.reason;
+          const message = error instanceof Error ? error.message : String(error);
+          const raw = (error as any)?.rawContent;
+          const snippet =
+            typeof raw === 'string' && raw.trim()
+              ? ` | snippet=${raw.replace(/\s+/g, ' ').trim().slice(0, 200)}`
+              : '';
+          this.logger.warn(`Dive deeper seed generation failed for a segment in episode ${episodeId}: ${message}${snippet}`);
+        }
+        if (seeds.length) {
+          await this.segmentDiveDeeperSeedsService.replaceSeeds(episodeId, seeds);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const raw = (error as any)?.rawContent;
+        const snippet =
+          typeof raw === 'string' && raw.trim()
+            ? ` | snippet=${raw.replace(/\s+/g, ' ').trim().slice(0, 260)}`
+            : '';
+        this.logger.warn(`Dive deeper seed generation failed for episode ${episodeId}: ${message}${snippet}`);
+      }
 
       stage = 'generating_script';
       await this.markEpisodeStatus(userId, episodeId, 'generating_script');
@@ -256,6 +334,22 @@ export class EpisodeProcessorService {
       }
       throw error;
     }
+  }
+
+  private extractParentQueryTexts(rawContent: string): string[] {
+    const lines = (rawContent || '').split('\n');
+    const queries: string[] = [];
+    for (const line of lines) {
+      const match = line.match(/^\s*Query\s+\d+\s*:\s*(.+)\s*$/i);
+      if (!match) {
+        continue;
+      }
+      const query = match[1]?.trim();
+      if (query) {
+        queries.push(query);
+      }
+    }
+    return queries;
   }
 
   private async stitchSegmentAudio(

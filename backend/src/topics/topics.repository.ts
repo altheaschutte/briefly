@@ -10,6 +10,8 @@ export interface TopicUpdateInput {
 
 export interface TopicListFilter {
   isActive?: boolean;
+  includeSystemGenerated?: boolean;
+  segmentDiveDeeperSeedId?: string;
 }
 
 export interface TopicsRepository {
@@ -18,7 +20,12 @@ export interface TopicsRepository {
   create(
     userId: string,
     originalText: string,
-    options?: { isSeed?: boolean; isActive?: boolean },
+    options?: {
+      isSeed?: boolean;
+      isActive?: boolean;
+      segmentDiveDeeperSeedId?: string | null;
+      contextBundle?: any | null;
+    },
   ): Promise<Topic>;
   update(userId: string, topicId: string, updates: TopicUpdateInput): Promise<Topic | undefined>;
 }

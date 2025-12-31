@@ -15,6 +15,9 @@ export type EpisodeRow = {
   show_notes?: string | null;
   description?: string | null;
   error_message?: string | null;
+  parent_episode_id?: string | null;
+  parent_segment_id?: string | null;
+  dive_deeper_seed_id?: string | null;
   created_at: string;
   updated_at: string;
   usage_recorded_at?: string | null;
@@ -65,12 +68,34 @@ type EpisodeSegmentsTable = {
   Relationships: [];
 };
 
+export type SegmentDiveDeeperSeedRow = {
+  id: string;
+  episode_id: string;
+  segment_id: string;
+  position?: number | null;
+  title: string;
+  angle: string;
+  focus_claims?: any | null;
+  seed_queries?: any | null;
+  context_bundle?: any | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type SegmentDiveDeeperSeedsTable = {
+  Row: SegmentDiveDeeperSeedRow;
+  Insert: SegmentDiveDeeperSeedRow;
+  Update: Partial<SegmentDiveDeeperSeedRow>;
+  Relationships: [];
+};
+
 export type SupabaseDatabase = {
   public: {
     Tables: {
       episodes: EpisodesTable;
       episode_sources: EpisodeSourcesTable;
       episode_segments: EpisodeSegmentsTable;
+      segment_dive_deeper_seeds: SegmentDiveDeeperSeedsTable;
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

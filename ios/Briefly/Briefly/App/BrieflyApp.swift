@@ -20,7 +20,6 @@ struct BrieflyApp: App {
         #if os(iOS)
         AppDelegate.pushManager = pushManager
         #endif
-        Self.configureAppearance()
     }
 
     var body: some Scene {
@@ -35,8 +34,14 @@ struct BrieflyApp: App {
         }
     }
 
-    private static func configureAppearance() {
+    static func configureAppearance() {
         #if os(iOS)
+        configureAppearanceOnMain()
+        #endif
+    }
+
+    #if os(iOS)
+    private static func configureAppearanceOnMain() {
         let background = UIColor(Color.brieflyBackground)
         UITableView.appearance().backgroundColor = background
         UITableViewCell.appearance().backgroundColor = background
@@ -47,8 +52,39 @@ struct BrieflyApp: App {
         UICollectionView.appearance().backgroundColor = background
         UICollectionViewCell.appearance().backgroundColor = background
         UICollectionReusableView.appearance().backgroundColor = background
-        #endif
+
+        let chromeBackgroundColor = background.withAlphaComponent(0.65)
+        let chromeBlurEffect = UIBlurEffect(style: .systemUltraThinMaterialDark)
+
+        let tabBarAppearance = UITabBarAppearance()
+        tabBarAppearance.configureWithTransparentBackground()
+        tabBarAppearance.backgroundEffect = chromeBlurEffect
+        tabBarAppearance.backgroundColor = chromeBackgroundColor
+
+        let tabBarProxy = UITabBar.appearance()
+        tabBarProxy.standardAppearance = tabBarAppearance
+        tabBarProxy.isTranslucent = true
+        if #available(iOS 15.0, *) {
+            tabBarProxy.scrollEdgeAppearance = tabBarAppearance
+        }
+
+        let navigationBarAppearance = UINavigationBarAppearance()
+        navigationBarAppearance.configureWithTransparentBackground()
+        navigationBarAppearance.backgroundEffect = chromeBlurEffect
+        navigationBarAppearance.backgroundColor = chromeBackgroundColor
+        navigationBarAppearance.titleTextAttributes = [.foregroundColor: UIColor.white]
+        navigationBarAppearance.largeTitleTextAttributes = [.foregroundColor: UIColor.white]
+
+        let navigationBarProxy = UINavigationBar.appearance()
+        navigationBarProxy.standardAppearance = navigationBarAppearance
+        navigationBarProxy.compactAppearance = navigationBarAppearance
+        if #available(iOS 15.0, *) {
+            navigationBarProxy.scrollEdgeAppearance = navigationBarAppearance
+            navigationBarProxy.compactScrollEdgeAppearance = navigationBarAppearance
+        }
+
     }
+    #endif
 }
 
 struct AppRootView: View {

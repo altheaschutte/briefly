@@ -3,9 +3,13 @@ import SwiftUI
 struct GenerateEpisodeView: View {
     @ObservedObject var viewModel: OnboardingViewModel
     @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
     @State private var isGenerating = false
+    @State private var isQueued = false
+    @State private var queueTask: Task<Void, Never>?
     @State private var didGenerate = false
     let onDone: () -> Void
+    private let queueDelayNanoseconds: UInt64 = 5_000_000_000
 
     var body: some View {
         VStack(spacing: 16) {
@@ -20,9 +24,13 @@ struct GenerateEpisodeView: View {
                 InlineErrorText(message: error)
             }
 
-            Button(action: generate) {
+            Button(action: handleButtonTap) {
                 if isGenerating {
                     ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                } else if isQueued {
+                    Label("Starting… Tap to undo", systemImage: "arrow.uturn.backward")
                         .frame(maxWidth: .infinity)
                         .padding()
                 } else {
@@ -42,20 +50,58 @@ struct GenerateEpisodeView: View {
         .onChange(of: didGenerate) { _, newValue in
             if newValue { onDone() }
         }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase != .active else { return }
+            Task { await fireNowIfQueued() }
+        }
     }
 
-    private func generate() {
+    private func handleButtonTap() {
         if viewModel.reachedUsageLimit {
             openURL(APIConfig.manageAccountURL)
             return
         }
-        Task {
-            isGenerating = true
-            let episode = await viewModel.generateFirstEpisode()
-            isGenerating = false
-            if episode != nil {
-                didGenerate = true
+
+        if isQueued {
+            cancelQueuedGeneration()
+            return
+        }
+
+        queueGeneration()
+    }
+
+    private func queueGeneration() {
+        guard isGenerating == false else { return }
+        viewModel.errorMessage = nil
+        isQueued = true
+        queueTask?.cancel()
+        queueTask = Task { @MainActor in
+            do {
+                try await Task.sleep(nanoseconds: queueDelayNanoseconds)
+            } catch {
+                return
             }
+            await fireNowIfQueued()
+        }
+    }
+
+    private func cancelQueuedGeneration() {
+        queueTask?.cancel()
+        queueTask = nil
+        isQueued = false
+    }
+
+    private func fireNowIfQueued() async {
+        guard isQueued else { return }
+        queueTask?.cancel()
+        queueTask = nil
+        isQueued = false
+
+        isGenerating = true
+        let episode = await viewModel.generateFirstEpisode()
+        isGenerating = false
+        if episode != nil {
+            didGenerate = true
         }
     }
 

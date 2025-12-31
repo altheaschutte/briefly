@@ -50,6 +50,9 @@ export class SupabaseEpisodesRepository implements EpisodesRepository {
         show_notes: null,
         description: null,
         error_message: null,
+        parent_episode_id: null,
+        parent_segment_id: null,
+        dive_deeper_seed_id: null,
         created_at: now,
         updated_at: now,
         usage_recorded_at: null,
@@ -135,6 +138,9 @@ export class SupabaseEpisodesRepository implements EpisodesRepository {
       if (updates.durationSeconds !== undefined) payload.duration_seconds = updates.durationSeconds ?? null;
       if (updates.usageRecordedAt !== undefined)
         payload.usage_recorded_at = updates.usageRecordedAt?.toISOString() ?? null;
+      if (updates.parentEpisodeId !== undefined) payload.parent_episode_id = updates.parentEpisodeId ?? null;
+      if (updates.parentSegmentId !== undefined) payload.parent_segment_id = updates.parentSegmentId ?? null;
+      if (updates.diveDeeperSeedId !== undefined) payload.dive_deeper_seed_id = updates.diveDeeperSeedId ?? null;
 
       const { data, error } = await this.client
         .from('episodes')
@@ -196,6 +202,9 @@ export class SupabaseEpisodesRepository implements EpisodesRepository {
       showNotes: row.show_notes ?? undefined,
       description: row.description ?? undefined,
       errorMessage: row.error_message ?? undefined,
+      parentEpisodeId: row.parent_episode_id ?? undefined,
+      parentSegmentId: row.parent_segment_id ?? undefined,
+      diveDeeperSeedId: row.dive_deeper_seed_id ?? undefined,
       usageRecordedAt: row.usage_recorded_at ? new Date(row.usage_recorded_at) : undefined,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),

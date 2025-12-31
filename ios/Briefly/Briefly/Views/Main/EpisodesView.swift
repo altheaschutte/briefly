@@ -63,12 +63,13 @@ struct EpisodesView: View {
 private struct EpisodeRow: View {
     let episode: Episode
     @EnvironmentObject private var playbackHistory: PlaybackHistory
+    @EnvironmentObject private var audioManager: AudioPlayerManager
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(dateLabel(episode.displayDate))
+                    Text(episode.displayDateLabel)
                         .font(.caption)
                         .fontWeight(.semibold)
                         .foregroundColor(.brieflyTextMuted)
@@ -154,21 +155,16 @@ private struct EpisodeRow: View {
     }
 
     private var pillRow: some View {
-        HStack(spacing: 8) {
+        let isCurrentlyPlaying = audioManager.isPlaying && audioManager.currentEpisode?.id == episode.id
+        return HStack(spacing: 8) {
             durationPill
-            if playbackHistory.isListened(episode.id) {
+            if isCurrentlyPlaying {
+                EqualizerWaveform(isAnimating: true, color: Color.brieflyAccentSoft, barCount: 4, minHeight: 4, maxHeight: 14, barWidth: 2, spacing: 2)
+                    .accessibilityLabel("Playing")
+            } else if playbackHistory.isListened(episode.id) {
                 listenedPill
             }
         }
-    }
-
-    private func dateLabel(_ date: Date?) -> String {
-        guard let date else { return "—" }
-        let calendar = Calendar.current
-        let needsYear = calendar.component(.year, from: date) != calendar.component(.year, from: Date())
-        let formatter = DateFormatter()
-        formatter.dateFormat = needsYear ? "d MMM yyyy" : "d MMM"
-        return formatter.string(from: date).uppercased()
     }
 
     private func durationLabel(_ seconds: Double?) -> String {

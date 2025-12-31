@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { Topic } from '../domain/types';
+import { SegmentDiveDeeperSeed, Topic } from '../domain/types';
 import { TOPICS_REPOSITORY, TopicListFilter, TopicsRepository } from './topics.repository';
 import { EntitlementsService } from '../billing/entitlements.service';
 import { LlmService } from '../llm/llm.service';
@@ -14,6 +14,18 @@ export class TopicsService {
 
   listTopics(userId: string, filter?: TopicListFilter): Promise<Topic[]> {
     return this.repository.listByUser(userId, filter);
+  }
+
+  async getDiveDeeperTopicForSeed(userId: string, seedId: string): Promise<Topic> {
+    const topics = await this.repository.listByUser(userId, {
+      includeSystemGenerated: true,
+      segmentDiveDeeperSeedId: seedId,
+    });
+    const topic = topics[0];
+    if (!topic) {
+      throw new NotFoundException('Dive deeper topic not found');
+    }
+    return topic;
   }
 
   async createTopic(
@@ -41,6 +53,9 @@ export class TopicsService {
   ): Promise<Topic> {
     const topic = await this.repository.getById(userId, topicId);
     if (!topic) {
+      throw new NotFoundException('Topic not found');
+    }
+    if (topic.segmentDiveDeeperSeedId) {
       throw new NotFoundException('Topic not found');
     }
 
@@ -76,11 +91,41 @@ export class TopicsService {
     if (!topic) {
       throw new NotFoundException('Topic not found');
     }
+    if (topic.segmentDiveDeeperSeedId) {
+      throw new NotFoundException('Topic not found');
+    }
     const updated = await this.repository.update(userId, topicId, { isActive: false });
     if (!updated) {
       throw new NotFoundException('Topic not found');
     }
     return updated;
+  }
+
+  async getOrCreateDiveDeeperTopic(userId: string, seed: SegmentDiveDeeperSeed): Promise<Topic> {
+    const existing = await this.repository.listByUser(userId, {
+      includeSystemGenerated: true,
+      segmentDiveDeeperSeedId: seed.id,
+    });
+    if (existing.length) {
+      return existing[0];
+    }
+    try {
+      return await this.repository.create(userId, seed.title, {
+        isSeed: false,
+        isActive: true,
+        segmentDiveDeeperSeedId: seed.id,
+        contextBundle: seed.contextBundle ?? {},
+      });
+    } catch (error) {
+      const after = await this.repository.listByUser(userId, {
+        includeSystemGenerated: true,
+        segmentDiveDeeperSeedId: seed.id,
+      });
+      if (after.length) {
+        return after[0];
+      }
+      throw error;
+    }
   }
 
   async generateSeedTopics(userId: string, userInsight: string): Promise<Topic[]> {

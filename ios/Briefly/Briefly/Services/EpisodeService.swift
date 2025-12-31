@@ -5,6 +5,7 @@ protocol EpisodeProviding {
     func fetchEpisodes() async throws -> [Episode]
     func generateEpisode() async throws -> Episode?
     func requestEpisodeGeneration(targetDurationMinutes: Int?) async throws -> EpisodeCreation
+    func requestDiveDeeperEpisode(parentEpisodeID: UUID, seedID: UUID, targetDurationMinutes: Int?) async throws -> EpisodeCreation
     func fetchEpisode(id: UUID) async throws -> Episode
     func deleteEpisode(id: UUID) async throws
 }
@@ -55,6 +56,23 @@ final class EpisodeService: EpisodeProviding {
 
     func requestEpisodeGeneration(targetDurationMinutes: Int? = nil) async throws -> EpisodeCreation {
         var endpoint = APIEndpoint(path: "/episodes", method: .post)
+        if let targetDurationMinutes {
+            struct Body: Encodable { let duration: Int }
+            endpoint.body = AnyEncodable(Body(duration: targetDurationMinutes))
+        }
+        let creation: EpisodeCreationResponse = try await apiClient.request(endpoint)
+        guard let episodeId = creation.episodeId else {
+            throw APIError.invalidResponse
+        }
+        return EpisodeCreation(episodeId: episodeId, status: creation.status)
+    }
+
+    func requestDiveDeeperEpisode(
+        parentEpisodeID: UUID,
+        seedID: UUID,
+        targetDurationMinutes: Int? = nil
+    ) async throws -> EpisodeCreation {
+        var endpoint = APIEndpoint(path: "/episodes/\(parentEpisodeID.uuidString)/dive-deeper/\(seedID.uuidString)", method: .post)
         if let targetDurationMinutes {
             struct Body: Encodable { let duration: Int }
             endpoint.body = AnyEncodable(Body(duration: targetDurationMinutes))

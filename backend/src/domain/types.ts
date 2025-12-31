@@ -5,6 +5,8 @@ export interface Topic {
   orderIndex: number;
   isActive: boolean;
   isSeed: boolean;
+  segmentDiveDeeperSeedId?: string;
+  contextBundle?: any;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -41,6 +43,7 @@ export type EpisodeStatus =
   | 'queued'
   | 'rewriting_queries'
   | 'retrieving_content'
+  | 'generating_dive_deeper_seeds'
   | 'generating_script'
   | 'generating_audio'
   | 'ready'
@@ -63,6 +66,9 @@ export interface Episode {
   showNotes?: string;
   description?: string;
   errorMessage?: string;
+  parentEpisodeId?: string;
+  parentSegmentId?: string;
+  diveDeeperSeedId?: string;
   createdAt: Date;
   updatedAt: Date;
   usageRecordedAt?: Date;
@@ -90,6 +96,20 @@ export interface EpisodeSource {
   sourceTitle: string;
   url: string;
   type?: string;
+}
+
+export interface SegmentDiveDeeperSeed {
+  id: string;
+  episodeId: string;
+  segmentId: string;
+  position?: number;
+  title: string;
+  angle: string;
+  focusClaims: string[];
+  seedQueries: string[];
+  contextBundle: any;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface UserProfile {

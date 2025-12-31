@@ -5,6 +5,8 @@ export type TopicRow = {
   is_active: boolean;
   is_seed: boolean;
   order_index: number;
+  segment_dive_deeper_seed_id?: string | null;
+  context_bundle?: any | null;
   created_at: string;
   updated_at: string;
 };

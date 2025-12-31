@@ -27,6 +27,10 @@ import { InMemoryEpisodeSegmentsRepository } from './in-memory-episode-segments.
 import { SupabaseEpisodeSegmentsRepository } from './supabase-episode-segments.repository';
 import { BillingModule } from '../billing/billing.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { SegmentDiveDeeperSeedsService } from './segment-dive-deeper-seeds.service';
+import { SEGMENT_DIVE_DEEPER_SEEDS_REPOSITORY } from './segment-dive-deeper-seeds.repository';
+import { InMemorySegmentDiveDeeperSeedsRepository } from './in-memory-segment-dive-deeper-seeds.repository';
+import { SupabaseSegmentDiveDeeperSeedsRepository } from './supabase-segment-dive-deeper-seeds.repository';
 
 const episodesRepositoryProvider: Provider = {
   provide: EPISODES_REPOSITORY,
@@ -66,10 +70,10 @@ const episodeSourcesRepositoryProvider: Provider = {
   },
 };
 
-const episodeSegmentsRepositoryProvider: Provider = {
-  provide: EPISODE_SEGMENTS_REPOSITORY,
-  inject: [ConfigService, InMemoryStoreService],
-  useFactory: (configService: ConfigService, store: InMemoryStoreService) => {
+	const episodeSegmentsRepositoryProvider: Provider = {
+	  provide: EPISODE_SEGMENTS_REPOSITORY,
+	  inject: [ConfigService, InMemoryStoreService],
+	  useFactory: (configService: ConfigService, store: InMemoryStoreService) => {
     const supabaseUrl = configService.get<string>('SUPABASE_PROJECT_URL');
     const supabaseKey = configService.get<string>('SUPABASE_SERVICE_ROLE_KEY');
     const storagePref = (configService.get<string>('EPISODES_STORAGE') || 'auto').toLowerCase();
@@ -81,7 +85,26 @@ const episodeSegmentsRepositoryProvider: Provider = {
     if (!canUseSupabase) {
       throw new Error('EPISODES_STORAGE is set to supabase but Supabase env vars are missing');
     }
-    return new SupabaseEpisodeSegmentsRepository(configService);
+	    return new SupabaseEpisodeSegmentsRepository(configService);
+	  },
+	};
+
+const segmentDiveDeeperSeedsRepositoryProvider: Provider = {
+  provide: SEGMENT_DIVE_DEEPER_SEEDS_REPOSITORY,
+  inject: [ConfigService, InMemoryStoreService],
+  useFactory: (configService: ConfigService, store: InMemoryStoreService) => {
+    const supabaseUrl = configService.get<string>('SUPABASE_PROJECT_URL');
+    const supabaseKey = configService.get<string>('SUPABASE_SERVICE_ROLE_KEY');
+    const storagePref = (configService.get<string>('EPISODES_STORAGE') || 'auto').toLowerCase();
+    const canUseSupabase = Boolean(supabaseUrl && supabaseKey);
+
+    if (storagePref === 'memory' || (!canUseSupabase && storagePref === 'auto')) {
+      return new InMemorySegmentDiveDeeperSeedsRepository(store);
+    }
+    if (!canUseSupabase) {
+      throw new Error('EPISODES_STORAGE is set to supabase but Supabase env vars are missing');
+    }
+    return new SupabaseSegmentDiveDeeperSeedsRepository(configService);
   },
 };
 
@@ -99,16 +122,24 @@ const episodeSegmentsRepositoryProvider: Provider = {
     forwardRef(() => BillingModule),
   ],
   controllers: [EpisodesController],
-  providers: [
-    EpisodesService,
-    EpisodeProcessorService,
-    EpisodeSourcesService,
-    EpisodeSegmentsService,
-    CoverImageService,
-    episodesRepositoryProvider,
-    episodeSourcesRepositoryProvider,
-    episodeSegmentsRepositoryProvider,
-  ],
-  exports: [EpisodesService, EpisodeProcessorService, EpisodeSourcesService, EpisodeSegmentsService],
-})
+	  providers: [
+	    EpisodesService,
+	    EpisodeProcessorService,
+	    EpisodeSourcesService,
+	    EpisodeSegmentsService,
+	    SegmentDiveDeeperSeedsService,
+	    CoverImageService,
+	    episodesRepositoryProvider,
+	    episodeSourcesRepositoryProvider,
+	    episodeSegmentsRepositoryProvider,
+	    segmentDiveDeeperSeedsRepositoryProvider,
+	  ],
+	  exports: [
+	    EpisodesService,
+	    EpisodeProcessorService,
+	    EpisodeSourcesService,
+	    EpisodeSegmentsService,
+	    SegmentDiveDeeperSeedsService,
+	  ],
+	})
 export class EpisodesModule {}

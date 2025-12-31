@@ -9,7 +9,12 @@ export class InMemoryTopicsRepository implements TopicsRepository {
   constructor(private readonly store: InMemoryStoreService) {}
 
   async listByUser(userId: string, filter?: TopicListFilter): Promise<Topic[]> {
-    const topics = this.store.getTopics(userId);
+    let topics = this.store.getTopics(userId);
+    if (filter?.segmentDiveDeeperSeedId) {
+      topics = topics.filter((topic) => topic.segmentDiveDeeperSeedId === filter.segmentDiveDeeperSeedId);
+    } else if (!filter?.includeSystemGenerated) {
+      topics = topics.filter((topic) => !topic.segmentDiveDeeperSeedId);
+    }
     if (filter?.isActive === undefined) {
       return topics;
     }
@@ -23,7 +28,12 @@ export class InMemoryTopicsRepository implements TopicsRepository {
   async create(
     userId: string,
     originalText: string,
-    options?: { isSeed?: boolean; isActive?: boolean },
+    options?: {
+      isSeed?: boolean;
+      isActive?: boolean;
+      segmentDiveDeeperSeedId?: string | null;
+      contextBundle?: any | null;
+    },
   ): Promise<Topic> {
     const now = new Date();
     const existing = await this.listByUser(userId);
@@ -35,6 +45,8 @@ export class InMemoryTopicsRepository implements TopicsRepository {
       orderIndex: nextOrder,
       isActive: options?.isActive ?? true,
       isSeed: options?.isSeed ?? false,
+      segmentDiveDeeperSeedId: options?.segmentDiveDeeperSeedId ?? undefined,
+      contextBundle: options?.contextBundle ?? undefined,
       createdAt: now,
       updatedAt: now,
     };

@@ -2,21 +2,20 @@ import SwiftUI
 import UIKit
 import ImageIO
 
-struct EpisodeDetailView: View {
-    let episode: Episode
-    let onCreateEpisode: (() -> Void)?
-    @EnvironmentObject private var appViewModel: AppViewModel
-    @EnvironmentObject private var audioManager: AudioPlayerManager
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.openURL) private var openURL
+	struct EpisodeDetailView: View {
+	    let episode: Episode
+	    let onCreateEpisode: (() -> Void)?
+	    @EnvironmentObject private var appViewModel: AppViewModel
+	    @EnvironmentObject private var audioManager: AudioPlayerManager
+	    @EnvironmentObject private var playbackHistory: PlaybackHistory
+	    @Environment(\.dismiss) private var dismiss
+	    @Environment(\.openURL) private var openURL
     @State private var detailedEpisode: Episode
     @State private var segments: [EpisodeSegment]
     @State private var sources: [EpisodeSource]
-    @State private var expandedSegments: Set<UUID> = []
     @State private var isLoading: Bool = false
     @State private var errorMessage: String?
     @State private var hasLoaded: Bool = false
-    @State private var isSummaryExpanded: Bool = false
     @State private var isShowingShareSheet: Bool = false
     @State private var shareItems: [Any] = []
     @State private var isDownloading: Bool = false
@@ -24,9 +23,13 @@ struct EpisodeDetailView: View {
     @State private var actionAlert: ActionAlert?
     @State private var isDeleting: Bool = false
     @State private var scrollToScript: Bool = false
-    @State private var showActionsSheet: Bool = false
-    @State private var showSpeedSheet: Bool = false
-    @State private var actionsSheetDetent: PresentationDetent = .large
+	    @State private var showActionsSheet: Bool = false
+	    @State private var showSpeedSheet: Bool = false
+	    @State private var actionsSheetDetent: PresentationDetent = .large
+	    @State private var isCreatingDiveDeeper: Bool = false
+	    @State private var creatingDiveDeeperSeedID: UUID?
+	    @State private var createdDiveDeeperEpisode: Episode?
+	    @State private var navigateToDiveDeeperEpisode: Bool = false
 
     init(episode: Episode, onCreateEpisode: (() -> Void)? = nil) {
         self.episode = episode
@@ -34,46 +37,64 @@ struct EpisodeDetailView: View {
         _detailedEpisode = State(initialValue: episode)
         _segments = State(initialValue: episode.segments ?? [])
         _sources = State(initialValue: episode.sources ?? [])
-    }
+	    }
 
-    var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    header
-                    playbackControls
+	    var body: some View {
+	        ZStack {
+	            NavigationLink(
+	                destination: Group {
+	                    if let createdDiveDeeperEpisode {
+	                        EpisodeDetailView(episode: createdDiveDeeperEpisode, onCreateEpisode: onCreateEpisode)
+	                    } else {
+	                        EmptyView()
+	                    }
+	                },
+	                isActive: $navigateToDiveDeeperEpisode
+	            ) { EmptyView() }
+	            .hidden()
+
+	            ScrollViewReader { proxy in
+	                ScrollView {
+	                    VStack(alignment: .leading, spacing: 16) {
+	                        header
+	                        playbackControls
 //                    actionRow
-                    if let script = scriptContent {
-                        scriptSection(title: script.title, body: script.body)
-                            .padding(.top, 8)
-                            .id(scriptSectionID)
-                    }
-                    if let topics = detailedEpisode.topics, topics.isEmpty == false {
-                        topicsSection(topics)
-                    }
-                    segmentsSection
-                    if let errorMessage {
-                        InlineErrorText(message: errorMessage)
-                            .padding(.top, 4)
-                        Button("Retry") {
-                            Task { await loadDetailsIfNeeded(force: true) }
-                        }
-                        .font(.footnote.weight(.semibold))
-                        .padding(.top, 2)
-                    }
-                }
-                .padding()
-            }
-            .onChange(of: scrollToScript) { target in
-                guard target else { return }
-                withAnimation {
-                    proxy.scrollTo(scriptSectionID, anchor: .top)
-                }
-                scrollToScript = false
-            }
-        }
-        .background(Color.brieflyBackground)
-        .navigationTitle("Episode")
+	                        if shouldShowDiveDeeperSection {
+	                            diveDeeperSection
+	                                .padding(.top, 8)
+	                        }
+	                        if let script = scriptContent {
+	                            scriptSection(title: script.title, body: script.body)
+	                                .padding(.top, 8)
+	                                .id(scriptSectionID)
+	                        }
+	                        if let topics = detailedEpisode.topics, topics.isEmpty == false {
+	                            topicsSection(topics)
+	                        }
+	                        segmentsSection
+	                        if let errorMessage {
+	                            InlineErrorText(message: errorMessage)
+	                                .padding(.top, 4)
+	                            Button("Retry") {
+	                                Task { await loadDetailsIfNeeded(force: true) }
+	                            }
+	                            .font(.footnote.weight(.semibold))
+	                            .padding(.top, 2)
+	                        }
+	                    }
+	                    .padding()
+	                }
+	                .onChange(of: scrollToScript) { target in
+	                    guard target else { return }
+	                    withAnimation {
+	                        proxy.scrollTo(scriptSectionID, anchor: .top)
+	                    }
+	                    scrollToScript = false
+	                }
+	            }
+	        }
+	        .background(Color.brieflyBackground)
+	        .navigationTitle("Episode")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -150,23 +171,9 @@ private extension EpisodeDetailView {
     }
 
     var summaryText: some View {
-        let toggleLabel = isSummaryExpanded ? "Show less" : "Show more"
-
-        return Text(detailedEpisode.summary)
+        Text(detailedEpisode.summary)
             .foregroundColor(.primary)
             .multilineTextAlignment(.leading)
-            .lineLimit(isSummaryExpanded ? nil : 4)
-            .overlay(alignment: .bottomTrailing) {
-                Button(toggleLabel) {
-                    isSummaryExpanded.toggle()
-                }
-                .font(.footnote.weight(.semibold))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(Color.brieflyBackground.opacity(0.92))
-                .tint(.brieflyPrimary)
-                .buttonStyle(.plain)
-            }
     }
 
     var coverImageHero: some View {
@@ -287,9 +294,9 @@ private extension EpisodeDetailView {
             EpisodeActionItem(id: "share", title: "Share episode", icon: "square.and.arrow.up", role: nil, isDisabled: false) {
                 shareEpisode()
             },
-            EpisodeActionItem(id: "download", title: isDownloading ? "Downloading…" : "Download", icon: "arrow.down.circle", role: nil, isDisabled: isDownloading || detailedEpisode.audioURL == nil) {
-                downloadEpisode()
-            },
+//            EpisodeActionItem(id: "download", title: isDownloading ? "Downloading…" : "Download", icon: "arrow.down.circle", role: nil, isDisabled: isDownloading || detailedEpisode.audioURL == nil) {
+//                downloadEpisode()
+//            },
             EpisodeActionItem(id: "script", title: "View script", icon: "doc.text", role: nil, isDisabled: scriptContent == nil) {
                 viewScript()
             },
@@ -452,20 +459,94 @@ private extension EpisodeDetailView {
         .cornerRadius(12)
     }
 
-    func topicsSection(_ topics: [Topic]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Topics")
-                .font(.headline)
-            ForEach(topics) { topic in
-                Text(topic.originalText)
-                    .foregroundColor(.primary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-                    .background(Color.brieflySurface)
-                    .cornerRadius(10)
-            }
-        }
-    }
+	    func topicsSection(_ topics: [Topic]) -> some View {
+	        VStack(alignment: .leading, spacing: 8) {
+	            Text("Topics")
+	                .font(.headline)
+	            ForEach(topics) { topic in
+	                Text(topic.originalText)
+	                    .foregroundColor(.primary)
+	                    .frame(maxWidth: .infinity, alignment: .leading)
+	                    .padding()
+	                    .background(Color.brieflySurface)
+	                    .cornerRadius(10)
+	            }
+	        }
+	    }
+
+	    private var shouldShowDiveDeeperSection: Bool {
+	        let seeds = detailedEpisode.diveDeeperSeeds ?? []
+	        return seeds.isEmpty == false
+	    }
+
+	    private struct DiveDeeperDisplayItem: Identifiable {
+	        let id: UUID
+	        let seed: SegmentDiveDeeperSeed
+	        let isUnlocked: Bool
+	        let unlockTimeSeconds: Double?
+	    }
+
+	    private var diveDeeperSection: some View {
+	        let items = diveDeeperDisplayItems()
+	        return VStack(alignment: .leading, spacing: 10) {
+	            HStack {
+	                Text("Dive deeper")
+	                    .font(.headline)
+	                if isCreatingDiveDeeper {
+	                    Spacer()
+	                    ProgressView()
+	                        .scaleEffect(0.85)
+	                }
+	            }
+
+	            VStack(spacing: 10) {
+	                ForEach(items) { item in
+	                    diveDeeperRow(item)
+	                }
+	            }
+	        }
+	    }
+
+	    private func diveDeeperRow(_ item: DiveDeeperDisplayItem) -> some View {
+	        Button {
+	            guard item.isUnlocked else { return }
+	            Task { await createDiveDeeperEpisode(seed: item.seed) }
+	        } label: {
+	            HStack(alignment: .top, spacing: 12) {
+	                VStack(alignment: .leading, spacing: 4) {
+	                    Text(item.seed.title)
+	                        .font(.callout.weight(.semibold))
+	                        .foregroundColor(.primary)
+	                        .lineLimit(2)
+	                    Text(item.seed.angle)
+	                        .font(.footnote)
+	                        .foregroundColor(.brieflyTextMuted)
+	                        .lineLimit(3)
+	                    if item.isUnlocked == false, let unlockTime = item.unlockTimeSeconds {
+	                        Text("Unlocks at \(timeString(unlockTime))")
+	                            .font(.caption.weight(.semibold))
+	                            .foregroundColor(.brieflyTextMuted)
+	                    }
+	                }
+	                .frame(maxWidth: .infinity, alignment: .leading)
+
+	                if creatingDiveDeeperSeedID == item.seed.id {
+	                    ProgressView()
+	                        .scaleEffect(0.85)
+	                }
+	            }
+	            .padding()
+	            .background(Color.brieflySurface)
+	            .cornerRadius(12)
+	            .overlay(
+	                RoundedRectangle(cornerRadius: 12, style: .continuous)
+	                    .stroke(Color.brieflyBorder, lineWidth: 1)
+	            )
+	            .opacity(item.isUnlocked ? 1 : 0.45)
+	        }
+	        .buttonStyle(.plain)
+	        .disabled(isCreatingDiveDeeper)
+	    }
 
     var segmentsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -531,11 +612,7 @@ private extension EpisodeDetailView {
             .contentShape(Rectangle())
 
             if segment.sources.isEmpty == false {
-                sourcesList(
-                    segment.sources,
-                    isExpanded: expandedSegments.contains(segment.id),
-                    toggle: { toggleSources(for: segment.id) }
-                )
+                sourcesList(segment.sources)
             } else {
                 Text("Sources will appear here when available.")
                     .font(.footnote)
@@ -565,11 +642,9 @@ private extension EpisodeDetailView {
         .cornerRadius(12)
     }
 
-    func sourcesList(_ list: [EpisodeSource], isExpanded: Bool, toggle: @escaping () -> Void) -> some View {
-        let displayedList = isExpanded ? list : Array(list.prefix(3))
-
-        return VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(displayedList.enumerated()), id: \.element.id) { index, source in
+    func sourcesList(_ list: [EpisodeSource]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(list.enumerated()), id: \.element.id) { index, source in
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(alignment: .top, spacing: 8) {
                         Image(systemName: "link")
@@ -598,21 +673,11 @@ private extension EpisodeDetailView {
                 }
                 .padding(.vertical, 6)
 
-                if index < displayedList.count - 1 {
+                if index < list.count - 1 {
                     Divider()
                         .padding(.leading, 20)
                         .padding(.trailing, 4)
                 }
-            }
-
-            if list.count > 3 {
-                Button(action: toggle) {
-                    Text(isExpanded ? "show less" : "+ \(list.count - 3) sources")
-                        .font(.footnote.weight(.semibold))
-                }
-                .buttonStyle(.plain)
-                .tint(.brieflyPrimary)
-                .padding(.top, 8)
             }
         }
     }
@@ -673,14 +738,6 @@ private extension EpisodeDetailView {
         audioManager.play(episode: detailedEpisode, from: start)
     }
 
-    func toggleSources(for segmentId: UUID) {
-        if expandedSegments.contains(segmentId) {
-            expandedSegments.remove(segmentId)
-        } else {
-            expandedSegments.insert(segmentId)
-        }
-    }
-
     var isCurrentlyPlaying: Bool {
         audioManager.currentEpisode?.id == detailedEpisode.id && audioManager.isPlaying
     }
@@ -711,6 +768,103 @@ private extension EpisodeDetailView {
         let duration = displayedDuration
         guard duration > 0 else { return 0 }
         return max(0, min(displayedCurrentTime / duration, 1))
+    }
+
+    private func diveDeeperDisplayItems() -> [DiveDeeperDisplayItem] {
+        let seeds = detailedEpisode.diveDeeperSeeds ?? []
+        guard seeds.isEmpty == false else { return [] }
+
+        let listenedUnlocksAll = playbackHistory.isListened(detailedEpisode.id)
+        let currentTime = displayedCurrentTime
+
+        let seedsBySegmentId: [UUID: SegmentDiveDeeperSeed] = Dictionary(
+            uniqueKeysWithValues: seeds.compactMap { seed in
+                guard let segmentId = seed.segmentId else { return nil }
+                return (segmentId, seed)
+            }
+        )
+
+        func unlockTimeSeconds(for segment: EpisodeSegment?) -> Double? {
+            guard let start = segment?.startTimeSeconds,
+                  let duration = segment?.durationSeconds,
+                  duration.isFinite,
+                  duration > 0 else { return nil }
+            return start + (duration * 0.5)
+        }
+
+        func isUnlocked(unlockTime: Double?) -> Bool {
+            if listenedUnlocksAll {
+                return true
+            }
+            guard let unlockTime else { return false }
+            return currentTime >= unlockTime
+        }
+
+        var ordered: [DiveDeeperDisplayItem] = []
+        let orderedSegments = segments.sorted(by: { $0.orderIndex < $1.orderIndex })
+        for segment in orderedSegments {
+            guard let seed = seedsBySegmentId[segment.id] else { continue }
+            let unlockTime = unlockTimeSeconds(for: segment)
+            ordered.append(
+                DiveDeeperDisplayItem(
+                    id: seed.id,
+                    seed: seed,
+                    isUnlocked: isUnlocked(unlockTime: unlockTime),
+                    unlockTimeSeconds: unlockTime
+                )
+            )
+        }
+
+        let includedSegmentIds = Set(ordered.compactMap { $0.seed.segmentId })
+        let remainingSeeds = seeds
+            .filter { seed in
+                guard let segmentId = seed.segmentId else { return true }
+                return includedSegmentIds.contains(segmentId) == false
+            }
+            .sorted(by: { lhs, rhs in
+                let left = lhs.position ?? Int.max
+                let right = rhs.position ?? Int.max
+                if left != right { return left < right }
+                return lhs.title < rhs.title
+            })
+
+        for seed in remainingSeeds {
+            let unlockTime = unlockTimeSeconds(for: nil)
+            ordered.append(
+                DiveDeeperDisplayItem(
+                    id: seed.id,
+                    seed: seed,
+                    isUnlocked: isUnlocked(unlockTime: unlockTime),
+                    unlockTimeSeconds: unlockTime
+                )
+            )
+        }
+
+        return ordered
+    }
+
+    @MainActor
+    private func createDiveDeeperEpisode(seed: SegmentDiveDeeperSeed) async {
+        guard isCreatingDiveDeeper == false else { return }
+        isCreatingDiveDeeper = true
+        creatingDiveDeeperSeedID = seed.id
+        defer {
+            isCreatingDiveDeeper = false
+            creatingDiveDeeperSeedID = nil
+        }
+
+        do {
+            let creation = try await appViewModel.episodeService.requestDiveDeeperEpisode(
+                parentEpisodeID: detailedEpisode.id,
+                seedID: seed.id,
+                targetDurationMinutes: nil
+            )
+            let created = try await appViewModel.episodeService.fetchEpisode(id: creation.episodeId)
+            createdDiveDeeperEpisode = created
+            navigateToDiveDeeperEpisode = true
+        } catch {
+            actionAlert = ActionAlert(title: "Couldn't create deep dive", message: error.localizedDescription)
+        }
     }
 
     private func seek(toProgress progress: Double) {

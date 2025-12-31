@@ -5,9 +5,11 @@ import { EpisodesService } from './episodes.service';
 import { EPISODES_QUEUE_TOKEN } from '../queue/queue.constants';
 import { StorageService } from '../storage/storage.service';
 import { EpisodeSourcesService } from './episode-sources.service';
-import { Episode, EpisodeSegment, EpisodeSource } from '../domain/types';
+import { Episode, EpisodeSegment, EpisodeSource, SegmentDiveDeeperSeed } from '../domain/types';
 import { EpisodeSegmentsService } from './episode-segments.service';
 import { EntitlementsService } from '../billing/entitlements.service';
+import { SegmentDiveDeeperSeedsService } from './segment-dive-deeper-seeds.service';
+import { TopicsService } from '../topics/topics.service';
 
 @Controller('episodes')
 export class EpisodesController {
@@ -18,6 +20,8 @@ export class EpisodesController {
     private readonly storageService: StorageService,
     private readonly episodeSourcesService: EpisodeSourcesService,
     private readonly episodeSegmentsService: EpisodeSegmentsService,
+    private readonly segmentDiveDeeperSeedsService: SegmentDiveDeeperSeedsService,
+    private readonly topicsService: TopicsService,
     private readonly entitlementsService: EntitlementsService,
     @Inject(EPISODES_QUEUE_TOKEN) private readonly episodesQueue: Queue,
   ) {}
@@ -45,7 +49,34 @@ export class EpisodesController {
   async getEpisode(@Req() req: Request, @Param('id') id: string) {
     const userId = (req as any).user?.id as string;
     const episode = await this.episodesService.getEpisode(userId, id);
-    return this.formatEpisodeResponse(userId, episode, { includeSegments: true, includeSources: true });
+    return this.formatEpisodeResponse(userId, episode, {
+      includeSegments: true,
+      includeSources: true,
+      includeDiveDeeperSeeds: true,
+    });
+  }
+
+  @Post(':episodeId/dive-deeper/:seedId')
+  async createDiveDeeperEpisode(
+    @Req() req: Request,
+    @Param('episodeId') episodeId: string,
+    @Param('seedId') seedId: string,
+    @Body('duration') duration?: number,
+  ) {
+    const userId = (req as any).user?.id as string;
+    await this.episodesService.getEpisode(userId, episodeId);
+    const seed = await this.segmentDiveDeeperSeedsService.getSeedForEpisode(episodeId, seedId);
+    const targetDuration = duration ?? this.episodesService.getDiveDeeperDefaultDurationMinutes();
+    await this.entitlementsService.ensureCanCreateEpisode(userId, targetDuration);
+    await this.topicsService.getOrCreateDiveDeeperTopic(userId, seed);
+    const episode = await this.episodesService.createDiveDeeperEpisode(userId, {
+      parentEpisodeId: episodeId,
+      parentSegmentId: seed.segmentId,
+      diveDeeperSeedId: seed.id,
+      targetDurationMinutes: targetDuration,
+    });
+    await this.episodesQueue.add('generate', { episodeId: episode.id, userId, duration: targetDuration });
+    return { episodeId: episode.id, status: episode.status };
   }
 
   @Get(':id/sources')
@@ -73,13 +104,16 @@ export class EpisodesController {
   private async formatEpisodeResponse(
     userId: string,
     episode: Episode,
-    options?: { includeSegments?: boolean; includeSources?: boolean },
+    options?: { includeSegments?: boolean; includeSources?: boolean; includeDiveDeeperSeeds?: boolean },
   ) {
     const createdAt = episode.createdAt instanceof Date ? episode.createdAt.toISOString() : episode.createdAt;
     const updatedAt = episode.updatedAt instanceof Date ? episode.updatedAt.toISOString() : episode.updatedAt;
     const audioUrl = await this.resolveAudioUrl(userId, episode);
     const segments = options?.includeSegments ? await this.episodeSegmentsService.listSegments(episode.id) : undefined;
     const sources = options?.includeSources ? await this.episodeSourcesService.listSources(episode.id) : undefined;
+    const diveDeeperSeeds = options?.includeDiveDeeperSeeds
+      ? await this.segmentDiveDeeperSeedsService.listSeeds(episode.id)
+      : undefined;
 
     return {
       ...episode,
@@ -92,8 +126,12 @@ export class EpisodesController {
       updated_at: updatedAt ?? null,
       cover_image_url: episode.coverImageUrl ?? null,
       cover_prompt: episode.coverPrompt ?? null,
+      parent_episode_id: episode.parentEpisodeId ?? null,
+      parent_segment_id: episode.parentSegmentId ?? null,
+      dive_deeper_seed_id: episode.diveDeeperSeedId ?? null,
       segments: segments?.map((segment) => this.formatSegmentResponse(segment)),
       sources: sources?.map((source) => this.formatSourceResponse(source)),
+      dive_deeper_seeds: diveDeeperSeeds?.map((seed) => this.formatDiveDeeperSeedResponse(seed)),
     };
   }
 
@@ -120,6 +158,21 @@ export class EpisodesController {
       segment_id: source.segmentId ?? null,
       source_title: source.sourceTitle,
       url: source.url,
+    };
+  }
+
+  private formatDiveDeeperSeedResponse(seed: SegmentDiveDeeperSeed) {
+    const createdAt = seed.createdAt instanceof Date ? seed.createdAt.toISOString() : seed.createdAt;
+    const updatedAt = seed.updatedAt instanceof Date ? seed.updatedAt.toISOString() : seed.updatedAt;
+    return {
+      ...seed,
+      episode_id: seed.episodeId,
+      segment_id: seed.segmentId,
+      focus_claims: seed.focusClaims,
+      seed_queries: seed.seedQueries,
+      context_bundle: seed.contextBundle,
+      created_at: createdAt ?? null,
+      updated_at: updatedAt ?? null,
     };
   }
 

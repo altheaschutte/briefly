@@ -334,7 +334,7 @@ final class AudioPlayerManager: NSObject, ObservableObject {
     private func updateNowPlayingInfo(for episode: Episode?, elapsed: Double? = nil, duration: Double? = nil, rate: Float? = nil) {
         guard let episode else { return }
         var info = nowPlayingInfo
-        info[MPMediaItemPropertyTitle] = episode.title
+        info[MPMediaItemPropertyTitle] = episode.displayTitle
         info[MPMediaItemPropertyArtist] = "Briefly"
         info[MPMediaItemPropertyAlbumTitle] = "News Brief"
 
@@ -362,7 +362,7 @@ final class AudioPlayerManager: NSObject, ObservableObject {
         os_log("Set nowPlayingInfo title=%{public}@ elapsed=%{public}.2f duration=%{public}.2f rate=%{public}.2f artwork=%{public}@",
                log: audioLog,
                type: .info,
-               episode.title,
+               episode.displayTitle,
                elapsed ?? -1,
                duration ?? -1,
                rate ?? -1,

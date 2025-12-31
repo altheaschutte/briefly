@@ -223,7 +223,7 @@ otp_expiry = 3600
 # Uncomment to customize email template
 [auth.email.template.magic_link]
 subject = "Your Briefly login link"
-content_path = "../../email-templates/auth/magic-link.html"
+content_path = "../email-templates/auth/magic-link.html"
 
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]

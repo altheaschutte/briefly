@@ -36,6 +36,12 @@ export class SupabaseTopicsRepository implements TopicsRepository {
         .from('topics')
         .select('*')
         .eq('user_id', userId);
+
+      if (filter?.segmentDiveDeeperSeedId) {
+        query = query.eq('segment_dive_deeper_seed_id', filter.segmentDiveDeeperSeedId);
+      } else if (!filter?.includeSystemGenerated) {
+        query = query.is('segment_dive_deeper_seed_id', null);
+      }
       if (filter?.isActive !== undefined) {
         query = query.eq('is_active', filter.isActive);
       }
@@ -82,7 +88,12 @@ export class SupabaseTopicsRepository implements TopicsRepository {
   async create(
     userId: string,
     originalText: string,
-    options?: { isSeed?: boolean; isActive?: boolean },
+    options?: {
+      isSeed?: boolean;
+      isActive?: boolean;
+      segmentDiveDeeperSeedId?: string | null;
+      contextBundle?: any | null;
+    },
   ): Promise<Topic> {
     return handleSupabaseErrors(this.logger, `create topic for user ${userId}`, async () => {
       const now = new Date().toISOString();
@@ -94,6 +105,8 @@ export class SupabaseTopicsRepository implements TopicsRepository {
         order_index: nextOrderIndex,
         is_active: options?.isActive ?? true,
         is_seed: options?.isSeed ?? false,
+        segment_dive_deeper_seed_id: options?.segmentDiveDeeperSeedId ?? null,
+        context_bundle: options?.contextBundle ?? null,
         created_at: now,
         updated_at: now,
       };
@@ -162,6 +175,8 @@ export class SupabaseTopicsRepository implements TopicsRepository {
       orderIndex: row.order_index,
       isActive: row.is_active,
       isSeed: row.is_seed,
+      segmentDiveDeeperSeedId: row.segment_dive_deeper_seed_id ?? undefined,
+      contextBundle: row.context_bundle ?? undefined,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
     };

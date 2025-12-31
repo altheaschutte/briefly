@@ -1,5 +1,79 @@
 import Foundation
 
+struct SegmentDiveDeeperSeed: Codable, Identifiable, Hashable {
+    var id: UUID
+    var episodeId: UUID?
+    var segmentId: UUID?
+    var position: Int?
+    var title: String
+    var angle: String
+    var focusClaims: [String]?
+    var seedQueries: [String]?
+    var contextBundle: JSONValue?
+    var createdAt: Date?
+    var updatedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case episodeId = "episode_id"
+        case segmentId = "segment_id"
+        case position
+        case title
+        case angle
+        case focusClaims = "focus_claims"
+        case seedQueries = "seed_queries"
+        case contextBundle = "context_bundle"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+}
+
+enum JSONValue: Codable, Hashable {
+    case string(String)
+    case number(Double)
+    case bool(Bool)
+    case object([String: JSONValue])
+    case array([JSONValue])
+    case null
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            self = .null
+        } else if let bool = try? container.decode(Bool.self) {
+            self = .bool(bool)
+        } else if let number = try? container.decode(Double.self) {
+            self = .number(number)
+        } else if let string = try? container.decode(String.self) {
+            self = .string(string)
+        } else if let array = try? container.decode([JSONValue].self) {
+            self = .array(array)
+        } else if let object = try? container.decode([String: JSONValue].self) {
+            self = .object(object)
+        } else {
+            self = .null
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .null:
+            try container.encodeNil()
+        case .bool(let bool):
+            try container.encode(bool)
+        case .number(let number):
+            try container.encode(number)
+        case .string(let string):
+            try container.encode(string)
+        case .array(let array):
+            try container.encode(array)
+        case .object(let object):
+            try container.encode(object)
+        }
+    }
+}
+
 struct Episode: Codable, Identifiable, Hashable {
     var id: UUID
     var title: String
@@ -21,6 +95,7 @@ struct Episode: Codable, Identifiable, Hashable {
     var coverImageURL: URL?
     var coverPrompt: String?
     var errorMessage: String?
+    var diveDeeperSeeds: [SegmentDiveDeeperSeed]?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -51,6 +126,8 @@ struct Episode: Codable, Identifiable, Hashable {
         case coverPromptSnake = "cover_prompt"
         case errorMessageCamel = "errorMessage"
         case errorMessageSnake = "error_message"
+        case diveDeeperSeedsCamel = "diveDeeperSeeds"
+        case diveDeeperSeedsSnake = "dive_deeper_seeds"
     }
 
     init(id: UUID,
@@ -72,7 +149,8 @@ struct Episode: Codable, Identifiable, Hashable {
          transcript: String? = nil,
          coverImageURL: URL? = nil,
          coverPrompt: String? = nil,
-         errorMessage: String? = nil) {
+         errorMessage: String? = nil,
+         diveDeeperSeeds: [SegmentDiveDeeperSeed]? = nil) {
         self.id = id
         self.title = title
         self.episodeNumber = episodeNumber
@@ -93,6 +171,7 @@ struct Episode: Codable, Identifiable, Hashable {
         self.coverImageURL = coverImageURL
         self.coverPrompt = coverPrompt
         self.errorMessage = errorMessage
+        self.diveDeeperSeeds = diveDeeperSeeds
     }
 
     init(from decoder: Decoder) throws {
@@ -111,6 +190,8 @@ struct Episode: Codable, Identifiable, Hashable {
         segments = try? container.decodeIfPresent([EpisodeSegment].self, forKey: .segments)
         sources = try? container.decodeIfPresent([EpisodeSource].self, forKey: .sources)
         status = try? container.decodeIfPresent(String.self, forKey: .status)
+        diveDeeperSeeds = (try? container.decodeIfPresent([SegmentDiveDeeperSeed].self, forKey: .diveDeeperSeedsCamel)) ??
+            (try? container.decodeIfPresent([SegmentDiveDeeperSeed].self, forKey: .diveDeeperSeedsSnake))
 
         if let number = (try? container.decodeIfPresent(Int.self, forKey: .episodeNumberSnake)) ??
             (try? container.decodeIfPresent(Int.self, forKey: .episodeNumberCamel)) {
@@ -205,6 +286,7 @@ struct Episode: Codable, Identifiable, Hashable {
         try container.encodeIfPresent(coverImageURL?.absoluteString, forKey: .coverImageURLSnake)
         try container.encodeIfPresent(coverPrompt, forKey: .coverPromptSnake)
         try container.encodeIfPresent(errorMessage, forKey: .errorMessageSnake)
+        try container.encodeIfPresent(diveDeeperSeeds, forKey: .diveDeeperSeedsSnake)
     }
 
     var subtitle: String {
@@ -212,12 +294,15 @@ struct Episode: Codable, Identifiable, Hashable {
     }
 
     var displayTitle: String {
-        guard let number = episodeNumber, number > 0 else { return title }
-        return "\(title) [\(number)]"
+        Episode.stripTrailingEpisodeNumber(from: title)
     }
 
     var displayDate: Date? {
         createdAt ?? publishedAt ?? updatedAt
+    }
+
+    var displayDateLabel: String {
+        Episode.formatEpisodeDateLabel(displayDate)
     }
 
     var durationDisplaySeconds: Double? {
@@ -258,6 +343,26 @@ struct Episode: Codable, Identifiable, Hashable {
     func hash(into hasher: inout Hasher) {
         hasher.combine(id)
     }
+
+    static func formatEpisodeDateLabel(_ date: Date?, relativeTo now: Date = Date(), calendar: Calendar = .current) -> String {
+        guard let date else { return "—" }
+
+        if calendar.isDate(date, inSameDayAs: now) {
+            return "TODAY"
+        }
+
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
+           calendar.isDate(date, inSameDayAs: yesterday) {
+            return "YESTERDAY"
+        }
+
+        let needsYear = calendar.component(.year, from: date) != calendar.component(.year, from: now)
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = needsYear ? "d MMM yyyy" : "d MMM"
+        return formatter.string(from: date).uppercased()
+    }
 }
 
 private extension String {
@@ -268,6 +373,18 @@ private extension String {
 }
 
 private extension Episode {
+    static func stripTrailingEpisodeNumber(from title: String) -> String {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false else { return trimmed }
+
+        let pattern = #"\s*\[\d+\]\s*$"#
+        guard let matchRange = trimmed.range(of: pattern, options: .regularExpression) else {
+            return trimmed
+        }
+
+        return String(trimmed[..<matchRange.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     static func deriveTitle(date: Date?, status: String?) -> String {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium

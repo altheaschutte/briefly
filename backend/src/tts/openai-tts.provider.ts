@@ -37,6 +37,7 @@ export class OpenAiTtsProvider implements TtsProvider {
       model: this.model,
       voice,
       input,
+      response_format: 'mp3',
     });
     const buffer = Buffer.from(await response.arrayBuffer());
     const durationSeconds = await this.measureDurationSeconds(buffer);

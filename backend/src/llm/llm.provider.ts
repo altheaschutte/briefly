@@ -7,8 +7,27 @@ export interface EpisodeMetadata {
   description: string;
 }
 
+export interface SegmentDiveDeeperSeedDraft {
+  title: string;
+  angle: string;
+  focusClaims: string[];
+  seedQueries: string[];
+  contextBundle: any;
+}
+
 export interface LlmProvider {
-  generateTopicQueries(topic: string, previousQueries: string[]): Promise<TopicQueryPlan>;
+  generateTopicQueries(
+    topic: string,
+    previousQueries: string[],
+    options?: {
+      mode?: 'standard' | 'dive_deeper';
+      seedQueries?: string[];
+      focusClaims?: string[];
+      angle?: string;
+      contextBundle?: any;
+      parentQueryTexts?: string[];
+    },
+  ): Promise<TopicQueryPlan>;
   generateSegmentScript(
     title: string,
     findings: string,
@@ -20,4 +39,10 @@ export interface LlmProvider {
   generateEpisodeMetadata(script: string, segments: EpisodeSegment[]): Promise<EpisodeMetadata>;
   extractTopicBriefs(transcript: string): Promise<string[]>;
   generateSeedTopics(userInsight: string): Promise<string[]>;
+  generateSegmentDiveDeeperSeed(input: {
+    parentTopicText: string;
+    segmentScript: string;
+    segmentSources: EpisodeSource[];
+    parentQueryTexts: string[];
+  }): Promise<SegmentDiveDeeperSeedDraft>;
 }

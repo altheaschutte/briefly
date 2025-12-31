@@ -60,8 +60,12 @@ struct MockEpisodeProvider: EpisodeProviding {
         episodes.first
     }
 
-    func requestEpisodeGeneration() async throws -> EpisodeCreation {
+    func requestEpisodeGeneration(targetDurationMinutes: Int?) async throws -> EpisodeCreation {
         EpisodeCreation(episodeId: episodes.first?.id ?? UUID(), status: "ready")
+    }
+
+    func requestDiveDeeperEpisode(parentEpisodeID: UUID, seedID: UUID, targetDurationMinutes: Int?) async throws -> EpisodeCreation {
+        EpisodeCreation(episodeId: episodes.first?.id ?? UUID(), status: "queued")
     }
 
     func fetchEpisode(id: UUID) async throws -> Episode {

@@ -118,7 +118,9 @@ struct FeedView: View {
     }
 
     private func latestCard(for episode: Episode) -> some View {
-        VStack(alignment: .center, spacing: 12) {
+        let isCurrentlyPlaying = audioManager.isPlaying && audioManager.currentEpisode?.id == episode.id
+
+        return VStack(alignment: .center, spacing: 12) {
             Text("Latest episode")
                 .font(.caption)
                 .foregroundColor(.brieflyTextMuted)
@@ -127,8 +129,15 @@ struct FeedView: View {
 
             HStack(spacing: 12) {
                 Button(action: { togglePlay(episode) }) {
-                    Label(audioManager.isPlaying && audioManager.currentEpisode?.id == episode.id ? "Pause" : "Play",
-                          systemImage: audioManager.isPlaying && audioManager.currentEpisode?.id == episode.id ? "pause.fill" : "play.fill")
+                    Group {
+                        if isCurrentlyPlaying {
+                            EqualizerWaveform(isAnimating: true, color: .white, barCount: 4, minHeight: 5, maxHeight: 18, barWidth: 2, spacing: 2)
+                                .accessibilityLabel("Pause")
+                        } else {
+                            Label("Play", systemImage: "play.fill")
+                                .accessibilityLabel("Play")
+                        }
+                    }
                         .frame(maxWidth: .infinity)
                         .padding()
                         .background(Color.brieflyPrimary)
@@ -243,12 +252,13 @@ struct FeedView: View {
 private struct EpisodeRow: View {
     let episode: Episode
     @EnvironmentObject private var playbackHistory: PlaybackHistory
+    @EnvironmentObject private var audioManager: AudioPlayerManager
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(dateLabel(episode.displayDate))
+                    Text(episode.displayDateLabel)
                         .font(.caption)
                         .fontWeight(.semibold)
                         .foregroundColor(.brieflyTextMuted)
@@ -314,21 +324,16 @@ private struct EpisodeRow: View {
     }
 
     private var pillRow: some View {
-        HStack(spacing: 8) {
+        let isCurrentlyPlaying = audioManager.isPlaying && audioManager.currentEpisode?.id == episode.id
+        return HStack(spacing: 8) {
             durationPill
-            if playbackHistory.isListened(episode.id) {
+            if isCurrentlyPlaying {
+                EqualizerWaveform(isAnimating: true, color: Color.brieflyAccentSoft, barCount: 4, minHeight: 4, maxHeight: 14, barWidth: 2, spacing: 2)
+                    .accessibilityLabel("Playing")
+            } else if playbackHistory.isListened(episode.id) {
                 listenedPill
             }
         }
-    }
-
-    private func dateLabel(_ date: Date?) -> String {
-        guard let date else { return "—" }
-        let calendar = Calendar.current
-        let needsYear = calendar.component(.year, from: date) != calendar.component(.year, from: Date())
-        let formatter = DateFormatter()
-        formatter.dateFormat = needsYear ? "d MMM yyyy" : "d MMM"
-        return formatter.string(from: date).uppercased()
     }
 
     private func durationLabel(_ seconds: Double?) -> String {
@@ -363,6 +368,40 @@ private var fallbackArtwork: some View {
     Image(systemName: "waveform.circle.fill")
         .font(.system(size: 32, weight: .semibold))
         .foregroundColor(Color.brieflySecondary)
+}
+
+struct EqualizerWaveform: View {
+    var isAnimating: Bool = true
+    var color: Color = .brieflyAccentSoft
+    var barCount: Int = 4
+    var minHeight: CGFloat = 4
+    var maxHeight: CGFloat = 14
+    var barWidth: CGFloat = 2
+    var spacing: CGFloat = 2
+
+    var body: some View {
+        TimelineView(.animation) { context in
+            let time = context.date.timeIntervalSinceReferenceDate
+            HStack(alignment: .center, spacing: spacing) {
+                ForEach(0..<max(barCount, 1), id: \.self) { index in
+                    RoundedRectangle(cornerRadius: barWidth / 2, style: .continuous)
+                        .frame(width: barWidth, height: barHeight(time: time, index: index))
+                }
+            }
+            .foregroundColor(color)
+            .frame(height: maxHeight, alignment: .center)
+        }
+    }
+
+    private func barHeight(time: Double, index: Int) -> CGFloat {
+        guard isAnimating else { return minHeight }
+        let baseSpeed = 6.0
+        let phase = Double(index) * 1.1
+        let base = (sin(time * baseSpeed + phase) + 1) / 2
+        let wobble = (sin(time * (baseSpeed * 0.63) + phase * 1.7) + 1) / 2
+        let value = (base * 0.7 + wobble * 0.3)
+        return minHeight + CGFloat(value) * (maxHeight - minHeight)
+    }
 }
 
 private extension FeedView {

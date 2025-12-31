@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     static weak var pushManager: PushNotificationManager?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        BrieflyApp.configureAppearance()
         UNUserNotificationCenter.current().delegate = Self.pushManager
         return true
     }

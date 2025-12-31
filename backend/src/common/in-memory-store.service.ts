@@ -1,5 +1,13 @@
 import { Injectable } from '@nestjs/common';
-import { Episode, EpisodeSegment, EpisodeSource, OnboardingTranscript, Topic, TopicQuery } from '../domain/types';
+import {
+  Episode,
+  EpisodeSegment,
+  EpisodeSource,
+  OnboardingTranscript,
+  SegmentDiveDeeperSeed,
+  Topic,
+  TopicQuery,
+} from '../domain/types';
 
 @Injectable()
 export class InMemoryStoreService {
@@ -7,6 +15,7 @@ export class InMemoryStoreService {
   private readonly episodesByUser: Map<string, Episode[]> = new Map();
   private readonly segmentsByEpisode: Map<string, EpisodeSegment[]> = new Map();
   private readonly sourcesByEpisode: Map<string, EpisodeSource[]> = new Map();
+  private readonly diveDeeperSeedsByEpisode: Map<string, SegmentDiveDeeperSeed[]> = new Map();
   private readonly onboardingByUser: Map<string, OnboardingTranscript[]> = new Map();
   private readonly topicQueriesByTopic: Map<string, TopicQuery[]> = new Map();
   private readonly topicQueriesByEpisode: Map<string, TopicQuery[]> = new Map();
@@ -80,6 +89,25 @@ export class InMemoryStoreService {
 
   getSources(episodeId: string): EpisodeSource[] {
     return this.sourcesByEpisode.get(episodeId) ?? [];
+  }
+
+  setDiveDeeperSeeds(episodeId: string, seeds: SegmentDiveDeeperSeed[]): SegmentDiveDeeperSeed[] {
+    this.diveDeeperSeedsByEpisode.set(episodeId, seeds);
+    return seeds;
+  }
+
+  getDiveDeeperSeeds(episodeId: string): SegmentDiveDeeperSeed[] {
+    return this.diveDeeperSeedsByEpisode.get(episodeId) ?? [];
+  }
+
+  getDiveDeeperSeedById(seedId: string): SegmentDiveDeeperSeed | undefined {
+    for (const seeds of this.diveDeeperSeedsByEpisode.values()) {
+      const found = seeds.find((seed) => seed.id === seedId);
+      if (found) {
+        return found;
+      }
+    }
+    return undefined;
   }
 
   getTopicQueries(topicId: string): TopicQuery[] {

@@ -12,10 +12,10 @@ struct SetupView: View {
     @StateObject private var creationViewModel: EpisodeCreationViewModel
     @Environment(\.openURL) private var openURL
     @Environment(\.undoManager) private var undoManager
+    @Environment(\.scenePhase) private var scenePhase
     @State private var bannerMessage: String?
     @State private var editingTopic: Topic?
     @State private var showActiveLimitAlert: Bool = false
-    @State private var editMode: EditMode = .inactive
 
     init(topicsViewModel: TopicsViewModel, appViewModel: AppViewModel) {
         _topicsViewModel = ObservedObject(wrappedValue: topicsViewModel)
@@ -90,6 +90,10 @@ struct SetupView: View {
         .onReceive(appViewModel.$prefetchedTopics.compactMap { $0 }) { topics in
             topicsViewModel.applyPrefetchedTopics(topics)
         }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase != .active else { return }
+            Task { await creationViewModel.fireQueuedGenerationIfNeeded() }
+        }
         .navigationDestination(for: TopicRoute.self) { route in
             switch route {
             case .edit(let topic):
@@ -106,12 +110,6 @@ struct SetupView: View {
             }
         }
         .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                if !topicsViewModel.activeTopics.isEmpty {
-                    EditButton()
-                        .disabled(topicsViewModel.activeTopics.count < 2)
-                }
-            }
             ToolbarItem(placement: .navigationBarTrailing) {
                 NavigationLink(value: TopicRoute.create) {
                     Label("Add topic", systemImage: "plus")
@@ -143,7 +141,6 @@ struct SetupView: View {
         } message: {
             Text("You can have up to \(topicsViewModel.maxActiveTopics) active topics on your plan.")
         }
-        .environment(\.editMode, $editMode)
     }
 
     private var emptyState: some View {
@@ -152,8 +149,12 @@ struct SetupView: View {
                 .font(.headline)
             Text("Add a few topics so we can personalize the episode we generate for you.")
                 .foregroundColor(.brieflyTextMuted)
-            Text("Use the + button above to add your first topic.")
-                .foregroundColor(.brieflyTextMuted)
+            NavigationLink(value: TopicRoute.create) {
+                Text("Create topics")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.blue)
         }
         .padding(.vertical, 12)
     }
@@ -179,8 +180,15 @@ struct SetupView: View {
     private var activeTopicsSection: some View {
         Section {
             if topicsViewModel.activeTopics.isEmpty {
-                Text("No active topics yet.")
-                    .foregroundColor(.brieflyTextMuted)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Select from inactive topics below or")
+                        .foregroundColor(.brieflyTextMuted)
+                    NavigationLink(value: TopicRoute.create) {
+                        Text("create a new topic")
+                            .foregroundColor(.brieflyPrimary)
+                    }
+                    .buttonStyle(.plain)
+                }
             } else {
                 ForEach(topicsViewModel.activeTopics) { topic in
                     topicRow(topic: topic, isActive: true)
@@ -341,7 +349,7 @@ struct SetupView: View {
                     .foregroundStyle(
                         isActive
                         ? Color.brieflyAccentSoft
-                        : (isInactiveAtLimit ? Color.brieflyTextMuted : Color.brieflyPrimary)
+                        : (isInactiveAtLimit ? Color.brieflyTextMuted : Color.brieflySecondary)
                     )
                     .font(.title3)
             }
@@ -412,6 +420,8 @@ private extension SetupView {
         VStack(spacing: 12) {
             if creationViewModel.hasActiveGeneration {
                 generationStatusBottomCard
+            } else if creationViewModel.isGenerationQueued {
+                undoGenerateEpisodeButton
             } else {
                 generateEpisodeButton
             }
@@ -431,7 +441,7 @@ private extension SetupView {
             if shouldShowManageAccount {
                 openURL(APIConfig.manageAccountURL)
             } else {
-                Task { await creationViewModel.generateEpisode() }
+                creationViewModel.queueEpisodeGeneration()
             }
         } label: {
             Label(generateButtonTitle, systemImage: generateButtonIcon)
@@ -444,6 +454,23 @@ private extension SetupView {
                 .cornerRadius(12)
         }
         .buttonStyle(.plain)
+    }
+
+    private var undoGenerateEpisodeButton: some View {
+        Button {
+            creationViewModel.cancelQueuedGeneration()
+        } label: {
+            Label("Starting… Tap to undo", systemImage: "arrow.uturn.backward")
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.brieflyPrimary)
+                .foregroundColor(.white)
+                .tint(.white)
+                .cornerRadius(12)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Starting episode generation. Tap to undo.")
     }
 
     private var generateButtonTitle: String {
@@ -499,12 +526,17 @@ final class EpisodeCreationViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var isGenerating: Bool = false
     @Published var isAtGenerationLimit: Bool = false
+    @Published var isGenerationQueued: Bool = false
 
     private let episodeService: EpisodeProviding
     private let entitlementsService: EntitlementsProviding?
     private let targetPreference = TargetDurationPreference()
     private var pollTask: Task<Void, Never>?
+    private var queueTask: Task<Void, Never>?
+    private var queuedPreviousEpisode: Episode?
+    private var queuedPreviousErrorMessage: String?
     private let pollInterval: UInt64 = 2_000_000_000
+    private let queueDelayNanoseconds: UInt64 = 5_000_000_000
 
     init(episodeService: EpisodeProviding, entitlementsService: EntitlementsProviding? = nil) {
         self.episodeService = episodeService
@@ -513,6 +545,7 @@ final class EpisodeCreationViewModel: ObservableObject {
 
     deinit {
         pollTask?.cancel()
+        queueTask?.cancel()
     }
 
     var hasActiveGeneration: Bool {
@@ -522,6 +555,51 @@ final class EpisodeCreationViewModel: ObservableObject {
     private var isEpisodeInFlight: Bool {
         guard let status = inProgressEpisode?.status else { return false }
         return Self.isTerminal(status) == false
+    }
+
+    func queueEpisodeGeneration() {
+        guard hasActiveGeneration == false else { return }
+        guard isGenerationQueued == false else { return }
+        queuedPreviousEpisode = inProgressEpisode
+        queuedPreviousErrorMessage = errorMessage
+
+        errorMessage = nil
+        isAtGenerationLimit = false
+
+        inProgressEpisode = nil
+        isGenerationQueued = true
+
+        queueTask?.cancel()
+        queueTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await Task.sleep(nanoseconds: self.queueDelayNanoseconds)
+            } catch {
+                return
+            }
+            await self.fireQueuedGenerationIfNeeded()
+        }
+    }
+
+    func cancelQueuedGeneration() {
+        guard isGenerationQueued else { return }
+        queueTask?.cancel()
+        queueTask = nil
+        isGenerationQueued = false
+        inProgressEpisode = queuedPreviousEpisode
+        errorMessage = queuedPreviousErrorMessage
+        queuedPreviousEpisode = nil
+        queuedPreviousErrorMessage = nil
+    }
+
+    func fireQueuedGenerationIfNeeded() async {
+        guard isGenerationQueued else { return }
+        queueTask?.cancel()
+        queueTask = nil
+        isGenerationQueued = false
+        queuedPreviousEpisode = nil
+        queuedPreviousErrorMessage = nil
+        await generateEpisode()
     }
 
     func generateEpisode() async {

@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
-import { EpisodeMetadata, LlmProvider } from './llm.provider';
+import { EpisodeMetadata, LlmProvider, SegmentDiveDeeperSeedDraft } from './llm.provider';
 import { EpisodeSegment, EpisodeSource } from '../domain/types';
 import { DialogueTurn, SegmentDialogueScript, TopicIntent, TopicQueryPlan } from './llm.types';
 
@@ -63,15 +63,73 @@ export class OpenAiLlmProvider implements LlmProvider {
     this.providerLabel = options.providerLabel ?? 'OpenAI LLM provider';
   }
 
-  async generateTopicQueries(topic: string, previousQueries: string[]): Promise<TopicQueryPlan> {
+  async generateTopicQueries(
+    topic: string,
+    previousQueries: string[],
+    options?: {
+      mode?: 'standard' | 'dive_deeper';
+      seedQueries?: string[];
+      focusClaims?: string[];
+      angle?: string;
+      contextBundle?: any;
+      parentQueryTexts?: string[];
+    },
+  ): Promise<TopicQueryPlan> {
     const client = this.getClient();
     const isoDate = new Date().toISOString().split('T')[0];
+    const mode = options?.mode ?? 'standard';
     const history = (previousQueries || []).map((q) => q.trim()).filter(Boolean).slice(-12);
     const historyBlock = history.length ? history.map((q, idx) => `${idx + 1}. ${q}`).join('\n') : 'None';
-    const messages = [
-      {
-        role: 'system',
-        content: `You craft high-signal web search queries for a research agent.
+    const messages =
+      mode === 'dive_deeper'
+        ? ([
+            {
+              role: 'system',
+              content: `You craft high-signal web search queries for a "Dive Deeper" follow-up micro-episode.
+
+Context:
+- The listener just finished the parent segment. This follow-up must go deeper (not a recap).
+
+Rules:
+- Output between 2 and 4 queries.
+- Each query must explicitly deepen at least one focus claim.
+- Start by refining/ranking the provided seed queries; add up to 2 new queries only if there are clear gaps.
+- Do not repeat, lightly rephrase, or overlap with:
+  - Any previous queries for this topic
+  - Any parent segment queries (avoid recap sourcing)
+- Avoid broad explainer / "what is X" queries unless a term appears in terms_to_define.
+- Keep each query lean, disambiguated (entities, locations, timeframes), and ready for direct use.
+
+Respond as JSON:
+{"intent":"single_story"|"multi_item","queries":["query one","query two"]}.`,
+            },
+            {
+              role: 'user',
+              content: `Topic brief: ${topic}
+Dive deeper angle: ${(options?.angle || '').trim() || 'None'}
+Focus claims to deepen:
+${(options?.focusClaims || []).map((c, i) => `${i + 1}. ${String(c).trim()}`).filter(Boolean).join('\n') || 'None'}
+
+Seed queries (refine/rank these first):
+${(options?.seedQueries || []).map((q, i) => `${i + 1}. ${String(q).trim()}`).filter(Boolean).join('\n') || 'None'}
+
+Terms to define (only if needed):
+${Array.isArray(options?.contextBundle?.terms_to_define) ? options?.contextBundle?.terms_to_define.join(', ') : 'None'}
+
+Parent segment queries (avoid repeating/overlapping):
+${(options?.parentQueryTexts || options?.contextBundle?.parent_query_texts || [])
+  .map((q: any, i: number) => `${i + 1}. ${String(q).trim()}`)
+  .filter(Boolean)
+  .join('\n') || 'None'}
+
+Previously used queries for this topic (avoid repeating):
+${historyBlock}`,
+            },
+          ] satisfies ChatCompletionMessageParam[])
+        : ([
+            {
+              role: 'system',
+              content: `You craft high-signal web search queries for a research agent.
 
 First, infer the topic intent:
 - "single_story": user wants ONE excellent, detailed item (e.g., "a story", "an interesting story", "deep dive", "profile", "tell me one story")
@@ -93,19 +151,19 @@ Recency guidance:
 
 Respond as JSON:
 {"intent":"single_story"|"multi_item","queries":["query one","query two"]}.`,
-      },
-      {
-        role: 'user',
-        content: `Topic brief: ${topic}
+            },
+            {
+              role: 'user',
+              content: `Topic brief: ${topic}
 Previously used queries (avoid repeating): 
 ${historyBlock}`,
-      },
-    ] satisfies ChatCompletionMessageParam[];
+            },
+          ] satisfies ChatCompletionMessageParam[]);
     const response = await client.chat.completions.create({
       model: this.queryModel,
       messages,
       temperature: 0.35,
-      max_tokens: 220,
+      max_tokens: mode === 'dive_deeper' ? 260 : 220,
       response_format: { type: 'json_object' },
     });
     const content = response.choices[0]?.message?.content;
@@ -116,8 +174,138 @@ ${historyBlock}`,
     if (!plan.queries.length) {
       throw new Error(`${this.providerLabel} did not return any topic queries`);
     }
+
+    if (mode === 'dive_deeper') {
+      const parentQueryTextsRaw =
+        (options?.parentQueryTexts ||
+          (Array.isArray(options?.contextBundle?.parent_query_texts) ? options?.contextBundle?.parent_query_texts : []) ||
+          []) as any[];
+      const parentQueryTexts = parentQueryTextsRaw.map((q) => String(q).trim()).filter(Boolean);
+      const used = new Set([...history, ...parentQueryTexts].map((q) => q.toLowerCase()));
+      const proposed = plan.queries.filter((q) => !used.has(q.toLowerCase())).slice(0, 4);
+      const fallback = this
+        .normalizeQueries(options?.seedQueries || [])
+        .filter((q) => !used.has(q.toLowerCase()))
+        .slice(0, 4);
+      const queries = (proposed.length >= 2 ? proposed : fallback).slice(0, 4);
+      if (!queries.length) {
+        throw new Error(`${this.providerLabel} did not return any usable dive deeper queries`);
+      }
+      return { intent: plan.intent, queries };
+    }
+
     const queries = plan.intent === 'single_story' ? plan.queries.slice(0, 1) : plan.queries.slice(0, 5);
     return { intent: plan.intent, queries };
+  }
+
+  async generateSegmentDiveDeeperSeed(input: {
+    parentTopicText: string;
+    segmentScript: string;
+    segmentSources: EpisodeSource[];
+    parentQueryTexts: string[];
+  }): Promise<SegmentDiveDeeperSeedDraft> {
+    const client = this.getClient();
+    const parentTopicText = input.parentTopicText?.trim() || '';
+    const segmentScript = input.segmentScript?.trim() || '';
+    const parentQueryTexts = (input.parentQueryTexts || []).map((q) => q.trim()).filter(Boolean).slice(0, 8);
+    const sources = (input.segmentSources || []).filter(Boolean).slice(0, 16);
+
+    const sourceList =
+      sources.map((s) => `- ${s.sourceTitle || s.url || 'source'} (${s.url || 'unknown'})`).join('\n') ||
+      '- None provided';
+    const parentQueriesBlock = parentQueryTexts.length ? parentQueryTexts.map((q, i) => `${i + 1}. ${q}`).join('\n') : 'None';
+    const parentCitations = Array.from(
+      new Map(
+        sources
+          .map((source) => ({
+            title: source.sourceTitle?.trim() || undefined,
+            url: source.url?.trim() || '',
+          }))
+          .filter((citation) => Boolean(citation.url))
+          .map((citation) => [citation.url, citation] as const),
+      ).values(),
+    ).slice(0, 6);
+
+    const response = await client.chat.completions.create({
+      model: this.queryModel,
+      temperature: 0.35,
+      max_tokens: 900,
+      response_format: { type: 'json_object' },
+      messages: [
+	        {
+	          role: 'system',
+	          content: `You generate a single "Dive Deeper" follow-up seed for a podcast segment.
+
+Goal:
+- Propose ONE follow-up that continues deeper from the segment (not a recap).
+
+Hard rules:
+- Output VALID JSON only. Do not include comments. Do not wrap in markdown fences.
+- Output JSON with these required keys:
+  - title (string): short CTA label, 3–8 words
+  - angle (string): one sentence describing what "deeper" means here
+  - focus_claims (string[]): 1–3 claims from the segment worth deepening
+  - seed_queries (string[]): 2–4 web search queries (not questions), each deepens a focus_claim
+  - context_bundle (object) with REQUIRED keys:
+    - parent_topic_text (string)
+    - segment_summary (string, 1–2 sentences)
+    - key_entities (string[], 2–8 items)
+    - key_claims (string[], 3–8 items)
+    - parent_query_texts (string[])
+    - terms_to_define (string[], optional, 0–6 items)
+
+Guidance:
+- The title should feel tappable on iOS (imperative, curiosity-driven).
+- The angle should make the follow-up clearly different from the segment (deeper, narrower, more investigative).
+- Avoid broad recap framing ("what happened", "overview", "explain X") unless the segment depends on defining a term.
+- Seed queries must be ready to send to a web search agent; add disambiguating entities/locations/timeframes.
+ - Keep the JSON small. Do NOT include citations; they are handled elsewhere.
+`,
+	        },
+        {
+          role: 'user',
+          content: `Parent topic text: ${parentTopicText || '(unknown)'}
+
+Parent queries (avoid repeating these verbatim in seed queries):
+${parentQueriesBlock}
+
+Segment sources/citations:
+${sourceList}
+
+Segment script:
+${segmentScript || '(empty)'}`,
+        },
+      ] satisfies ChatCompletionMessageParam[],
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error(`${this.providerLabel} returned empty content for dive deeper seed`);
+    }
+    const parsed = this.parseJsonWithFallback(content, 'dive deeper seed');
+
+    const title = typeof parsed?.title === 'string' ? parsed.title.trim() : '';
+    const angle = typeof parsed?.angle === 'string' ? parsed.angle.trim() : '';
+    const focusClaims = Array.isArray(parsed?.focus_claims) ? parsed.focus_claims.map((v: any) => String(v).trim()).filter(Boolean) : [];
+    const seedQueries = Array.isArray(parsed?.seed_queries) ? parsed.seed_queries.map((v: any) => String(v).trim()).filter(Boolean) : [];
+    const contextBundle = (parsed?.context_bundle && typeof parsed.context_bundle === 'object') ? parsed.context_bundle : {};
+
+    if (!title || !angle) {
+      throw new Error(`${this.providerLabel} did not return a valid dive deeper seed (missing title/angle)`);
+    }
+
+    return {
+      title,
+      angle,
+      focusClaims: focusClaims.slice(0, 3),
+      seedQueries: seedQueries.slice(0, 4),
+      contextBundle: {
+        parent_topic_text: parentTopicText,
+        parent_query_texts: parentQueryTexts,
+        parent_citations: parentCitations,
+        ...contextBundle,
+      },
+    };
   }
 
   async extractTopicBriefs(transcript: string): Promise<string[]> {
@@ -872,12 +1060,13 @@ SHOW NOTES RULES
   }
 
   private repairJsonCandidate(raw: string): string {
-    const cleaned = (raw || '')
+    const preprocessed = (raw || '')
       .replace(/^\uFEFF/, '')
       .replace(/\u0000/g, '')
       .replace(/[“”]/g, '"')
       .replace(/[‘’]/g, "'")
       .trim();
+    const cleaned = this.stripJsonComments(preprocessed).trim();
 
     const escapedNewlines: string[] = [];
     let inString = false;
@@ -905,13 +1094,19 @@ SHOW NOTES RULES
           continue;
         }
 
-        if (char === '\n') {
-          escapedNewlines.push('\\n');
-          continue;
-        }
-
-        if (char === '\r') {
-          escapedNewlines.push('\\r');
+        const code = char.charCodeAt(0);
+        // JSON strings cannot contain unescaped control chars U+0000..U+001F.
+        // Some providers occasionally emit them (tabs, vertical tabs, etc.), so escape them defensively.
+        if (code < 32) {
+          if (char === '\n') {
+            escapedNewlines.push('\\n');
+          } else if (char === '\r') {
+            escapedNewlines.push('\\r');
+          } else if (char === '\t') {
+            escapedNewlines.push('\\t');
+          } else {
+            escapedNewlines.push(`\\u${code.toString(16).padStart(4, '0')}`);
+          }
           continue;
         }
 
@@ -926,6 +1121,66 @@ SHOW NOTES RULES
     }
 
     return escapedNewlines.join('').replace(/,\s*([}\]])/g, '$1').trim();
+  }
+
+  private stripJsonComments(raw: string): string {
+    const input = (raw || '').replace(/\u0000/g, '');
+    const out: string[] = [];
+    let inString = false;
+    let escaped = false;
+
+    for (let index = 0; index < input.length; index += 1) {
+      const char = input[index];
+      const next = index + 1 < input.length ? input[index + 1] : '';
+
+      if (inString) {
+        out.push(char);
+        if (escaped) {
+          escaped = false;
+          continue;
+        }
+        if (char === '\\') {
+          escaped = true;
+          continue;
+        }
+        if (char === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (char === '"') {
+        inString = true;
+        out.push(char);
+        continue;
+      }
+
+      if (char === '/' && next === '/') {
+        while (index < input.length && input[index] !== '\n') {
+          index += 1;
+        }
+        if (index < input.length && input[index] === '\n') {
+          out.push('\n');
+        }
+        continue;
+      }
+
+      if (char === '/' && next === '*') {
+        index += 2;
+        while (index < input.length - 1) {
+          if (input[index] === '*' && input[index + 1] === '/') {
+            index += 1;
+            break;
+          }
+          index += 1;
+        }
+        continue;
+      }
+
+      out.push(char);
+    }
+
+    return out.join('');
   }
 
   private parseJsonWithFallback(raw: string, contextLabel: string): any {
