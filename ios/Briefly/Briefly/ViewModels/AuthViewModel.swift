@@ -70,6 +70,10 @@ final class AuthViewModel: ObservableObject {
             statusMessage = "Signed in!"
             os_log("Google sign-in succeeded", log: authLog, type: .info)
         } catch {
+            if isUserCancelledWebAuthentication(error) {
+                os_log("Google sign-in cancelled by user", log: authLog, type: .info)
+                return
+            }
             os_log("Google sign-in failed: %{public}@", log: authLog, type: .error, error.localizedDescription)
             errorMessage = error.localizedDescription
         }
@@ -92,5 +96,29 @@ final class AuthViewModel: ObservableObject {
             return false
         }
         return true
+    }
+
+    private func isUserCancelledWebAuthentication(_ error: Error) -> Bool {
+        if error is CancellationError {
+            return true
+        }
+
+        if let urlError = error as? URLError, urlError.code == .cancelled {
+            return true
+        }
+
+        return isUserCancelledWebAuthenticationNSError(error as NSError)
+    }
+
+    private func isUserCancelledWebAuthenticationNSError(_ error: NSError) -> Bool {
+        if error.code == 1, error.domain.contains("WebAuthenticationSession") {
+            return true
+        }
+
+        if let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError {
+            return isUserCancelledWebAuthenticationNSError(underlying)
+        }
+
+        return false
     }
 }

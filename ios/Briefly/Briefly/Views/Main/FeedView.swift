@@ -17,9 +17,6 @@ struct FeedView: View {
             .background(Color.brieflyBackground.ignoresSafeArea())
             .navigationTitle("Your Library")
             .navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(for: UUID.self) { episodeId in
-                EpisodeDetailView(episodeId: episodeId, onCreateEpisode: onCreateEpisode)
-            }
             .task {
                 await refreshFeed()
             }
@@ -56,7 +53,7 @@ struct FeedView: View {
                     .font(.headline)
                 VStack(spacing: 0) {
                     ForEach(Array(viewModel.previousEpisodes.enumerated()), id: \.element.id) { index, episode in
-                        NavigationLink(value: episode.id) {
+                        NavigationLink(destination: EpisodeDetailView(episode: episode, onCreateEpisode: onCreateEpisode)) {
                             EpisodeRow(episode: episode)
                         }
                         .buttonStyle(.plain)
@@ -145,7 +142,7 @@ struct FeedView: View {
                         .cornerRadius(12)
                 }
 
-                NavigationLink(value: episode.id) {
+                NavigationLink(destination: EpisodeDetailView(episode: episode, onCreateEpisode: onCreateEpisode)) {
                     Text("Details")
                         .frame(maxWidth: .infinity)
                         .padding()
@@ -327,6 +324,7 @@ private struct EpisodeRow: View {
         let isCurrentlyPlaying = audioManager.isPlaying && audioManager.currentEpisode?.id == episode.id
         return HStack(spacing: 8) {
             durationPill
+            partialPlaybackStatus
             if isCurrentlyPlaying {
                 EqualizerWaveform(isAnimating: true, color: Color.brieflyAccentSoft, barCount: 4, minHeight: 4, maxHeight: 14, barWidth: 2, spacing: 2)
                     .accessibilityLabel("Playing")
@@ -336,10 +334,35 @@ private struct EpisodeRow: View {
         }
     }
 
+    @ViewBuilder
+    private var partialPlaybackStatus: some View {
+        if let remainingSeconds = playbackHistory.remainingSeconds(episodeID: episode.id, fallbackDurationSeconds: episode.durationDisplaySeconds),
+           let fraction = playbackHistory.partialPlaybackFraction(episodeID: episode.id, fallbackDurationSeconds: episode.durationDisplaySeconds) {
+            HStack(spacing: 8) {
+                Text(remainingLabel(seconds: remainingSeconds))
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.brieflyTextMuted)
+                ProgressView(value: fraction)
+                    .progressViewStyle(.linear)
+                    .tint(Color.brieflyAccentSoft)
+                    .frame(width: 64)
+                    .scaleEffect(x: 1, y: 0.85, anchor: .center)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("\(remainingLabel(seconds: remainingSeconds)) remaining")
+        }
+    }
+
     private func durationLabel(_ seconds: Double?) -> String {
         guard let seconds, seconds.isFinite, seconds > 0 else { return "—" }
         let minutes = max(Int(round(seconds / 60)), 1)
         return "\(minutes)m"
+    }
+
+    private func remainingLabel(seconds: Double) -> String {
+        guard seconds.isFinite, seconds > 0 else { return "— min left" }
+        let minutes = max(Int(ceil(seconds / 60)), 1)
+        return minutes == 1 ? "1 min left" : "\(minutes) min left"
     }
 }
 

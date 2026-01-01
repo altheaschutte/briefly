@@ -26,6 +26,9 @@ final class AudioPlayerManager: NSObject, ObservableObject {
     private var playbackPreferences = PlaybackPreferences()
     private let playbackHistory: PlaybackHistory?
     private let audioLog = OSLog(subsystem: "com.briefly.app", category: "Audio")
+    private var lastPersistedEpisodeID: UUID?
+    private var lastPersistedSeconds: Double = 0
+    private var lastPersistedTime: CFTimeInterval = 0
 
     var nextEpisodeResolver: ((Episode) async -> Episode?)?
 
@@ -58,7 +61,12 @@ final class AudioPlayerManager: NSObject, ObservableObject {
             return
         }
 
-        let startSeconds = max(startTime ?? 0, 0)
+        var startSeconds = max(startTime ?? 0, 0)
+        if startTime == nil,
+           let playbackHistory,
+           let resumeSeconds = playbackHistory.resumePositionSeconds(for: resolvedEpisode.id, durationSeconds: resolvedEpisode.durationDisplaySeconds) {
+            startSeconds = max(resumeSeconds, 0)
+        }
         startPlayback(episode: resolvedEpisode, url: url, startSeconds: startSeconds)
     }
 
@@ -91,6 +99,9 @@ final class AudioPlayerManager: NSObject, ObservableObject {
             }
             progress = 0
             currentTimeSeconds = 0
+            lastPersistedEpisodeID = episode.id
+            lastPersistedSeconds = 0
+            lastPersistedTime = 0
             updateNowPlayingInfo(for: episode, elapsed: startSeconds, duration: durationSeconds, rate: 0)
             os_log("Started new playback item. url=%{public}@ startSeconds=%{public}.2f duration=%{public}.2f", log: audioLog, type: .info, url.absoluteString, startSeconds, durationSeconds)
         } else {
@@ -106,6 +117,7 @@ final class AudioPlayerManager: NSObject, ObservableObject {
 
     func pause() {
         player?.pause()
+        persistPlaybackPositionIfNeeded(force: true)
         isPlaying = false
         updateNowPlayingInfo(for: currentEpisode, elapsed: currentTimeSeconds, duration: durationSeconds, rate: 0)
     }
@@ -129,6 +141,7 @@ final class AudioPlayerManager: NSObject, ObservableObject {
 
     func stop() {
         player?.pause()
+        persistPlaybackPositionIfNeeded(force: true)
         isPlaying = false
         progress = 0
         currentTimeSeconds = 0
@@ -171,6 +184,7 @@ final class AudioPlayerManager: NSObject, ObservableObject {
                                       elapsed: clampedSeconds,
                                       duration: validDuration ?? self.durationSeconds,
                                       rate: shouldPlay ? Float(self.playbackSpeed) : 0)
+            self.persistPlaybackPositionIfNeeded(force: true)
         }
     }
 
@@ -329,6 +343,7 @@ final class AudioPlayerManager: NSObject, ObservableObject {
 
     private func handlePlaybackFinished(for episode: Episode) {
         playbackHistory?.markListened(episode.id)
+        playbackHistory?.clearPlaybackPosition(episode.id)
         hasFinishedCurrentItem = true
         isPlaying = false
         if durationSeconds.isFinite && durationSeconds > 0 {
@@ -433,7 +448,31 @@ final class AudioPlayerManager: NSObject, ObservableObject {
                                       elapsed: current,
                                       duration: duration,
                                       rate: self.isPlaying ? Float(self.playbackSpeed) : 0)
+            self.persistPlaybackPositionIfNeeded(force: false)
         }
+    }
+
+    private func persistPlaybackPositionIfNeeded(force: Bool) {
+        guard let playbackHistory, let episode = currentEpisode else { return }
+        guard durationSeconds.isFinite, durationSeconds > 0 else { return }
+
+        let now = CFAbsoluteTimeGetCurrent()
+        let minIntervalSeconds: CFTimeInterval = 5
+        let minDeltaSeconds: Double = 5
+
+        if force == false {
+            if lastPersistedEpisodeID == episode.id {
+                if abs(currentTimeSeconds - lastPersistedSeconds) < minDeltaSeconds,
+                   (now - lastPersistedTime) < minIntervalSeconds {
+                    return
+                }
+            }
+        }
+
+        lastPersistedEpisodeID = episode.id
+        lastPersistedSeconds = currentTimeSeconds
+        lastPersistedTime = now
+        playbackHistory.updatePlaybackPosition(episodeID: episode.id, seconds: currentTimeSeconds, durationSeconds: durationSeconds)
     }
 
     private func removeTimeObserverIfNeeded() {

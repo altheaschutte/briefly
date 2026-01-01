@@ -8,6 +8,7 @@ import ImageIO
 	    @EnvironmentObject private var appViewModel: AppViewModel
 	    @EnvironmentObject private var audioManager: AudioPlayerManager
 	    @EnvironmentObject private var playbackHistory: PlaybackHistory
+        @EnvironmentObject private var episodeGenerationStatus: EpisodeGenerationStatusCenter
 	    @Environment(\.dismiss) private var dismiss
 	    @Environment(\.openURL) private var openURL
     @State private var detailedEpisode: Episode
@@ -34,13 +35,13 @@ import ImageIO
 	    @State private var createdDiveDeeperEpisode: Episode?
 	    @State private var navigateToDiveDeeperEpisode: Bool = false
 
-    init(episodeId: UUID, initialEpisode: Episode? = nil, onCreateEpisode: (() -> Void)? = nil) {
-        self.episodeId = episodeId
-        self.onCreateEpisode = onCreateEpisode
-        let seed = initialEpisode ?? Episode(id: episodeId, title: "Episode", summary: "")
-        _detailedEpisode = State(initialValue: seed)
-        _segments = State(initialValue: seed.segments ?? [])
-        _sources = State(initialValue: seed.sources ?? [])
+	    init(episodeId: UUID, initialEpisode: Episode? = nil, onCreateEpisode: (() -> Void)? = nil) {
+	        self.episodeId = episodeId
+	        self.onCreateEpisode = onCreateEpisode
+	        let seed = initialEpisode ?? Episode(id: episodeId, title: "Episode", summary: "")
+	        _detailedEpisode = State(initialValue: seed)
+	        _segments = State(initialValue: seed.segments ?? [])
+	        _sources = State(initialValue: seed.sources ?? [])
 	    }
 
     init(episode: Episode, onCreateEpisode: (() -> Void)? = nil) {
@@ -498,11 +499,6 @@ private extension EpisodeDetailView {
 	            HStack {
 	                Text("Dive deeper")
 	                    .font(.headline)
-	                if isCreatingDiveDeeper || queuedDiveDeeperSeedID != nil || (isLoading && hasLoaded == false) {
-	                    Spacer()
-	                    ProgressView()
-	                        .scaleEffect(0.9)
-	                }
 	            }
 
 	            if items.isEmpty {
@@ -716,17 +712,35 @@ private extension EpisodeDetailView {
     @MainActor
     func loadDetailsIfNeeded(force: Bool = false) async {
         if hasLoaded && force == false { return }
+
+        if force == false, let cached = await appViewModel.episodeService.cachedEpisode(id: episodeId) {
+            applyEpisode(cached)
+            hasLoaded = true
+            errorMessage = nil
+            return
+        }
+
         isLoading = true
         defer { isLoading = false }
         do {
-            let latest = try await appViewModel.episodeService.fetchEpisode(id: episodeId)
-            detailedEpisode = latest
-            segments = (latest.segments ?? []).sorted(by: { $0.orderIndex < $1.orderIndex })
-            sources = latest.sources ?? []
+            let latest = try await appViewModel.episodeService.fetchEpisodeCached(id: episodeId, forceRefresh: force)
+            applyEpisode(latest)
             errorMessage = nil
             hasLoaded = true
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func applyEpisode(_ episode: Episode) {
+        detailedEpisode = episode
+        segments = (episode.segments ?? []).sorted(by: { $0.orderIndex < $1.orderIndex })
+        sources = episode.sources ?? []
+
+        let status = episode.status?.lowercased()
+        if status != "ready", status != "failed" {
+            episodeGenerationStatus.trackEpisode(id: episode.id, status: episode.status)
         }
     }
 
@@ -850,8 +864,10 @@ private extension EpisodeDetailView {
                 seedID: seed.id,
                 targetDurationMinutes: nil
             )
+            episodeGenerationStatus.trackEpisode(id: creation.episodeId, status: creation.status)
             requestedDiveDeeperSeedIDs.insert(seed.id)
             let created = try await appViewModel.episodeService.fetchEpisode(id: creation.episodeId)
+            episodeGenerationStatus.trackEpisode(id: created.id, status: created.status)
             createdDiveDeeperEpisode = created
             navigateToDiveDeeperEpisode = true
         } catch {

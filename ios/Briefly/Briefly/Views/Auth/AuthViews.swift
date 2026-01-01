@@ -32,15 +32,15 @@ struct AuthFlowView: View {
                         }
 
                         VStack(alignment: .leading, spacing: 16) {
-                            Button {
-                                Task { await viewModel.signInWithGoogle() }
-                            } label: {
-                                HStack(spacing: 12) {
-                                    GoogleLogoView()
-                                    Text("Continue with Google")
-                                        .fontWeight(.semibold)
-                                    Spacer()
-                                }
+	                            Button {
+	                                Task { await viewModel.signInWithGoogle() }
+	                            } label: {
+	                                HStack(alignment: .center, spacing: 12) {
+	                                    GoogleLogoView()
+	                                    Text("Continue with Google")
+	                                        .fontWeight(.semibold)
+	                                    Spacer()
+	                                }
                                 .padding()
                                 .frame(maxWidth: .infinity)
                                 .background(Color.white.opacity(0.12))
@@ -162,12 +162,12 @@ struct AuthFlowView: View {
 }
 
 private struct GoogleLogoView: View {
-    var body: some View {
-        ZStack {
-            Path { path in
-                path.move(to: CGPoint(x: 12.0003, y: 4.75))
-                path.addCurve(
-                    to: CGPoint(x: 16.6053, y: 6.54998),
+	    var body: some View {
+	        ZStack {
+	            Path { path in
+	                path.move(to: CGPoint(x: 12.0003, y: 4.75))
+	                path.addCurve(
+	                    to: CGPoint(x: 16.6053, y: 6.54998),
                     control1: CGPoint(x: 13.7703, y: 4.75),
                     control2: CGPoint(x: 15.3553, y: 5.36002)
                 )
@@ -270,11 +270,13 @@ private struct GoogleLogoView: View {
                     control2: CGPoint(x: 7.3104, y: 24.0001)
                 )
                 path.closeSubpath()
-            }
-            .fill(Color(red: 52 / 255, green: 168 / 255, blue: 83 / 255))
-        }
-        .frame(width: 18, height: 18)
-    }
+	            }
+	            .fill(Color(red: 52 / 255, green: 168 / 255, blue: 83 / 255))
+	        }
+	        .frame(width: 24, height: 24)
+	        .scaleEffect(18.0 / 24.0)
+	        .frame(width: 18, height: 18)
+	    }
 }
 
 private struct DividerWithLabel: View {

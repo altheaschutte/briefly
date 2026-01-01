@@ -10,13 +10,16 @@ struct BrieflyApp: App {
     #endif
     @StateObject private var appViewModel: AppViewModel
     @StateObject private var pushManager: PushNotificationManager
+    @StateObject private var episodeGenerationStatus: EpisodeGenerationStatusCenter
 
     init() {
         let viewModel = AppViewModel()
         let notificationService = NotificationService(apiClient: viewModel.apiClient)
         let pushManager = PushNotificationManager(notificationService: notificationService)
+        let episodeGenerationStatus = EpisodeGenerationStatusCenter(episodeService: viewModel.episodeService)
         _appViewModel = StateObject(wrappedValue: viewModel)
         _pushManager = StateObject(wrappedValue: pushManager)
+        _episodeGenerationStatus = StateObject(wrappedValue: episodeGenerationStatus)
         #if os(iOS)
         AppDelegate.pushManager = pushManager
         #endif
@@ -29,6 +32,7 @@ struct BrieflyApp: App {
                 .environmentObject(appViewModel.audioPlayer)
                 .environmentObject(appViewModel.playbackHistory)
                 .environmentObject(pushManager)
+                .environmentObject(episodeGenerationStatus)
                 .tint(.brieflyPrimary)
                 .preferredColorScheme(.dark)
         }
@@ -90,6 +94,7 @@ struct BrieflyApp: App {
 struct AppRootView: View {
     @EnvironmentObject private var appViewModel: AppViewModel
     @EnvironmentObject private var pushManager: PushNotificationManager
+    @EnvironmentObject private var episodeGenerationStatus: EpisodeGenerationStatusCenter
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -107,6 +112,18 @@ struct AppRootView: View {
                 } else {
                     MainTabView(appViewModel: appViewModel)
                 }
+            }
+            .overlay {
+                GeometryReader { proxy in
+                    if appViewModel.isAuthenticated, episodeGenerationStatus.isVisible {
+                        EpisodeGenerationToastView(text: episodeGenerationStatus.text)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                            .padding(.top, proxy.safeAreaInsets.top + 10)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                            .animation(.easeInOut(duration: 0.2), value: episodeGenerationStatus.isVisible)
+                    }
+                }
+                .allowsHitTesting(false)
             }
             .overlay(alignment: .bottom) {
                 if let message = appViewModel.snackbarMessage {
@@ -128,13 +145,20 @@ struct AppRootView: View {
         .onChange(of: appViewModel.isAuthenticated) { isAuthenticated in
             if isAuthenticated {
                 Task { await pushManager.registerForPushNotifications() }
+                Task { await episodeGenerationStatus.refreshFromServer() }
+                episodeGenerationStatus.resumePollingIfNeeded()
             } else {
                 Task { await pushManager.unregisterCurrentDevice() }
+                episodeGenerationStatus.clear()
             }
         }
         .onChange(of: scenePhase) { phase in
             if phase == .active {
                 Task { await appViewModel.authManager.refreshSessionIfNeeded(force: true) }
+                if appViewModel.isAuthenticated {
+                    Task { await episodeGenerationStatus.refreshFromServer() }
+                    episodeGenerationStatus.resumePollingIfNeeded()
+                }
             }
         }
         .onOpenURL { url in

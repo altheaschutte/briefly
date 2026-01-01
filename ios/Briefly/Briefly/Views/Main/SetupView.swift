@@ -10,6 +10,7 @@ struct SetupView: View {
     @ObservedObject var topicsViewModel: TopicsViewModel
     @ObservedObject private var appViewModel: AppViewModel
     @StateObject private var creationViewModel: EpisodeCreationViewModel
+    @EnvironmentObject private var episodeGenerationStatus: EpisodeGenerationStatusCenter
     @Environment(\.openURL) private var openURL
     @Environment(\.undoManager) private var undoManager
     @Environment(\.scenePhase) private var scenePhase
@@ -83,6 +84,13 @@ struct SetupView: View {
         }
         .onChange(of: creationViewModel.errorMessage) { message in
             handleErrorChange(message)
+        }
+        .onChange(of: creationViewModel.inProgressEpisode) { _, episode in
+            guard let episode else { return }
+            let status = episode.status?.lowercased()
+            if status != "ready", status != "failed" {
+                episodeGenerationStatus.trackEpisode(id: episode.id, status: episode.status)
+            }
         }
         .onChange(of: topicsViewModel.entitlements) { entitlements in
             creationViewModel.updateLimitState(with: entitlements)
@@ -418,9 +426,7 @@ private extension SetupView {
     @ViewBuilder
     var bottomActions: some View {
         VStack(spacing: 12) {
-            if creationViewModel.hasActiveGeneration {
-                generationStatusBottomCard
-            } else if creationViewModel.isGenerationQueued {
+            if creationViewModel.isGenerationQueued {
                 undoGenerateEpisodeButton
             } else {
                 generateEpisodeButton
@@ -444,16 +450,27 @@ private extension SetupView {
                 creationViewModel.queueEpisodeGeneration()
             }
         } label: {
-            Label(generateButtonTitle, systemImage: generateButtonIcon)
-                .font(.headline)
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color.brieflyPrimary)
-                .foregroundColor(.white)
-                .tint(.white)
-                .cornerRadius(12)
+            Group {
+                if creationViewModel.hasActiveGeneration {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                            .tint(.white)
+                        Text("Generating…")
+                    }
+                } else {
+                    Label(generateButtonTitle, systemImage: generateButtonIcon)
+                }
+            }
+            .font(.headline)
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(creationViewModel.hasActiveGeneration ? Color.brieflySurface : Color.brieflyPrimary)
+            .foregroundColor(.white)
+            .tint(.white)
+            .cornerRadius(12)
         }
         .buttonStyle(.plain)
+        .disabled(creationViewModel.hasActiveGeneration)
     }
 
     private var undoGenerateEpisodeButton: some View {
@@ -489,39 +506,6 @@ private extension SetupView {
         (topicsViewModel.entitlements?.isGenerationUsageExhausted ?? false) || creationViewModel.isAtGenerationLimit
     }
 
-    @ViewBuilder
-    private var generationStatusBottomCard: some View {
-        if let episode = creationViewModel.inProgressEpisode {
-            generationStatusCard(episode: episode)
-        } else {
-            generationStatusPlaceholder
-        }
-    }
-
-    private func generationStatusCard(episode: Episode) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(statusHeader(for: episode))
-                .font(.subheadline.weight(.semibold))
-                .foregroundColor(.brieflyTextMuted)
-            statusCardContent(for: episode)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(Color.brieflySurface)
-        .cornerRadius(12)
-    }
-
-    private var generationStatusPlaceholder: some View {
-        HStack(spacing: 10) {
-            ProgressView()
-            Text("Creating episode...")
-                .font(.headline)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(Color.brieflySurface)
-        .cornerRadius(12)
-    }
 }
 
 @MainActor

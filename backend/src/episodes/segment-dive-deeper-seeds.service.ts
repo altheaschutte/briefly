@@ -26,7 +26,9 @@ export class SegmentDiveDeeperSeedsService {
 
   async getSeedForEpisode(episodeId: string, seedId: string): Promise<SegmentDiveDeeperSeed> {
     const seed = await this.repository.getById(seedId);
-    if (!seed || seed.episodeId !== episodeId) {
+    const normalizedEpisodeId = (episodeId || '').trim().toLowerCase();
+    const normalizedSeedEpisodeId = (seed?.episodeId || '').trim().toLowerCase();
+    if (!seed || normalizedSeedEpisodeId !== normalizedEpisodeId) {
       throw new NotFoundException('Dive deeper seed not found');
     }
     return seed;

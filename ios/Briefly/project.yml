@@ -41,6 +41,19 @@ targets:
       - path: Briefly
     info:
       path: Briefly/Resources/Info.plist
+      properties:
+        API_BASE_URL: '$(API_BASE_URL)'
+        APP_WEB_URL: '$(APP_WEB_URL)'
+        SUPABASE_ANON_KEY: '$(SUPABASE_ANON_KEY)'
+        SUPABASE_URL: '$(SUPABASE_URL)'
+        SUPABASE_AUTH_URL: '$(SUPABASE_AUTH_URL)'
+        CFBundleURLTypes:
+          - CFBundleTypeRole: Editor
+            CFBundleURLSchemes:
+              - io.supabase.gotrue
+        UIBackgroundModes:
+          - audio
+        UILaunchStoryboardName: LaunchScreen
     dependencies:
       - package: Supabase
     configFiles:

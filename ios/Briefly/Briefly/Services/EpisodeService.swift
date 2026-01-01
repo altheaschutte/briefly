@@ -30,6 +30,17 @@ final class EpisodeService: EpisodeProviding {
         self.apiClient = apiClient
     }
 
+    func cachedEpisode(id: UUID, maxAge: TimeInterval = 3600) async -> Episode? {
+        await detailsCache.episodeIfFresh(for: id, maxAge: maxAge)
+    }
+
+    func fetchEpisodeCached(id: UUID, maxAge: TimeInterval = 3600, forceRefresh: Bool = false) async throws -> Episode {
+        if forceRefresh == false, let cached = await cachedEpisode(id: id, maxAge: maxAge) {
+            return cached
+        }
+        return try await fetchEpisode(id: id)
+    }
+
     func fetchLatestEpisode() async throws -> Episode? {
         let episodes = try await fetchEpisodes()
         return episodes.sorted { lhs, rhs in
@@ -86,7 +97,9 @@ final class EpisodeService: EpisodeProviding {
         seedID: UUID,
         targetDurationMinutes: Int? = nil
     ) async throws -> EpisodeCreation {
-        var endpoint = APIEndpoint(path: "/episodes/\(parentEpisodeID.uuidString)/dive-deeper/\(seedID.uuidString)", method: .post)
+        let parentId = parentEpisodeID.uuidString.lowercased()
+        let seedId = seedID.uuidString.lowercased()
+        var endpoint = APIEndpoint(path: "/episodes/\(parentId)/dive-deeper/\(seedId)", method: .post)
         if let targetDurationMinutes {
             struct Body: Encodable { let duration: Int }
             endpoint.body = AnyEncodable(Body(duration: targetDurationMinutes))
@@ -214,14 +227,25 @@ private struct EpisodeCreationResponse: Decodable {
 }
 
 private actor EpisodeDetailsCache {
-    private var episodesById: [UUID: Episode] = [:]
+    private struct Entry {
+        var episode: Episode
+        var storedAt: Date
+    }
+
+    private var episodesById: [UUID: Entry] = [:]
 
     func episode(for id: UUID) -> Episode? {
-        episodesById[id]
+        episodesById[id]?.episode
+    }
+
+    func episodeIfFresh(for id: UUID, maxAge: TimeInterval) -> Episode? {
+        guard let entry = episodesById[id] else { return nil }
+        guard Date().timeIntervalSince(entry.storedAt) <= maxAge else { return nil }
+        return entry.episode
     }
 
     func store(_ episode: Episode) {
-        episodesById[episode.id] = episode
+        episodesById[episode.id] = Entry(episode: episode, storedAt: Date())
     }
 
     func remove(_ id: UUID) {
@@ -230,7 +254,7 @@ private actor EpisodeDetailsCache {
 
     func mergeSummaries(_ summaries: [Episode]) -> [Episode] {
         summaries.map { summary in
-            guard let cached = episodesById[summary.id] else { return summary }
+            guard let cached = episodesById[summary.id]?.episode else { return summary }
             return Self.mergePreferNew(summary, keepingMissingFrom: cached)
         }
     }
