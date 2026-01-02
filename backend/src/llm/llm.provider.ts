@@ -7,6 +7,11 @@ export interface EpisodeMetadata {
   description: string;
 }
 
+export interface SegmentScriptDraft {
+  title: string;
+  script: string;
+}
+
 export interface SegmentDiveDeeperSeedDraft {
   title: string;
   angle: string;
@@ -38,7 +43,7 @@ export interface LlmProvider {
     sources: EpisodeSource[],
     targetDurationMinutes?: number,
     instruction?: string,
-  ): Promise<string>;
+  ): Promise<SegmentScriptDraft>;
   generateCoverMotif(title: string, topics?: string[]): Promise<string>;
   generateEpisodeMetadata(script: string, segments: EpisodeSegment[]): Promise<EpisodeMetadata>;
   extractTopicBriefs(transcript: string): Promise<string[]>;

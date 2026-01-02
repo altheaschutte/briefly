@@ -2,9 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
-import { EpisodeMetadata, LlmProvider, SegmentDiveDeeperSeedDraft, TopicMeta } from './llm.provider';
+import { EpisodeMetadata, LlmProvider, SegmentDiveDeeperSeedDraft, SegmentScriptDraft, TopicMeta } from './llm.provider';
 import { EpisodeSegment, EpisodeSource } from '../domain/types';
 import { DialogueTurn, SegmentDialogueScript, TopicIntent, TopicQueryPlan } from './llm.types';
+import { LlmUsageReporter } from './llm-usage';
 
 export interface OpenAiLlmProviderOptions {
   apiKeyConfigKey?: string;
@@ -19,6 +20,7 @@ export interface OpenAiLlmProviderOptions {
   scriptModelConfigKeys?: string[];
   extractionModelConfigKeys?: string[];
   providerLabel?: string;
+  usageReporter?: LlmUsageReporter;
 }
 
 @Injectable()
@@ -29,6 +31,7 @@ export class OpenAiLlmProvider implements LlmProvider {
   private readonly transcriptExtractionModel: string;
   private readonly logger = new Logger(OpenAiLlmProvider.name);
   private readonly providerLabel: string;
+  private readonly usageReporter?: LlmUsageReporter;
 
   private readonly apiKeyConfigKeys: string[];
   private readonly baseUrlConfigKeys: string[];
@@ -61,6 +64,7 @@ export class OpenAiLlmProvider implements LlmProvider {
     this.transcriptExtractionModel =
       this.getFirstConfigValue(this.extractionModelConfigKeys) ?? options.defaultExtractionModel ?? this.queryModel;
     this.providerLabel = options.providerLabel ?? 'OpenAI LLM provider';
+    this.usageReporter = options.usageReporter;
   }
 
   async generateTopicQueries(
@@ -176,6 +180,7 @@ ${historyBlock}`,
       max_tokens: mode === 'dive_deeper' ? 260 : 220,
       response_format: { type: 'json_object' },
     });
+    await this.recordUsage('generateTopicQueries', response);
     const content = response.choices[0]?.message?.content;
     if (!content) {
       throw new Error(`${this.providerLabel} returned empty content for topic queries`);
@@ -292,6 +297,7 @@ ${segmentScript || '(empty)'}`,
         },
       ] satisfies ChatCompletionMessageParam[],
     });
+    await this.recordUsage('generateSegmentDiveDeeperSeed', response);
 
     const content = response.choices[0]?.message?.content;
     if (!content) {
@@ -342,6 +348,7 @@ ${segmentScript || '(empty)'}`,
         { role: 'user', content: transcript },
       ],
     });
+    await this.recordUsage('extractTopicBriefs', response);
     const content = response.choices[0]?.message?.content;
     if (!content) {
       throw new Error(`${this.providerLabel} returned empty content for transcript topic extraction`);
@@ -382,6 +389,7 @@ Rules:
         },
       ] satisfies ChatCompletionMessageParam[],
     });
+    await this.recordUsage('generateSeedTopics', response);
     const content = response.choices[0]?.message?.content;
     if (!content) {
       throw new Error(`${this.providerLabel} returned empty content for seed topics`);
@@ -421,6 +429,7 @@ Respond with JSON only: {"title":"..."}.
         },
       ] satisfies ChatCompletionMessageParam[],
     });
+    await this.recordUsage('generateTopicMeta', response);
 
     const content = response.choices[0]?.message?.content;
     if (!content) {
@@ -477,6 +486,7 @@ Describe the motif only.`,
       max_tokens: 140,
       response_format: { type: 'json_object' },
     });
+    await this.recordUsage('generateCoverMotif', response);
     const content = response.choices[0]?.message?.content;
     if (!content) {
       throw new Error(`${this.providerLabel} returned empty content for cover motif`);
@@ -494,7 +504,7 @@ Describe the motif only.`,
     sources: EpisodeSource[],
     targetDurationMinutes?: number,
     instruction?: string,
-  ): Promise<string> {
+  ): Promise<SegmentScriptDraft> {
     const client = this.getClient();
     const sourceList =
       sources
@@ -515,7 +525,7 @@ Hard rules:
 - If Findings are thin or uncertain, say so plainly and stick to what is known.
 - No URLs spoken aloud.
 - Spell out numbers and dates.
-- Do NOT include speaker labels, turn markers, titles, headings, bullets, or JSON.
+- Do NOT include speaker labels, turn markers, or headings in the narration.
 - Do NOT include bracketed audio direction tags (no [pause], [excited], etc.).
 - Avoid meta commentary (no “in this segment”, “coming up”, “let’s dive in”, “today we’ll…”).
 - Avoid corny/overdramatic openers. Do NOT start with “Imagine…”, “Picture this…”, “Close your eyes…”, or “What if…”.
@@ -534,7 +544,9 @@ Target length:
 - Aim for a ${durationLabel} narration at ~150 words/minute.
 
 Output format:
-- Plain text only.`,
+- Return JSON only with exactly these keys: {"title":"...","script":"..."}.
+- "title": a short, specific segment title (2–5 words). No quotes, no trailing punctuation, no speaker labels.
+- "script": the narration as plain text (no headings, no lists, no JSON).`,
       },
       {
         role: 'user',
@@ -556,7 +568,9 @@ ${sourceList}${instructionLine}`,
           messages,
           temperature: 0.65,
           max_tokens: 1200,
+          response_format: { type: 'json_object' },
         });
+        await this.recordUsage('generateSegmentScript', response);
         content = response.choices[0]?.message?.content;
       } catch (error) {
         if (this.isRetryableLlmError(error) && attempt < maxAttempts) {
@@ -582,7 +596,31 @@ ${sourceList}${instructionLine}`,
         throw new Error(`${this.providerLabel} returned empty content for segment script`);
       }
 
-      return cleaned;
+      try {
+        const parsed = this.parseJsonWithFallback(cleaned, 'segment script');
+        const rawTitle = typeof parsed?.title === 'string' ? parsed.title.trim() : '';
+        const rawScript =
+          typeof parsed?.script === 'string'
+            ? parsed.script.trim()
+            : typeof parsed?.narration === 'string'
+              ? parsed.narration.trim()
+              : '';
+        const script = rawScript.trim();
+        if (!script) {
+          throw new Error('Empty segment script');
+        }
+        const normalizedTitle = this.normalizeSegmentTitle(rawTitle) || this.buildSegmentTitleFallback(title);
+        return { title: normalizedTitle, script };
+      } catch (error) {
+        if ((error instanceof LlmProviderInvalidJsonError || error instanceof Error) && attempt < maxAttempts) {
+          const snippet = this.truncateForLogs(cleaned);
+          this.logger.warn(
+            `${this.providerLabel} returned invalid JSON/content for segment script (attempt ${attempt}/${maxAttempts}). Response snippet: ${snippet}`,
+          );
+          continue;
+        }
+        throw error;
+      }
     }
     throw new Error(`${this.providerLabel} failed to generate a segment script`);
   }
@@ -723,6 +761,7 @@ SHOW NOTES RULES
       temperature: 0.55,
       max_tokens: 800,
     });
+    await this.recordUsage('generateEpisodeMetadata', response);
     const content = response.choices[0]?.message?.content?.trim();
     if (!content) {
       throw new Error(`${this.providerLabel} returned empty content for metadata generation`);
@@ -993,6 +1032,34 @@ SHOW NOTES RULES
       return '';
     }
     return compact.length <= maxLength ? compact : `${compact.slice(0, maxLength)}…`;
+  }
+
+  private async recordUsage(operation: string, response: any): Promise<void> {
+    const reporter = this.usageReporter;
+    if (!reporter) {
+      return;
+    }
+    const usage = response?.usage;
+    if (!usage) {
+      return;
+    }
+    try {
+      await reporter.record({
+        operation: `llm.${operation}`,
+        provider: this.providerLabel,
+        model: typeof response?.model === 'string' ? response.model : undefined,
+        usage: {
+          promptTokens: typeof usage?.prompt_tokens === 'number' ? usage.prompt_tokens : undefined,
+          completionTokens: typeof usage?.completion_tokens === 'number' ? usage.completion_tokens : undefined,
+          totalTokens: typeof usage?.total_tokens === 'number' ? usage.total_tokens : undefined,
+          raw: usage,
+        },
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to record LLM usage for ${operation}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   private isRetryableLlmError(error: unknown): boolean {
@@ -1335,6 +1402,21 @@ SHOW NOTES RULES
     return words.slice(0, 3).join(' ');
   }
 
+  private normalizeSegmentTitle(input: string): string {
+    const cleaned = (input || '')
+      .trim()
+      .replace(/^["'\\s]+|["'\\s]+$/g, '')
+      .replace(/[.!,;:]+$/g, '')
+      .replace(/[^\p{L}\p{N}\s'’\-]+/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!cleaned) {
+      return '';
+    }
+    const words = cleaned.split(' ').filter(Boolean);
+    return words.slice(0, 5).join(' ');
+  }
+
   private buildTopicTitleFallback(topicText: string): string {
     const cleaned = (topicText || '')
       .trim()
@@ -1347,6 +1429,20 @@ SHOW NOTES RULES
     }
     const words = cleaned.split(' ').filter(Boolean);
     return words.slice(0, 3).join(' ');
+  }
+
+  private buildSegmentTitleFallback(text: string): string {
+    const cleaned = (text || '')
+      .trim()
+      .replace(/^["'\\s]+|["'\\s]+$/g, '')
+      .replace(/[^\p{L}\p{N}\s'’\-]+/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!cleaned) {
+      return '';
+    }
+    const words = cleaned.split(' ').filter(Boolean);
+    return words.slice(0, 5).join(' ');
   }
 
   private parseMetadataJson(raw: string): EpisodeMetadata {

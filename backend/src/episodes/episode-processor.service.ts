@@ -33,6 +33,7 @@ import {
 import { EpisodeSegmentsService } from './episode-segments.service';
 import { SegmentDialogueScript } from '../llm/llm.types';
 import { SegmentDiveDeeperSeedsService } from './segment-dive-deeper-seeds.service';
+import { LlmUsageContextService } from '../llm-usage/llm-usage.context';
 
 @Injectable()
 export class EpisodeProcessorService {
@@ -43,6 +44,7 @@ export class EpisodeProcessorService {
     private readonly topicsService: TopicsService,
     private readonly episodesService: EpisodesService,
     private readonly llmService: LlmService,
+    private readonly llmUsageContext: LlmUsageContextService,
     private readonly topicQueriesService: TopicQueriesService,
     private readonly perplexityService: PerplexityService,
     private readonly ttsService: TtsService,
@@ -58,6 +60,7 @@ export class EpisodeProcessorService {
 
   async process(job: Job<{ episodeId: string; userId: string }>): Promise<void> {
     const { episodeId, userId } = job.data;
+    return this.llmUsageContext.run({ userId, episodeId, flow: 'episode_generation' }, async () => {
     let stage = 'init';
     try {
       stage = 'get_episode';
@@ -146,19 +149,19 @@ export class EpisodeProcessorService {
           instructionParts.push(`This continues immediately after the previous segment on "${previousSegmentTitle}".`);
         }
         const instruction = instructionParts.length ? instructionParts.join(' ') : undefined;
-        const segmentScript = await this.llmService.generateSegmentScript(
+        const segmentDraft = await this.llmService.generateSegmentScript(
           topic.originalText,
           segmentContent,
           segmentSources,
           perSegmentTargetMinutes,
           instruction,
         );
+        const segmentTitle = segmentDraft.title;
         const segmentDialogue: SegmentDialogueScript = {
-          title: topic.originalText,
+          title: segmentTitle,
           intent: undefined,
-          turns: coerceTextToDialogue(segmentScript),
+          turns: coerceTextToDialogue(segmentDraft.script),
         };
-        const segmentTitle = topic.originalText;
         const segmentScriptText = renderDialogueScript(segmentDialogue);
         stage = `topic:${index}:tts`;
         const segmentTtsResult = await this.ttsService.synthesize(segmentDialogue, { voiceA, voiceB });
@@ -334,6 +337,7 @@ export class EpisodeProcessorService {
       }
       throw error;
     }
+    });
   }
 
   private extractParentQueryTexts(rawContent: string): string[] {

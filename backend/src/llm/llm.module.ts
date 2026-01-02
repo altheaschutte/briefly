@@ -5,16 +5,18 @@ import { LlmProvider } from './llm.provider';
 import { LlmService } from './llm.service';
 import { OpenAiLlmProvider } from './openai-llm.provider';
 import { XaiLlmProvider } from './xai-llm.provider';
+import { LlmUsageModule } from '../llm-usage/llm-usage.module';
+import { LlmUsageService } from '../llm-usage/llm-usage.service';
 
 type ProviderName = 'openai' | 'xai' | 'grok';
 
 @Module({
-  imports: [ConfigModule],
+  imports: [ConfigModule, LlmUsageModule],
   providers: [
     {
       provide: LLM_PROVIDER_TOKEN,
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService): LlmProvider => {
+      inject: [ConfigService, LlmUsageService],
+      useFactory: (configService: ConfigService, llmUsageService: LlmUsageService): LlmProvider => {
         const logger = new Logger('LlmProvider');
         const defaultProvider = resolveProviderName(configService.get<string>('LLM_PROVIDER') ?? 'openai');
         const rewriteProviderName = resolveProviderName(
@@ -22,11 +24,11 @@ type ProviderName = 'openai' | 'xai' | 'grok';
         );
         const scriptProviderName = resolveProviderName(configService.get<string>('LLM_SCRIPT_PROVIDER') ?? defaultProvider);
 
-        const rewriteProvider = createOpenAiCompatibleProvider(configService, rewriteProviderName as ProviderName);
+        const rewriteProvider = createOpenAiCompatibleProvider(configService, rewriteProviderName as ProviderName, llmUsageService);
         const scriptProvider =
           scriptProviderName === rewriteProviderName
             ? rewriteProvider
-            : createOpenAiCompatibleProvider(configService, scriptProviderName as ProviderName);
+            : createOpenAiCompatibleProvider(configService, scriptProviderName as ProviderName, llmUsageService);
 
         logger.log(
           `LLM providers configured: rewrite=${rewriteProviderName}, script=${scriptProviderName}`,
@@ -77,7 +79,11 @@ type ProviderName = 'openai' | 'xai' | 'grok';
 })
 export class LlmModule {}
 
-function createOpenAiCompatibleProvider(configService: ConfigService, name: ProviderName): LlmProvider {
+function createOpenAiCompatibleProvider(
+  configService: ConfigService,
+  name: ProviderName,
+  usageReporter: LlmUsageService,
+): LlmProvider {
   const normalized = name === 'grok' ? 'xai' : name;
   if (normalized === 'openai') {
     return new OpenAiLlmProvider(configService, {
@@ -89,11 +95,12 @@ function createOpenAiCompatibleProvider(configService: ConfigService, name: Prov
       defaultQueryModel: 'gpt-4.1',
       defaultScriptModel: 'gpt-4.1',
       defaultExtractionModel: 'gpt-4.1',
+      usageReporter,
     });
   }
 
   if (normalized === 'xai') {
-    return new XaiLlmProvider(configService);
+    return new XaiLlmProvider(configService, usageReporter);
   }
 
   throw new Error(`Unsupported LLM provider: ${name}`);

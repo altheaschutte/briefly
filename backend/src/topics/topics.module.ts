@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { InMemoryStoreService } from '../common/in-memory-store.service';
 import { BillingModule } from '../billing/billing.module';
 import { LlmModule } from '../llm/llm.module';
+import { LlmUsageModule } from '../llm-usage/llm-usage.module';
 import { InMemoryTopicsRepository } from './in-memory-topics.repository';
 import { SupabaseTopicsRepository } from './supabase-topics.repository';
 import { TOPICS_REPOSITORY } from './topics.repository';
@@ -33,7 +34,7 @@ const topicsRepositoryProvider: Provider = {
 };
 
 @Module({
-  imports: [forwardRef(() => BillingModule), LlmModule],
+  imports: [forwardRef(() => BillingModule), LlmModule, LlmUsageModule],
   providers: [TopicsService, topicsRepositoryProvider],
   controllers: [TopicsController],
   exports: [TopicsService],

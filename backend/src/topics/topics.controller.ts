@@ -12,10 +12,14 @@ import {
 } from '@nestjs/common';
 import { Request } from 'express';
 import { TopicsService } from './topics.service';
+import { LlmUsageService } from '../llm-usage/llm-usage.service';
 
 @Controller('topics')
 export class TopicsController {
-  constructor(private readonly topicsService: TopicsService) {}
+  constructor(
+    private readonly topicsService: TopicsService,
+    private readonly llmUsageService: LlmUsageService,
+  ) {}
 
   @Get()
   async getTopics(
@@ -92,6 +96,12 @@ export class TopicsController {
   ) {
     const userId = (req as any).user?.id as string;
     return this.topicsService.updateTopic(userId, id, { originalText, isActive, orderIndex });
+  }
+
+  @Get(':id/llm-usage')
+  async getTopicLlmUsage(@Req() req: Request, @Param('id') id: string) {
+    const userId = (req as any).user?.id as string;
+    return this.llmUsageService.getTopicTotals(userId, id);
   }
 
   @Delete(':id')

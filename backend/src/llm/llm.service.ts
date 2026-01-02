@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { LLM_PROVIDER_TOKEN } from './llm.constants';
 import { LlmProvider } from './llm.provider';
 import { EpisodeSegment, EpisodeSource } from '../domain/types';
-import { EpisodeMetadata, SegmentDiveDeeperSeedDraft, TopicMeta } from './llm.provider';
+import { EpisodeMetadata, SegmentDiveDeeperSeedDraft, SegmentScriptDraft, TopicMeta } from './llm.provider';
 import { TopicQueryPlan } from './llm.types';
 
 @Injectable()
@@ -30,7 +30,7 @@ export class LlmService implements LlmProvider {
     sources: EpisodeSource[],
     targetDurationMinutes?: number,
     instruction?: string,
-  ): Promise<string> {
+  ): Promise<SegmentScriptDraft> {
     return this.provider.generateSegmentScript(title, findings, sources, targetDurationMinutes, instruction);
   }
 

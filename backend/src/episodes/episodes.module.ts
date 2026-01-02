@@ -5,6 +5,7 @@ import { EpisodesController } from './episodes.controller';
 import { QueueModule } from '../queue/queue.module';
 import { TopicsModule } from '../topics/topics.module';
 import { LlmModule } from '../llm/llm.module';
+import { LlmUsageModule } from '../llm-usage/llm-usage.module';
 import { PerplexityModule } from '../perplexity/perplexity.module';
 import { TtsModule } from '../tts/tts.module';
 import { StorageModule } from '../storage/storage.module';
@@ -115,6 +116,7 @@ const segmentDiveDeeperSeedsRepositoryProvider: Provider = {
     forwardRef(() => TopicsModule),
     TopicQueriesModule,
     LlmModule,
+    LlmUsageModule,
     PerplexityModule,
     TtsModule,
     StorageModule,

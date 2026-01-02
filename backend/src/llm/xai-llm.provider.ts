@@ -4,10 +4,11 @@ import { EpisodeSegment, EpisodeSource } from '../domain/types';
 import { EpisodeMetadata } from './llm.provider';
 import { DialogueTurn, SegmentDialogueScript, TopicIntent, TopicQueryPlan } from './llm.types';
 import { OpenAiLlmProvider } from './openai-llm.provider';
+import { LlmUsageReporter } from './llm-usage';
 
 @Injectable()
 export class XaiLlmProvider extends OpenAiLlmProvider {
-  constructor(configService: ConfigService) {
+  constructor(configService: ConfigService, usageReporter?: LlmUsageReporter) {
     const xaiPrefixes = ['LLM_PROVIDER_XAI', 'LLM_PROVIDER_GROK'];
     super(configService, {
       apiKeyConfigKeys: [...xaiPrefixes.map((prefix) => `${prefix}_API_KEY`), 'XAI_API_KEY'],
@@ -23,6 +24,7 @@ export class XaiLlmProvider extends OpenAiLlmProvider {
       defaultScriptModel: 'grok-4-0709',
       defaultExtractionModel: 'grok-4-0709',
       providerLabel: 'XAI LLM provider',
+      usageReporter,
     });
   }
 

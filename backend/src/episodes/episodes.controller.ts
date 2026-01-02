@@ -10,6 +10,7 @@ import { EpisodeSegmentsService } from './episode-segments.service';
 import { EntitlementsService } from '../billing/entitlements.service';
 import { SegmentDiveDeeperSeedsService } from './segment-dive-deeper-seeds.service';
 import { TopicsService } from '../topics/topics.service';
+import { LlmUsageService } from '../llm-usage/llm-usage.service';
 
 @Controller('episodes')
 export class EpisodesController {
@@ -23,6 +24,7 @@ export class EpisodesController {
     private readonly segmentDiveDeeperSeedsService: SegmentDiveDeeperSeedsService,
     private readonly topicsService: TopicsService,
     private readonly entitlementsService: EntitlementsService,
+    private readonly llmUsageService: LlmUsageService,
     @Inject(EPISODES_QUEUE_TOKEN) private readonly episodesQueue: Queue,
   ) {}
 
@@ -92,6 +94,13 @@ export class EpisodesController {
     const episode = await this.episodesService.getEpisode(userId, id);
     const signedUrl = await this.resolveAudioUrl(userId, episode);
     return { audioUrl: signedUrl };
+  }
+
+  @Get(':id/llm-usage')
+  async getEpisodeLlmUsage(@Req() req: Request, @Param('id') id: string) {
+    const userId = (req as any).user?.id as string;
+    await this.episodesService.getEpisode(userId, id);
+    return this.llmUsageService.getEpisodeTotals(userId, id);
   }
 
   @Delete(':id')

@@ -3,6 +3,7 @@ import { SegmentDiveDeeperSeed, Topic } from '../domain/types';
 import { TOPICS_REPOSITORY, TopicListFilter, TopicsRepository } from './topics.repository';
 import { EntitlementsService } from '../billing/entitlements.service';
 import { LlmService } from '../llm/llm.service';
+import { LlmUsageContextService } from '../llm-usage/llm-usage.context';
 
 @Injectable()
 export class TopicsService {
@@ -10,6 +11,7 @@ export class TopicsService {
     @Inject(TOPICS_REPOSITORY) private readonly repository: TopicsRepository,
     private readonly entitlementsService: EntitlementsService,
     private readonly llmService: LlmService,
+    private readonly llmUsageContext: LlmUsageContextService,
   ) {}
 
   listTopics(userId: string, filter?: TopicListFilter): Promise<Topic[]> {
@@ -45,12 +47,19 @@ export class TopicsService {
       this.assertActiveTopicLimit(activeCount + 1, limit);
     }
 
-    const title = await this.generateTopicTitle(trimmedOriginalText);
-    const topic = await this.repository.create(userId, trimmedOriginalText, {
-      title,
+    const provisionalTitle = this.buildTopicTitleFallback(trimmedOriginalText) || null;
+    let topic = await this.repository.create(userId, trimmedOriginalText, {
+      title: provisionalTitle,
       isSeed: options?.isSeed ?? false,
       isActive: options?.isActive ?? true,
     });
+    const generatedTitle = await this.llmUsageContext.run(
+      { userId, topicId: topic.id, flow: 'topic_creation' },
+      async () => this.generateTopicTitle(trimmedOriginalText),
+    );
+    if (generatedTitle && generatedTitle !== topic.title) {
+      topic = (await this.repository.update(userId, topic.id, { title: generatedTitle })) ?? topic;
+    }
     return topic;
   }
 
@@ -92,7 +101,11 @@ export class TopicsService {
       updates.originalText !== undefined &&
       this.normalizeTopicText(nextOriginalText) !== this.normalizeTopicText(topic.originalText);
 
-    const nextTitle = shouldRegenerateTitle ? await this.generateTopicTitle(nextOriginalText) : undefined;
+    const nextTitle = shouldRegenerateTitle
+      ? await this.llmUsageContext.run({ userId, topicId, flow: 'topic_update' }, async () =>
+          this.generateTopicTitle(nextOriginalText),
+        )
+      : undefined;
     const updated = await this.repository.update(userId, topicId, {
       title: nextTitle,
       originalText: nextOriginalText,
@@ -162,7 +175,9 @@ export class TopicsService {
       throw new BadRequestException(`You already have ${limit} active topics. Remove one to add more.`);
     }
 
-    const suggestions = await this.llmService.generateSeedTopics(trimmedInsight);
+    const suggestions = await this.llmUsageContext.run({ userId, flow: 'topic_creation' }, async () =>
+      this.llmService.generateSeedTopics(trimmedInsight),
+    );
     const normalizedExisting = new Set(existing.map((t) => this.normalizeTopicText(t.originalText)));
     const seen = new Set(normalizedExisting);
     const deduped = suggestions

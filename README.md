@@ -23,6 +23,7 @@
 - Onboarding: live voice capture streaming to `/onboarding/stream` (SSE transcripts + topic extraction), manual entry fallback, and a `/onboarding/complete` step that saves timezone + schedule plus topic seeding via user-provided context.
 - Topics: create/edit/deactivate topics, enforce max active topics from the current plan, drag-and-drop reordering, and LLM-powered seeding from `user_about_context` or onboarding transcripts.
 - Episodes + library: trigger episode jobs, poll status through the pipeline, resume in-flight jobs on app launch, and show covers/notes/segments/source links with signed audio URLs when missing from payloads.
+- LLM usage tracking: records per-call token usage + estimated USD cost (pricing is configured in `backend/src/llm-usage/llm-pricing.ts`), with per-episode/topic totals available via API.
 - Dive deeper: each episode can include per-segment “Dive deeper” prompts; tapping one creates a follow-up micro-episode seeded from that segment.
 - Scheduling: timezone-aware schedules (daily/every N days/weekly) with target durations; onboarding bootstraps a default schedule, and the worker sweeps every 5 minutes to queue due episodes while logging run history.
 - Notifications: register/unregister push device tokens and send APNs on episode ready/failure.
@@ -91,12 +92,14 @@
 - `POST /topics` with `{ "original_text": "..." }` → creates a topic (enforces plan-based active cap). Returns topic with `isSeed`.
 - `POST /topics/seed` with `{ "user_about_context": "..." }` → generates and persists seed topics from user context (respects active-topic limit).
 - `PATCH /topics/:id` with `{ "original_text"?, "is_active"?, "order_index"? }` → updates and returns the topic.
+- `GET /topics/:id/llm-usage` → summed LLM token usage + estimated cost for that topic’s creation/updates.
 - `DELETE /topics/:id` → soft-deactivates (`is_active: false`) and returns the topic.
 
 ### Episodes
 - `POST /episodes` with optional `{ "duration": <minutes> }` → queues a new episode job after entitlement checks. Returns `{ "episodeId": "uuid", "status": "queued" }`.
 - `GET /episodes` → lists non-archived, non-failed episodes (newest first) with camel + snake fields (`id`, `episode_number`, `status`, `title`, `description`, `target_duration_minutes`, `duration_seconds`, `audio_url`, `cover_image_url`, `cover_prompt`, `created_at`, `updated_at`).
 - `GET /episodes/:id` → full episode with segments, sources, and `dive_deeper_seeds` (includes snake/camel mirrors for audio URLs, start/duration, raw_sources/rawSources).
+- `GET /episodes/:id/llm-usage` → summed LLM token usage + estimated cost for that episode generation run.
 - `POST /episodes/:episodeId/dive-deeper/:seedId` with optional `{ "duration": <minutes> }` → creates a Dive Deeper follow-up episode (a “micro-episode” seeded from the selected segment). Returns `{ "episodeId": "uuid", "status": "queued" }`.
 - `GET /episodes/:id/sources` → array of source objects (`id`, `episode_id`, optional `segment_id`, `source_title`, `url`, `type`).
 - `GET /episodes/:id/audio` → `{ "audioUrl": "https://signed-s3-url-or-null" }`.
