@@ -67,6 +67,7 @@ final class TopicService: TopicProviding {
 
 private struct BackendTopic: Decodable {
     let id: String
+    let title: String?
     let originalText: String
     let rewrittenQuery: String?
     let isActive: Bool
@@ -74,6 +75,7 @@ private struct BackendTopic: Decodable {
 
     enum CodingKeys: String, CodingKey {
         case id
+        case title
         case originalTextCamel = "originalText"
         case originalTextSnake = "original_text"
         case rewrittenQuery
@@ -87,6 +89,7 @@ private struct BackendTopic: Decodable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
+        title = try container.decodeIfPresent(String.self, forKey: .title)
         if let camel = try? container.decode(String.self, forKey: .originalTextCamel) {
             originalText = camel
         } else {
@@ -114,6 +117,7 @@ private struct BackendTopic: Decodable {
     func toTopic() -> Topic {
         Topic(
             id: UUID(uuidString: id) ?? UUID(),
+            title: title,
             originalText: originalText,
             orderIndex: orderIndex,
             isActive: isActive

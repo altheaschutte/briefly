@@ -1,6 +1,7 @@
 export type TopicRow = {
   id: string;
   user_id: string;
+  title?: string | null;
   original_text: string;
   is_active: boolean;
   is_seed: boolean;

@@ -33,13 +33,21 @@ export class TopicsService {
     originalText: string,
     options?: { isSeed?: boolean; isActive?: boolean },
   ): Promise<Topic> {
+    const trimmedOriginalText = (originalText || '').trim();
+    if (!trimmedOriginalText) {
+      throw new BadRequestException('original_text is required');
+    }
+
     const willBeActive = options?.isActive ?? true;
     if (willBeActive) {
       const limit = await this.getActiveTopicLimit(userId);
       const activeCount = await this.countActiveTopics(userId);
       this.assertActiveTopicLimit(activeCount + 1, limit);
     }
-    const topic = await this.repository.create(userId, originalText, {
+
+    const title = await this.generateTopicTitle(trimmedOriginalText);
+    const topic = await this.repository.create(userId, trimmedOriginalText, {
+      title,
       isSeed: options?.isSeed ?? false,
       isActive: options?.isActive ?? true,
     });
@@ -75,8 +83,19 @@ export class TopicsService {
       this.assertActiveTopicLimit(nextActiveCount, limit);
     }
 
+    const nextOriginalTextRaw = updates.originalText ?? topic.originalText;
+    const nextOriginalText = (nextOriginalTextRaw || '').trim();
+    if (!nextOriginalText) {
+      throw new BadRequestException('original_text cannot be empty');
+    }
+    const shouldRegenerateTitle =
+      updates.originalText !== undefined &&
+      this.normalizeTopicText(nextOriginalText) !== this.normalizeTopicText(topic.originalText);
+
+    const nextTitle = shouldRegenerateTitle ? await this.generateTopicTitle(nextOriginalText) : undefined;
     const updated = await this.repository.update(userId, topicId, {
-      originalText: updates.originalText ?? topic.originalText,
+      title: nextTitle,
+      originalText: nextOriginalText,
       isActive: updates.isActive ?? topic.isActive,
       orderIndex: updates.orderIndex ?? topic.orderIndex,
     });
@@ -111,6 +130,7 @@ export class TopicsService {
     }
     try {
       return await this.repository.create(userId, seed.title, {
+        title: this.buildTopicTitleFallback(seed.title),
         isSeed: false,
         isActive: true,
         segmentDiveDeeperSeedId: seed.id,
@@ -186,5 +206,32 @@ export class TopicsService {
 
   private normalizeTopicText(text: string): string {
     return (text || '').trim().replace(/\s+/g, ' ').toLowerCase();
+  }
+
+  private async generateTopicTitle(originalText: string): Promise<string | null> {
+    const trimmed = (originalText || '').trim();
+    if (!trimmed) {
+      return null;
+    }
+    try {
+      const meta = await this.llmService.generateTopicMeta(trimmed);
+      const normalized = this.buildTopicTitleFallback(meta?.title || '');
+      return normalized || this.buildTopicTitleFallback(trimmed) || null;
+    } catch {
+      return this.buildTopicTitleFallback(trimmed) || null;
+    }
+  }
+
+  private buildTopicTitleFallback(text: string): string {
+    const cleaned = (text || '')
+      .trim()
+      .replace(/^["'\s]+|["'\s]+$/g, '')
+      .replace(/[^\p{L}\p{N}\s'’\-]+/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!cleaned) {
+      return '';
+    }
+    return cleaned.split(' ').filter(Boolean).slice(0, 3).join(' ');
   }
 }

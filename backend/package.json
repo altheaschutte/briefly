@@ -16,6 +16,7 @@
     "script:preview": "ts-node -r tsconfig-paths/register scripts/generate-script-preview.ts",
     "backfill:cover": "ts-node -r tsconfig-paths/register scripts/backfill-cover.ts",
     "backfill:metadata": "ts-node -r tsconfig-paths/register scripts/backfill-metadata.ts",
+    "backfill:topic-titles": "ts-node -r tsconfig-paths/register scripts/backfill-topic-titles.ts",
     "backfill:episode-numbers": "ts-node -r tsconfig-paths/register scripts/backfill-episode-numbers.ts"
   },
   "dependencies": {

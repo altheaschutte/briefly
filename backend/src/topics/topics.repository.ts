@@ -3,6 +3,7 @@ import { Topic } from '../domain/types';
 export const TOPICS_REPOSITORY = 'TOPICS_REPOSITORY';
 
 export interface TopicUpdateInput {
+  title?: string | null;
   originalText?: string;
   isActive?: boolean;
   orderIndex?: number;
@@ -21,6 +22,7 @@ export interface TopicsRepository {
     userId: string,
     originalText: string,
     options?: {
+      title?: string | null;
       isSeed?: boolean;
       isActive?: boolean;
       segmentDiveDeeperSeedId?: string | null;

@@ -15,6 +15,10 @@ export interface SegmentDiveDeeperSeedDraft {
   contextBundle: any;
 }
 
+export interface TopicMeta {
+  title: string;
+}
+
 export interface LlmProvider {
   generateTopicQueries(
     topic: string,
@@ -39,6 +43,7 @@ export interface LlmProvider {
   generateEpisodeMetadata(script: string, segments: EpisodeSegment[]): Promise<EpisodeMetadata>;
   extractTopicBriefs(transcript: string): Promise<string[]>;
   generateSeedTopics(userInsight: string): Promise<string[]>;
+  generateTopicMeta(topicText: string): Promise<TopicMeta>;
   generateSegmentDiveDeeperSeed(input: {
     parentTopicText: string;
     segmentScript: string;

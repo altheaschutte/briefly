@@ -1,6 +1,7 @@
 export interface Topic {
   id: string;
   userId: string;
+  title?: string;
   originalText: string;
   orderIndex: number;
   isActive: boolean;

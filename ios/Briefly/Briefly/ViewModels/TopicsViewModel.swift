@@ -369,7 +369,7 @@ final class TopicsViewModel: ObservableObject {
 
 private extension Topic {
     func withActiveState(_ isActive: Bool) -> Topic {
-        Topic(id: id, originalText: originalText, orderIndex: orderIndex, isActive: isActive)
+        Topic(id: id, title: title, originalText: originalText, orderIndex: orderIndex, isActive: isActive)
     }
 }
 

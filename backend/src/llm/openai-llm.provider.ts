@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { ChatCompletionMessageParam } from 'openai/resources/chat/completions';
-import { EpisodeMetadata, LlmProvider, SegmentDiveDeeperSeedDraft } from './llm.provider';
+import { EpisodeMetadata, LlmProvider, SegmentDiveDeeperSeedDraft, TopicMeta } from './llm.provider';
 import { EpisodeSegment, EpisodeSource } from '../domain/types';
 import { DialogueTurn, SegmentDialogueScript, TopicIntent, TopicQueryPlan } from './llm.types';
 
@@ -391,6 +391,50 @@ Rules:
       throw new Error(`${this.providerLabel} did not return any seed topics`);
     }
     return topics;
+  }
+
+  async generateTopicMeta(topicText: string): Promise<TopicMeta> {
+    const client = this.getClient();
+    const normalizedTopic = (topicText || '').trim();
+    const response = await client.chat.completions.create({
+      model: this.queryModel,
+      temperature: 0.35,
+      max_tokens: 80,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content: `You write short, distinct titles for topics in a daily AI audio briefing app.
+
+Rules:
+- Output a 2–3 word title (as short as possible while still distinct).
+- Use plain words (no quotes, no emojis, no hashtags).
+- Avoid leading verbs like "Tell", "Update", "Share", "Highlight", "Reveal", "Dive", "Alert", "Explore", "Uncover".
+- No trailing punctuation.
+
+Respond with JSON only: {"title":"..."}.
+`,
+        },
+        {
+          role: 'user',
+          content: `Topic: ${normalizedTopic || '(empty)'}`,
+        },
+      ] satisfies ChatCompletionMessageParam[],
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      throw new Error(`${this.providerLabel} returned empty content for topic meta`);
+    }
+
+    const parsed = this.parseJsonWithFallback(content, 'topic meta');
+    const rawTitle = typeof parsed?.title === 'string' ? parsed.title.trim() : '';
+    const title = this.normalizeTopicTitle(rawTitle) || this.buildTopicTitleFallback(normalizedTopic);
+    if (!title) {
+      throw new Error(`${this.providerLabel} did not return a valid topic title`);
+    }
+
+    return { title };
   }
 
   async generateCoverMotif(title: string, topics: string[] = []): Promise<string> {
@@ -1276,6 +1320,33 @@ SHOW NOTES RULES
     }
 
     throw new LlmProviderInvalidJsonError(this.providerLabel, contextLabel, cleaned);
+  }
+
+  private normalizeTopicTitle(input: string): string {
+    const cleaned = (input || '')
+      .trim()
+      .replace(/^["'\\s]+|["'\\s]+$/g, '')
+      .replace(/[.!,;:]+$/g, '')
+      .replace(/\\s+/g, ' ');
+    if (!cleaned) {
+      return '';
+    }
+    const words = cleaned.split(' ').filter(Boolean);
+    return words.slice(0, 3).join(' ');
+  }
+
+  private buildTopicTitleFallback(topicText: string): string {
+    const cleaned = (topicText || '')
+      .trim()
+      .replace(/^["'\\s]+|["'\\s]+$/g, '')
+      .replace(/[^\p{L}\p{N}\s'’\-]+/gu, ' ')
+      .replace(/\\s+/g, ' ')
+      .trim();
+    if (!cleaned) {
+      return '';
+    }
+    const words = cleaned.split(' ').filter(Boolean);
+    return words.slice(0, 3).join(' ');
   }
 
   private parseMetadataJson(raw: string): EpisodeMetadata {

@@ -89,6 +89,7 @@ export class SupabaseTopicsRepository implements TopicsRepository {
     userId: string,
     originalText: string,
     options?: {
+      title?: string | null;
       isSeed?: boolean;
       isActive?: boolean;
       segmentDiveDeeperSeedId?: string | null;
@@ -101,6 +102,7 @@ export class SupabaseTopicsRepository implements TopicsRepository {
       const payload: TopicRow = {
         id: uuid(),
         user_id: userId,
+        title: options?.title ?? null,
         original_text: originalText,
         order_index: nextOrderIndex,
         is_active: options?.isActive ?? true,
@@ -135,6 +137,9 @@ export class SupabaseTopicsRepository implements TopicsRepository {
 
       if (updates.originalText !== undefined) {
         payload.original_text = updates.originalText;
+      }
+      if (updates.title !== undefined) {
+        payload.title = updates.title;
       }
       if (updates.isActive !== undefined) {
         payload.is_active = updates.isActive;
@@ -171,6 +176,7 @@ export class SupabaseTopicsRepository implements TopicsRepository {
     return {
       id: row.id,
       userId: row.user_id,
+      title: row.title ?? undefined,
       originalText: row.original_text,
       orderIndex: row.order_index,
       isActive: row.is_active,

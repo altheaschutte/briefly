@@ -476,12 +476,20 @@ private extension EpisodeDetailView {
 	            Text("Topics")
 	                .font(.headline)
 	            ForEach(topics) { topic in
-	                Text(topic.originalText)
-	                    .foregroundColor(.primary)
-	                    .frame(maxWidth: .infinity, alignment: .leading)
-	                    .padding()
-	                    .background(Color.brieflySurface)
-	                    .cornerRadius(10)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(topic.displayTitle)
+                            .font(.body.bold())
+                            .foregroundColor(.primary)
+                        Text(topic.originalText)
+                            .font(.body)
+                            .foregroundColor(.brieflyTextMuted)
+                            .lineLimit(2)
+                            .truncationMode(.tail)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                    .background(Color.brieflySurface)
+                    .cornerRadius(10)
 	            }
 	        }
 	    }

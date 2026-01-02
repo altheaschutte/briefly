@@ -48,6 +48,10 @@ type ProviderName = 'openai' | 'xai' | 'grok';
             logCall(`rewrite:${rewriteProviderName}`, 'generateSeedTopics');
             return rewriteProvider.generateSeedTopics(...args);
           },
+          generateTopicMeta: (...args: Parameters<LlmProvider['generateTopicMeta']>) => {
+            logCall(`rewrite:${rewriteProviderName}`, 'generateTopicMeta');
+            return rewriteProvider.generateTopicMeta(...args);
+          },
           generateSegmentDiveDeeperSeed: (...args: Parameters<LlmProvider['generateSegmentDiveDeeperSeed']>) => {
             logCall(`rewrite:${rewriteProviderName}`, 'generateSegmentDiveDeeperSeed');
             return rewriteProvider.generateSegmentDiveDeeperSeed(...args);

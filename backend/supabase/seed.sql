@@ -4,10 +4,22 @@
 with vars as (
   select 'e60978d0-98fc-4177-851d-58f5db55d0ff'::uuid as test_user_id
 )
-insert into public.topics (id, user_id, original_text, order_index, is_active, is_seed, created_at, updated_at)
+insert into public.topics (id, user_id, title, original_text, order_index, is_active, is_seed, created_at, updated_at)
 select
   gen_random_uuid(),
   vars.test_user_id,
+  nullif(
+    btrim(
+      array_to_string(
+        (regexp_split_to_array(
+          regexp_replace(coalesce(seed.original_text, ''), '[^[:alnum:][:space:]''’\\-]', '', 'g'),
+          '\\s+'
+        ))[1:3],
+        ' '
+      )
+    ),
+    ''
+  ),
   seed.original_text,
   seed.order_index,
   true,

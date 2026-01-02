@@ -336,11 +336,18 @@ struct SetupView: View {
             Button {
                 editingTopic = topic
             } label: {
-                Text(topic.originalText)
-                    .lineLimit(2)
-                    .truncationMode(.tail)
-                    .foregroundColor(.primary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(topic.displayTitle)
+                        .font(.body.bold())
+                        .foregroundColor(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(topic.originalText)
+                        .font(.body)
+                        .foregroundColor(.brieflyTextMuted)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             .buttonStyle(.plain)
             Spacer(minLength: 10)

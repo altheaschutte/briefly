@@ -29,6 +29,7 @@ export class InMemoryTopicsRepository implements TopicsRepository {
     userId: string,
     originalText: string,
     options?: {
+      title?: string | null;
       isSeed?: boolean;
       isActive?: boolean;
       segmentDiveDeeperSeedId?: string | null;
@@ -41,6 +42,7 @@ export class InMemoryTopicsRepository implements TopicsRepository {
     const topic: Topic = {
       id: uuid(),
       userId,
+      title: options?.title ?? undefined,
       originalText,
       orderIndex: nextOrder,
       isActive: options?.isActive ?? true,
@@ -56,6 +58,7 @@ export class InMemoryTopicsRepository implements TopicsRepository {
 
   async update(userId: string, topicId: string, updates: TopicUpdateInput): Promise<Topic | undefined> {
     return this.store.updateTopic(userId, topicId, {
+      ...(updates.title !== undefined ? { title: updates.title ?? undefined } : {}),
       originalText: updates.originalText,
       isActive: updates.isActive,
       orderIndex: updates.orderIndex,

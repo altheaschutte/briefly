@@ -23,10 +23,16 @@
 - Onboarding: live voice capture streaming to `/onboarding/stream` (SSE transcripts + topic extraction), manual entry fallback, and a `/onboarding/complete` step that saves timezone + schedule plus topic seeding via user-provided context.
 - Topics: create/edit/deactivate topics, enforce max active topics from the current plan, drag-and-drop reordering, and LLM-powered seeding from `user_about_context` or onboarding transcripts.
 - Episodes + library: trigger episode jobs, poll status through the pipeline, resume in-flight jobs on app launch, and show covers/notes/segments/source links with signed audio URLs when missing from payloads.
+- Dive deeper: each episode can include per-segment “Dive deeper” prompts; tapping one creates a follow-up micro-episode seeded from that segment.
 - Scheduling: timezone-aware schedules (daily/every N days/weekly) with target durations; onboarding bootstraps a default schedule, and the worker sweeps every 5 minutes to queue due episodes while logging run history.
 - Notifications: register/unregister push device tokens and send APNs on episode ready/failure.
-- Playback: global audio player with play/pause/resume, segment-level seeking, progress tracking, and configurable speed plus player bar.
+- Playback: global audio player with play/pause/resume, segment-level seeking, configurable speed, and persistent per-episode listening progress (resume where you left off + “X min left” progress indicator in episode lists).
 - Settings + profile: playback preferences, logout, timezone updates, and stored `user_about_context` to personalize topic generation.
+
+### iOS Playback Progress (Resume Where You Left Off)
+- The iOS app persists per-episode playback position locally via `PlaybackHistory` and updates it from `AudioPlayerManager` while listening (and on pause/seek/stop).
+- When you press play on an episode you’ve partially listened to, playback resumes from the last saved timestamp.
+- In episode lists, partially played episodes show “X min left” plus a small progress bar next to the duration pill.
 
 ## TODO Features
 - Wire Episode detail secondary actions (transcript view, bookmark/queue, share, “talk to producer”, overflow) to real flows/endpoints.
@@ -58,11 +64,12 @@
 - Imagery: cover art and illustration prompts lean on pastel takes of these colors blended with complementary hues for cohesion without being repetitive.
 
 ## Database Schema (Supabase/Postgres)
-- `topics`: `id uuid` PK, `user_id uuid`, `original_text text` (unique per user), `order_index int`, `is_active bool`, `is_seed bool`, timestamps; RLS restricts to `auth.uid() = user_id`.
+- `topics`: `id uuid` PK, `user_id uuid`, `original_text text` (unique per user), `order_index int`, `is_active bool`, `is_seed bool`, optional `segment_dive_deeper_seed_id uuid`, optional `context_bundle jsonb`, timestamps; RLS restricts to `auth.uid() = user_id`. Topics with `segment_dive_deeper_seed_id` are system-generated for Dive Deeper and are not user-editable.
 - `topic_queries`: `id uuid`, `user_id uuid`, `topic_id` → `topics`, `episode_id` → `episodes`, `query text`, `answer text`, `citations jsonb[]`, optional `intent`, `order_index int`, timestamps; RLS user-scoped.
-- `episodes`: `id uuid` PK, `user_id uuid`, optional `episode_number`, `title`, `description`, `status enum (queued | rewriting_queries | retrieving_content | generating_script | generating_audio | ready | failed)`, `archived_at`, `target_duration_minutes int`, `duration_seconds numeric`, `audio_url`, `cover_image_url`, `cover_prompt`, `transcript`, `script_prompt`, `show_notes`, `error_message`, `usage_recorded_at`, timestamps. Trigger assigns per-user `episode_number`; RLS user-scoped; `archived_at` filters list views.
+- `episodes`: `id uuid` PK, `user_id uuid`, optional `episode_number`, `title`, `description`, `status enum (queued | rewriting_queries | retrieving_content | generating_dive_deeper_seeds | generating_script | generating_audio | ready | failed)`, `archived_at`, `target_duration_minutes int`, `duration_seconds numeric`, `audio_url`, `cover_image_url`, `cover_prompt`, `transcript`, `script_prompt`, `show_notes`, `error_message`, optional `parent_episode_id uuid`, optional `parent_segment_id uuid`, optional `dive_deeper_seed_id uuid`, `usage_recorded_at`, timestamps. Trigger assigns per-user `episode_number`; RLS user-scoped; `archived_at` filters list views.
 - `episode_segments`: `id uuid` PK, `episode_id` → `episodes` (cascade), `order_index int`, `title`, `raw_content text`, `raw_sources jsonb`, `script`, `audio_url`, `start_time_seconds numeric`, `duration_seconds numeric`, `created_at`; RLS tied to owning episode.
 - `episode_sources`: `id uuid` PK, `episode_id` → `episodes` (cascade), optional `segment_id` FK to `episode_segments`, `source_title text`, `url text`, `type text`, `created_at`; RLS tied to owning episode.
+- `segment_dive_deeper_seeds`: `id uuid` PK, `episode_id` → `episodes` (cascade), `segment_id` → `episode_segments` (cascade), optional `position int`, `title text`, `angle text`, `focus_claims jsonb`, `seed_queries jsonb`, `context_bundle jsonb`, timestamps; used to render “Dive deeper” prompts in clients.
 - `onboarding_transcripts`: `id uuid` PK, `user_id uuid`, `transcript text`, `status in_progress|completed|failed|cancelled`, `extracted_topics jsonb`, `error_message`, timestamps; RLS user-scoped.
 - `profiles`: `id uuid` PK → `auth.users`, `first_name`, `intention`, `user_about_context`, `timezone`, timestamps; RLS scoped to the owning user.
 - `user_subscriptions`: `user_id uuid` PK, `stripe_customer_id`, `stripe_subscription_id` (unique), `tier enum (free|starter|pro|power)`, `status enum (none|active|trialing|past_due|canceled|incomplete)`, `current_period_start/end timestamptz`, `cancel_at_period_end bool`, timestamps; RLS user-scoped.
@@ -89,7 +96,8 @@
 ### Episodes
 - `POST /episodes` with optional `{ "duration": <minutes> }` → queues a new episode job after entitlement checks. Returns `{ "episodeId": "uuid", "status": "queued" }`.
 - `GET /episodes` → lists non-archived, non-failed episodes (newest first) with camel + snake fields (`id`, `episode_number`, `status`, `title`, `description`, `target_duration_minutes`, `duration_seconds`, `audio_url`, `cover_image_url`, `cover_prompt`, `created_at`, `updated_at`).
-- `GET /episodes/:id` → full episode with segments and sources (includes snake/camel mirrors for audio URLs, start/duration, raw_sources/rawSources).
+- `GET /episodes/:id` → full episode with segments, sources, and `dive_deeper_seeds` (includes snake/camel mirrors for audio URLs, start/duration, raw_sources/rawSources).
+- `POST /episodes/:episodeId/dive-deeper/:seedId` with optional `{ "duration": <minutes> }` → creates a Dive Deeper follow-up episode (a “micro-episode” seeded from the selected segment). Returns `{ "episodeId": "uuid", "status": "queued" }`.
 - `GET /episodes/:id/sources` → array of source objects (`id`, `episode_id`, optional `segment_id`, `source_title`, `url`, `type`).
 - `GET /episodes/:id/audio` → `{ "audioUrl": "https://signed-s3-url-or-null" }`.
 - `DELETE /episodes/:id` → `{ "success": true }` (archives the episode).
@@ -125,6 +133,22 @@
 - `POST /notifications/device` with `{ "token": "...", "platform": "ios"|"android" }` → register/update a device token.
 - `DELETE /notifications/device/:token` → unregisters the token for the user.
 
+## Dive Deeper Flow
+Dive Deeper lets a listener tap a per-segment prompt on an episode detail screen to generate a short follow-up episode that goes deeper on that segment (not a recap).
+
+### Seed generation (backend worker)
+- During episode generation, after segments/sources are persisted, the worker generates one `segment_dive_deeper_seeds` row per segment with an LLM-produced `title`, `angle`, `focus_claims`, `seed_queries`, and `context_bundle`.
+- `GET /episodes/:id` returns these as `dive_deeper_seeds`, which clients render in the episode detail view.
+
+### Creating a Dive Deeper episode (API + worker)
+- Client calls `POST /episodes/:episodeId/dive-deeper/:seedId` (optional `{ "duration": <minutes> }`).
+- Backend validates the seed belongs to the parent episode, creates (or reuses) a system-generated `topics` row tied to that seed (`segment_dive_deeper_seed_id = seedId`), and creates a new episode with `parent_episode_id`, `parent_segment_id`, and `dive_deeper_seed_id` set.
+- When the worker processes this new episode, it runs with only that Dive Deeper topic and generates content in `dive_deeper` mode (default duration is `DIVE_DEEPER_DEFAULT_DURATION_MINUTES`, fallback 8).
+
+### iOS UI behavior
+- `ios/Briefly/Briefly/Views/Main/EpisodeDetailView.swift` renders a “Dive deeper” section from `Episode.diveDeeperSeeds`.
+- Tapping a row starts a 5-second “starting… tap to undo” queue; if not cancelled it fires the POST, fetches the created episode, and navigates to its detail view.
+
 ## Episode Generation Flow
 1. Trigger & entitlement checks: `/episodes` (or schedule runner) enqueues a BullMQ `generate` job after validating plan limits and target duration (default 20 minutes from `EPISODE_DEFAULT_DURATION_MINUTES`).
 2. Load episode & topics: status moves to `rewriting_queries`, then `retrieving_content`; active topics are fetched/sorted (test mode can limit to one segment), per-segment target minutes are derived, and default TTS voices are selected.
@@ -133,7 +157,7 @@
    - Run Perplexity for each planned query; persist `topic_queries` with answers/citations.
    - Build `episode_sources` from citations and segment content from query answers.
    - Generate a dialogue script per segment (optionally chained to the previous segment), enhance for ElevenLabs voice tags when applicable, synthesize TTS (voices A/B), and capture start/duration with 2s gaps between segments.
-4. Persist segments/sources: replace `episode_segments` and `episode_sources`, mark status `generating_script`, and combine dialogue into a full transcript.
+4. Persist segments/sources: replace `episode_segments` and `episode_sources`, generate per-segment Dive Deeper seeds (`generating_dive_deeper_seeds`), then mark status `generating_script` and combine dialogue into a full transcript.
 5. Metadata & assets: move to `generating_audio`; LLM produces title/description/show notes and a cover prompt. In parallel, generate the cover image (S3-backed) and stitch segment audio with ffmpeg (download parts, insert silence, concat, upload final MP3, measure duration).
 6. Finalize: mark `ready` with transcript, script prompt note, show notes, metadata, cover prompt/URL, audio key/URL, and duration; send APNs status notifications; record usage into `usage_periods` (idempotent via `usage_recorded_at`).
 7. Failure handling: on any error, mark `failed` with a contextual message (stage/status/code), attempt a failure notification, and leave logs for debugging.
