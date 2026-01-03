@@ -26,10 +26,16 @@ export class LlmUsageService implements LlmUsageReporter {
     const totalTokens = event.usage?.totalTokens ?? undefined;
 
     const pricing = resolveModelPricing(event.model);
-    const costUsd =
+    const tokenCostUsd =
       pricing && Number.isFinite(promptTokens) && Number.isFinite(completionTokens)
-        ? estimateUsdCostFromTokens(promptTokens as number, completionTokens as number, pricing)
+        ? estimateUsdCostFromTokens(
+            promptTokens as number,
+            completionTokens as number,
+            pricing,
+            typeof event.usage?.cachedPromptTokens === 'number' ? event.usage.cachedPromptTokens : undefined,
+          )
         : null;
+    const costUsd = event.costUsd !== undefined ? event.costUsd : tokenCostUsd;
 
     const record: LlmUsageRecord = {
       userId,

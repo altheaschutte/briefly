@@ -1044,12 +1044,19 @@ SHOW NOTES RULES
       return;
     }
     try {
+      const cachedPromptTokens =
+        typeof usage?.prompt_tokens_details?.cached_tokens === 'number'
+          ? usage.prompt_tokens_details.cached_tokens
+          : typeof usage?.prompt_tokens_details?.cachedTokens === 'number'
+            ? usage.prompt_tokens_details.cachedTokens
+            : undefined;
       await reporter.record({
         operation: `llm.${operation}`,
         provider: this.providerLabel,
         model: typeof response?.model === 'string' ? response.model : undefined,
         usage: {
           promptTokens: typeof usage?.prompt_tokens === 'number' ? usage.prompt_tokens : undefined,
+          cachedPromptTokens,
           completionTokens: typeof usage?.completion_tokens === 'number' ? usage.completion_tokens : undefined,
           totalTokens: typeof usage?.total_tokens === 'number' ? usage.total_tokens : undefined,
           raw: usage,

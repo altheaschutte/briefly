@@ -5,6 +5,8 @@ import crypto from 'crypto';
 import { EpisodeSegment } from '../domain/types';
 import { StorageService } from '../storage/storage.service';
 import { LlmService } from '../llm/llm.service';
+import { LlmUsageService } from '../llm-usage/llm-usage.service';
+import { estimateImageCostUsd } from '../llm-usage/image-pricing';
 
 @Injectable()
 export class CoverImageService {
@@ -20,6 +22,7 @@ export class CoverImageService {
     private readonly configService: ConfigService,
     private readonly storageService: StorageService,
     private readonly llmService: LlmService,
+    private readonly llmUsageService: LlmUsageService,
   ) {
     this.provider = resolveImageProvider(configService.get<string>('COVER_IMAGE_PROVIDER') ?? 'openai');
     this.apiKeyConfigKeys =
@@ -89,6 +92,25 @@ export class CoverImageService {
       }
     }
     const response = await client.images.generate(request);
+    try {
+      const costUsd = estimateImageCostUsd({
+        model: String(model),
+        count: 1,
+        size: (request as any).size,
+        quality: (request as any).quality,
+      });
+      await this.llmUsageService.record({
+        operation: 'image.generateCoverImage',
+        provider: this.provider === 'xai' ? 'xAI Images' : 'OpenAI Images',
+        model: String(model),
+        usage: { raw: { request: { ...request }, response: { created: (response as any)?.created } } },
+        costUsd,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to record image generation cost for episode ${episodeId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
     const first = response.data?.[0] as any;
     const imageBase64: string | undefined = first?.b64_json || first?.b64Json;
     if (!imageBase64) {
