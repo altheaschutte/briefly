@@ -35,7 +35,7 @@ struct WelcomeView: View {
                     .padding()
                     .background(Color.brieflyPrimary)
                     .foregroundColor(.white)
-                    .cornerRadius(16)
+                    .clipShape(Capsule())
             }
             Button("Sign in or sign up", action: onShowAuth)
                 .padding(.top, 8)

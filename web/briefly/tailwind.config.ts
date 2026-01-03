@@ -14,29 +14,31 @@ const config: Config = {
     },
     extend: {
       colors: {
-        midnight: "#132a3b",
-        surface: "#1f3a4e",
-        overlay: "#0f2231",
-        accent: "#ffa563",
-        teal: "#37a8ae",
-        tealDeep: "#2a7997",
-        tealSoft: "#93c8c2",
-        muted: "#c7d9e7",
-        ink: "#0c1824",
-        borderSoft: "#93c8c226"
+        midnight: "#FFFFFF",
+        surface: "#F3EFEA",
+        overlay: "#E2DFDB",
+        accent: "#A2845E",
+        teal: "#A2845E",
+        tealDeep: "#9F9A95",
+        tealSoft: "#A2845E",
+        muted: "#8A8A8E",
+        ink: "#2E2E2E",
+        borderSoft: "#E2DFDB",
+        navBar: "#2F2F2F",
+        navInactive: "#B3B3B3"
       },
       fontFamily: {
         display: ["var(--font-display)", "sans-serif"],
         body: ["var(--font-body)", "sans-serif"]
       },
       boxShadow: {
-        glow: "0 20px 80px rgba(55,168,174,0.22)",
-        accent: "0 16px 45px rgba(255,165,99,0.35)"
+        glow: "0 20px 80px rgba(162,132,94,0.18)",
+        accent: "0 16px 45px rgba(162,132,94,0.25)"
       },
       backgroundImage: {
-        mesh: "radial-gradient(circle at 10% 20%, rgba(55,168,174,0.25), transparent 22%), radial-gradient(circle at 80% 0%, rgba(255,165,99,0.25), transparent 28%), radial-gradient(circle at 40% 70%, rgba(42,121,151,0.2), transparent 32%)",
-        grain: "radial-gradient(rgba(255,255,255,0.06) 1px, transparent 0)",
-        "glow-border": "linear-gradient(120deg, rgba(55,168,174,0.45), rgba(255,165,99,0.45), rgba(55,168,174,0.45))"
+        mesh: "radial-gradient(circle at 10% 20%, rgba(162,132,94,0.18), transparent 28%), radial-gradient(circle at 80% 0%, rgba(226,223,219,0.8), transparent 32%), radial-gradient(circle at 40% 70%, rgba(159,154,149,0.18), transparent 30%)",
+        grain: "radial-gradient(rgba(46,46,46,0.05) 1px, transparent 0)",
+        "glow-border": "linear-gradient(120deg, rgba(162,132,94,0.35), rgba(159,154,149,0.25), rgba(162,132,94,0.35))"
       },
       animation: {
         float: "float 12s ease-in-out infinite",

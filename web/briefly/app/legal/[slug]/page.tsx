@@ -81,11 +81,11 @@ export default async function LegalPage({ params }: { params: Promise<{ slug: st
 
   return (
     <div className="container relative max-w-4xl py-12 md:py-16">
-      <div className="absolute inset-0 -z-10 rounded-[32px] bg-gradient-to-br from-accent/5 via-overlay/40 to-[#0b1926] blur-3xl" />
-      <div className="overflow-hidden rounded-[28px] border border-[#93c8c226] bg-[#0f1f30]/70 shadow-2xl backdrop-blur">
-        <div className="border-b border-[#93c8c226] bg-[#13293d]/60 px-6 py-6 md:px-8">
+      <div className="absolute inset-0 -z-10 rounded-[32px] bg-gradient-to-br from-accent/10 via-surface to-transparent blur-3xl" />
+      <div className="overflow-hidden rounded-[28px] border border-borderSoft bg-white shadow-xl">
+        <div className="border-b border-borderSoft bg-surface px-6 py-6 md:px-8">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-tealSoft">Briefly Legal</p>
-          <h1 className="mt-2 text-2xl font-semibold text-white md:text-3xl">{page.title}</h1>
+          <h1 className="mt-2 text-2xl font-semibold text-ink md:text-3xl">{page.title}</h1>
           <p className="mt-2 max-w-3xl text-sm text-muted">{page.description}</p>
           <p className="mt-3 text-sm text-accent">
             Need help? Email{" "}
@@ -95,7 +95,7 @@ export default async function LegalPage({ params }: { params: Promise<{ slug: st
             .
           </p>
         </div>
-        <article className="prose prose-invert prose-headings:text-white prose-a:text-accent prose-strong:text-white prose-blockquote:border-accent/40 prose-blockquote:text-muted max-w-none px-6 py-8 md:px-8 md:py-10">
+        <article className="prose prose-a:text-accent prose-blockquote:border-accent/40 prose-blockquote:text-muted max-w-none px-6 py-8 md:px-8 md:py-10">
           <ReactMarkdown>{markdown ?? fallback}</ReactMarkdown>
         </article>
       </div>

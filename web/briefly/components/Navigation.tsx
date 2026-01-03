@@ -94,20 +94,20 @@ export default function Navigation() {
     <header
       className={clsx(
         "sticky top-0 z-30 transition-colors",
-        scrolled ? "bg-gradient-to-b from-[#0f1d2c] via-[#0f1d2c] to-transparent" : "bg-transparent"
+        scrolled ? "border-b border-borderSoft bg-white/80 backdrop-blur" : "bg-transparent"
       )}
     >
       <div className="container relative flex items-center justify-between py-4">
-        <Link href="/" className="text-white">
+        <Link href="/" className="text-ink">
           <div className="flex items-center gap-3">
-          <Image
-            src="/briefly-logo.png"
-            alt="Briefly"
-            width={40}
-            height={40}
-            className="rounded-xl"
-          />
-            <p className="text-sm uppercase tracking-[0.2em] text-tealSoft">Briefly</p>
+            <Image
+              src="/briefly-logo.svg"
+              alt="Briefly"
+              width={90}
+              height={23}
+              className="h-auto w-[90px]"
+              priority
+            />
           </div>
         </Link>
 
@@ -124,7 +124,7 @@ export default function Navigation() {
                   onBlur={handleAccountBlur}
                 >
                   <button
-                    className="inline-flex items-center gap-2 rounded-full border border-borderSoft px-3 py-2 text-sm font-semibold text-white transition hover:border-teal"
+                    className="inline-flex items-center gap-2 rounded-full border border-borderSoft px-3 py-2 text-sm font-semibold text-ink transition hover:border-accent"
                     aria-haspopup="menu"
                     aria-expanded={accountOpen}
                   >
@@ -137,7 +137,7 @@ export default function Navigation() {
                       accountOpen ? "visible translate-y-0 opacity-100" : "invisible -translate-y-1 opacity-0"
                     )}
                   >
-                    <div className="rounded-2xl border border-borderSoft/80 bg-overlay/90 p-3 shadow-xl backdrop-blur transition">
+                    <div className="rounded-2xl border border-borderSoft bg-surface/95 p-3 shadow-xl backdrop-blur transition">
                     
                       <div className="mt-2 flex flex-col gap-1 text-sm">
                         <button
@@ -145,14 +145,14 @@ export default function Navigation() {
                             setAccountOpen(false);
                             router.push("/subscription");
                           }}
-                          className="flex items-center gap-2 rounded-xl px-3 py-2 text-left text-white transition hover:bg-overlay/80"
+                          className="flex items-center gap-2 rounded-xl px-3 py-2 text-left text-ink transition hover:bg-overlay/60"
                         >
                           <CircleUser className="h-4 w-4 text-muted" />
                           Subscription
                         </button>
                         <button
                           onClick={handleManageBilling}
-                          className="flex items-center gap-2 rounded-xl px-3 py-2 text-left text-white transition hover:bg-overlay/80 disabled:opacity-60"
+                          className="flex items-center gap-2 rounded-xl px-3 py-2 text-left text-ink transition hover:bg-overlay/60 disabled:opacity-60"
                           disabled={billingLoading}
                         >
                           {billingLoading ? (
@@ -170,13 +170,13 @@ export default function Navigation() {
                             setAccountOpen(false);
                             logout();
                           }}
-                          className="flex items-center gap-2 rounded-xl px-3 py-2 text-left text-white transition hover:bg-overlay/80"
+                          className="flex items-center gap-2 rounded-xl px-3 py-2 text-left text-ink transition hover:bg-overlay/60"
                         >
                           <LogOut className="h-4 w-4 text-muted" />
                           Logout
                         </button>
                       </div>
-                      {billingError && <p className="mt-2 text-xs text-red-200">{billingError}</p>}
+                      {billingError && <p className="mt-2 text-xs text-red-600">{billingError}</p>}
                     </div>
                   </div>
                 </div>
@@ -185,7 +185,7 @@ export default function Navigation() {
               !isLoginPage && (
                 <button
                   onClick={() => router.push("/login")}
-                  className="inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-sm font-semibold text-ink transition hover:opacity-90"
+                  className="inline-flex items-center gap-2 rounded-full bg-navBar px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
                 >
                   <LogIn className="h-4 w-4" />
                   Login
@@ -195,7 +195,7 @@ export default function Navigation() {
           </nav>
 
           <button
-            className="inline-flex items-center rounded-full bg-transparent p-2 text-white md:hidden"
+            className="inline-flex items-center rounded-full bg-transparent p-2 text-ink md:hidden"
             onClick={() => setOpen((prev) => !prev)}
             aria-label="Toggle navigation"
           >
@@ -220,20 +220,20 @@ export default function Navigation() {
         />
         <div
           className={clsx(
-            "absolute right-0 top-0 flex h-full w-80 max-w-[85%] flex-col gap-6 bg-overlay/95 p-6 shadow-2xl ring-1 ring-borderSoft transition-transform duration-200",
+            "absolute right-0 top-0 flex h-full w-80 max-w-[85%] flex-col gap-6 bg-white p-6 shadow-2xl ring-1 ring-borderSoft transition-transform duration-200",
             open ? "translate-x-0" : "translate-x-full"
           )}
         >
           {session ? (
             <>
               <div className="pt-4">
-                <p className="text-lg font-semibold text-white">{primaryName ?? "Account"}</p>
+                <p className="text-lg font-semibold text-ink">{primaryName ?? "Account"}</p>
                 {email ? <p className="mt-1 text-sm text-muted">{email}</p> : null}
               </div>
 
               <div className="flex flex-col gap-3">
                 <button
-                  className="inline-flex items-center justify-between gap-2 rounded-xl border border-borderSoft px-4 py-3 text-sm font-semibold text-white transition hover:border-teal disabled:opacity-60"
+                  className="inline-flex items-center justify-between gap-2 rounded-xl border border-borderSoft px-4 py-3 text-sm font-semibold text-ink transition hover:border-accent disabled:opacity-60"
                   onClick={() => {
                     setOpen(false);
                     handleManageBilling();
@@ -251,7 +251,7 @@ export default function Navigation() {
                   <ExternalLink className="h-3 w-3 text-muted" />
                 </button>
                 <button
-                  className="inline-flex items-center justify-between gap-2 rounded-xl bg-surface px-4 py-3 text-sm font-semibold text-white transition hover:bg-overlay/80"
+                  className="inline-flex items-center justify-between gap-2 rounded-xl bg-surface px-4 py-3 text-sm font-semibold text-ink transition hover:bg-overlay/60"
                   onClick={() => {
                     setOpen(false);
                     router.push("/subscription");
@@ -264,7 +264,7 @@ export default function Navigation() {
                   <ExternalLink className="h-3 w-3 text-muted" />
                 </button>
                 <button
-                  className="inline-flex items-center justify-between gap-2 rounded-xl bg-surface px-4 py-3 text-sm font-semibold text-white transition hover:bg-overlay/80"
+                  className="inline-flex items-center justify-between gap-2 rounded-xl bg-surface px-4 py-3 text-sm font-semibold text-ink transition hover:bg-overlay/60"
                   onClick={() => {
                     setOpen(false);
                     logout();
@@ -275,14 +275,14 @@ export default function Navigation() {
                     Logout
                   </span>
                 </button>
-                {billingError && <p className="text-sm text-red-200">{billingError}</p>}
+                {billingError && <p className="text-sm text-red-600">{billingError}</p>}
               </div>
             </>
           ) : (
             !isLoginPage && (
               <div className="pt-4">
                 <button
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-accent px-4 py-3 text-sm font-semibold text-ink transition hover:opacity-90"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-navBar px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90"
                   onClick={() => {
                     setOpen(false);
                     router.push("/login");

@@ -3,6 +3,8 @@ export type TopicRow = {
   user_id: string;
   title?: string | null;
   original_text: string;
+  classification_id?: string | null;
+  classification_short_label?: string | null;
   is_active: boolean;
   is_seed: boolean;
   order_index: number;

@@ -22,6 +22,8 @@ export interface SegmentDiveDeeperSeedDraft {
 
 export interface TopicMeta {
   title: string;
+  classificationId: string;
+  classificationShortLabel: string;
 }
 
 export interface LlmProvider {

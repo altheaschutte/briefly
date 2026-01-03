@@ -1,21 +1,41 @@
 import SwiftUI
 
 extension Color {
-    // Core palette (dark-mode only)
-    static let brieflyBackground = Color(hex: 0x132A3B)
-    static let brieflySurface = Color(hex: 0x1F3A4E)
+    // Raw palette
+    static let warmGrey = Color(hex: 0xF3EFEA)
+    static let mediumWarmGrey = Color(hex: 0xE2DFDB)
+    static let darkerWarmGrey = Color(hex: 0x9F9A95)
+    static let offBlack = Color(hex: 0x2E2E2E)
+    static let gold = Color(hex: 0xA2845E)
 
-    // Accents
-    static let brieflyPrimary = Color(hex: 0xFFA563) // brightest CTA accent, white text on top
-    static let brieflySecondary = Color(hex: 0x37A8AE) // secondary accent for buttons and chips
-    static let brieflyAccentStrong = Color(hex: 0x2A7997)
-    static let brieflyAccentSoft = Color(hex: 0x93C8C2)
+    // Semantic surfaces
+    static let brieflyBackground = Color.white
+    static let brieflySurface = Color.warmGrey
+    static let brieflyDarkSurface = Color(hex: 0x383838)
 
-    // UI helpers
-    static let brieflyDurationBackground = Color(hex: 0x2A7997, alpha: 0.3)
-    static let brieflyListenedBackground = Color(hex: 0xFFA563, alpha: 0.3)
-    static let brieflyTextMuted = Color.white.opacity(0.78)
-    static let brieflyBorder = Color.white.opacity(0.12)
+    // Accent (gold)
+    static let brieflyPrimary = Color.gold
+    static let brieflySecondary = Color.offBlack
+    static let brieflyAccentStrong = Color.gold
+    static let brieflyAccentSoft = Color.gold
+
+    // Text
+    static let brieflyTextPrimary = Color.offBlack
+    static let brieflyTextSecondary = Color(hex: 0x757575)
+    static let brieflyTextMuted = Color(hex: 0x8A8A8E)
+
+    // Borders + pills
+    static let brieflyBorder = Color.mediumWarmGrey
+    static let brieflyClassificationPillText = Color(hex: 0x858486)
+    static let brieflyDurationBackground = Color.mediumWarmGrey
+    static let brieflyListenedBackground = Color(hex: 0xA2845E, alpha: 0.18)
+    static let brieflyProgressTrackBackground = Color(hex: 0xE9E9EA)
+
+    // Tab bar
+    static let brieflyTabBarBackground = Color(hex: 0x2F2F2F)
+    static let brieflyTabBarInactive = Color(hex: 0xB3B3B3)
+
+    // Status
     static let brieflyDestructive = Color(hex: 0xC13232)
 }
 

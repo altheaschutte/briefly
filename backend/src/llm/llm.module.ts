@@ -25,6 +25,9 @@ type ProviderName = 'openai' | 'xai' | 'grok';
         const scriptProviderName = resolveProviderName(configService.get<string>('LLM_SCRIPT_PROVIDER') ?? defaultProvider);
 
         const rewriteProvider = createOpenAiCompatibleProvider(configService, rewriteProviderName as ProviderName, llmUsageService);
+        const metaProvider = rewriteProviderName === 'openai'
+          ? rewriteProvider
+          : createOpenAiCompatibleProvider(configService, 'openai', llmUsageService);
         const scriptProvider =
           scriptProviderName === rewriteProviderName
             ? rewriteProvider
@@ -51,8 +54,8 @@ type ProviderName = 'openai' | 'xai' | 'grok';
             return rewriteProvider.generateSeedTopics(...args);
           },
           generateTopicMeta: (...args: Parameters<LlmProvider['generateTopicMeta']>) => {
-            logCall(`rewrite:${rewriteProviderName}`, 'generateTopicMeta');
-            return rewriteProvider.generateTopicMeta(...args);
+            logCall('meta:openai', 'generateTopicMeta');
+            return metaProvider.generateTopicMeta(...args);
           },
           generateSegmentDiveDeeperSeed: (...args: Parameters<LlmProvider['generateSegmentDiveDeeperSeed']>) => {
             logCall(`rewrite:${rewriteProviderName}`, 'generateSegmentDiveDeeperSeed');

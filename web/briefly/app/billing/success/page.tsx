@@ -5,7 +5,7 @@ import { CheckCircle, Home, User } from "lucide-react";
 
 export default function BillingSuccessPage() {
   return (
-    <main className="min-h-screen bg-gradient-to-b from-[#0a1018] via-[#0a1018] to-[#0d1521] text-white">
+    <main className="min-h-screen bg-midnight text-ink">
       <div className="mx-auto flex max-w-3xl flex-col gap-8 px-6 py-16">
         <header className="space-y-2">
           <p className="text-xs uppercase tracking-[0.2em] text-tealSoft/80">Billing</p>
@@ -29,14 +29,14 @@ export default function BillingSuccessPage() {
           <div className="grid gap-3 sm:grid-cols-2">
             <Link
               href="/subscription"
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-accent px-4 py-3 text-sm font-semibold text-ink shadow-accent transition hover:-translate-y-0.5 hover:brightness-105"
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-ink px-4 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:brightness-110"
             >
               <User className="h-4 w-4" />
               Manage subscription
             </Link>
             <Link
               href="/"
-              className="inline-flex items-center justify-center gap-2 rounded-full border border-borderSoft px-4 py-3 text-sm font-semibold text-white transition hover:border-teal"
+              className="inline-flex items-center justify-center gap-2 rounded-full border border-borderSoft px-4 py-3 text-sm font-semibold text-ink transition hover:border-accent"
             >
               <Home className="h-4 w-4" />
               Back to home

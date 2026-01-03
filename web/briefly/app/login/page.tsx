@@ -98,21 +98,20 @@ export default function LoginPage() {
       <div className="w-full max-w-sm space-y-4">
         <div className="mb-12 flex flex-col items-center gap-4 text-center">
           <Image
-            src="/briefly-logo.png"
+            src="/briefly-logo.svg"
             alt="Briefly logo"
-            width={72}
-            height={72}
-            className="rounded-2xl"
+            width={90}
+            height={22}
+            className="h-auto w-[90px]"
             priority
           />
-          <p className="text-sm uppercase tracking-[0.3em] text-tealSoft md:text-base">Briefly</p>
         </div>
 
         <button
           type="button"
           onClick={handleGoogleLogin}
           disabled={submitting}
-          className="flex w-full items-center justify-center gap-3 rounded-full border border-white/15 bg-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/15 disabled:opacity-70"
+          className="flex w-full items-center justify-center gap-3 rounded-full border border-borderSoft bg-surface px-4 py-3 text-sm font-semibold text-ink transition hover:bg-overlay/60 disabled:opacity-70"
         >
           <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5">
             <path
@@ -135,21 +134,21 @@ export default function LoginPage() {
           Continue with Google
         </button>
 
-        <div className="flex items-center gap-3 text-white/60">
-          <div className="h-px flex-1 bg-white/15" />
+        <div className="flex items-center gap-3 text-muted">
+          <div className="h-px flex-1 bg-borderSoft" />
           <span className="text-xs font-semibold uppercase tracking-[0.25em]">Or</span>
-          <div className="h-px flex-1 bg-white/15" />
+          <div className="h-px flex-1 bg-borderSoft" />
         </div>
 
         <form className="space-y-4" onSubmit={codeSent ? handleVerify : handleRequest}>
           <label className="block space-y-1  text-muted">
             <span className="mb-2 text-sm">Email</span>
-            <div className="flex items-center gap-2 rounded-lg bg-overlay px-3 py-2 text-white focus-within:ring-1 focus-within:ring-tealSoft">
+            <div className="flex items-center gap-2 rounded-lg bg-surface px-3 py-2 text-ink ring-1 ring-transparent focus-within:ring-ink">
              
               <input
                 type="email"
                 placeholder="name@example.com"
-                className="w-full bg-transparent text-white outline-none "
+                className="w-full bg-transparent text-ink outline-none"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -160,14 +159,14 @@ export default function LoginPage() {
           {codeSent && (
             <label className="block space-y-1  text-muted">
             <span className="mb-2 text-sm">6-digit code</span>
-              <div className="flex items-center gap-2 rounded-lg bg-overlay px-3 py-2 text-white focus-within:ring-1 focus-within:ring-tealSoft">
+              <div className="flex items-center gap-2 rounded-lg bg-surface px-3 py-2 text-ink ring-1 ring-transparent focus-within:ring-ink">
                 <Lock className="h-4 w-4 text-tealSoft" />
                 <input
                   type="text"
                   inputMode="numeric"
                   pattern="[0-9]*"
                   placeholder="123456"
-                  className="w-full bg-transparent text-white outline-none"
+                  className="w-full bg-transparent text-ink outline-none"
                   value={code}
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                   required
@@ -176,7 +175,7 @@ export default function LoginPage() {
             </label>
           )}
           <button
-            className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-accent px-4 py-3 text-sm font-semibold text-ink transition hover:opacity-90 disabled:opacity-70"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-ink px-4 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-70"
             type="submit"
             disabled={submitting}
           >
@@ -191,7 +190,7 @@ export default function LoginPage() {
           </div>
         )}
         {error && (
-          <div className="flex items-center gap-2 text-sm text-red-100">
+          <div className="flex items-center gap-2 text-sm text-red-600">
             <AlertCircle className="h-4 w-4" />
             {error}
           </div>

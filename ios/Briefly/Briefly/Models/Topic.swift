@@ -4,6 +4,7 @@ struct Topic: Codable, Identifiable, Equatable, Hashable {
     var id: UUID?
     var title: String?
     var originalText: String
+    var classificationShortLabel: String?
     var orderIndex: Int
     var isActive: Bool
 
@@ -13,6 +14,8 @@ struct Topic: Codable, Identifiable, Equatable, Hashable {
         case originalTextCamel = "originalText"
         case originalTextSnake = "original_text"
         case descriptionFallback = "description"
+        case classificationShortLabelCamel = "classificationShortLabel"
+        case classificationShortLabelSnake = "classification_short_label"
         case orderIndexCamel = "orderIndex"
         case orderIndexSnake = "order_index"
         case isActiveCamel = "isActive"
@@ -20,10 +23,18 @@ struct Topic: Codable, Identifiable, Equatable, Hashable {
         case isActiveLegacy = "active"
     }
 
-    init(id: UUID? = nil, title: String? = nil, originalText: String, orderIndex: Int, isActive: Bool) {
+    init(
+        id: UUID? = nil,
+        title: String? = nil,
+        originalText: String,
+        classificationShortLabel: String? = nil,
+        orderIndex: Int,
+        isActive: Bool
+    ) {
         self.id = id
         self.title = title
         self.originalText = originalText
+        self.classificationShortLabel = classificationShortLabel
         self.orderIndex = orderIndex
         self.isActive = isActive
     }
@@ -43,6 +54,14 @@ struct Topic: Codable, Identifiable, Equatable, Hashable {
             originalText = description
         } else {
             originalText = ""
+        }
+
+        if let camel = try? container.decode(String.self, forKey: .classificationShortLabelCamel) {
+            classificationShortLabel = camel
+        } else if let snake = try? container.decode(String.self, forKey: .classificationShortLabelSnake) {
+            classificationShortLabel = snake
+        } else {
+            classificationShortLabel = nil
         }
 
         if let camel = try? container.decode(Int.self, forKey: .orderIndexCamel) {
@@ -69,6 +88,7 @@ struct Topic: Codable, Identifiable, Equatable, Hashable {
         try container.encodeIfPresent(id, forKey: .id)
         try container.encodeIfPresent(title, forKey: .title)
         try container.encode(originalText, forKey: .originalTextSnake)
+        try container.encodeIfPresent(classificationShortLabel, forKey: .classificationShortLabelSnake)
         try container.encode(orderIndex, forKey: .orderIndexSnake)
         try container.encode(isActive, forKey: .isActiveSnake)
     }
@@ -78,6 +98,7 @@ struct Topic: Codable, Identifiable, Equatable, Hashable {
             id: UUID(),
             title: "Local Arts",
             originalText: "Local arts: upcoming exhibitions and creative events this week.",
+            classificationShortLabel: nil,
             orderIndex: 0,
             isActive: true
         )

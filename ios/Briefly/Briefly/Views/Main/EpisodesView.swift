@@ -3,6 +3,7 @@ import SwiftUI
 struct EpisodesView: View {
     @ObservedObject var viewModel: EpisodesViewModel
     @EnvironmentObject private var audioManager: AudioPlayerManager
+    @EnvironmentObject private var appViewModel: AppViewModel
     @State private var bannerMessage: String?
 
     var body: some View {
@@ -10,9 +11,13 @@ struct EpisodesView: View {
             ForEach(viewModel.sections) { section in
                 Section(header: Text(section.title)) {
                     ForEach(section.episodes) { episode in
-                        NavigationLink(destination: EpisodeDetailView(episode: episode)) {
+                        Button {
+                            appViewModel.presentEpisodeDetail(episode)
+                        } label: {
                             EpisodeRow(episode: episode)
                         }
+                        .buttonStyle(.plain)
+                        .listRowSeparator(.hidden)
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
                                 deleteEpisode(episode)
@@ -34,6 +39,7 @@ struct EpisodesView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        .listSectionSeparator(.hidden)
         .overlay(alignment: .top) { bannerView }
         .overlay {
             if let message = viewModel.errorMessage, viewModel.episodes.isEmpty {
@@ -45,10 +51,6 @@ struct EpisodesView: View {
                 )
                 .transition(.opacity)
             }
-        }
-        .overlay(alignment: .bottom) {
-            PlayerBarView()
-                .padding(.bottom, 8)
         }
         .onChange(of: viewModel.errorMessage) { newValue in
             handleErrorChange(newValue)
@@ -67,8 +69,7 @@ private struct EpisodeRow: View {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(episode.displayDateLabel)
-                        .font(.caption)
-                        .fontWeight(.semibold)
+                        .font(.caption.weight(.medium))
                         .foregroundColor(.brieflyTextMuted)
                     Text(episode.displayTitle)
                         .font(.callout.weight(.semibold))
@@ -85,36 +86,31 @@ private struct EpisodeRow: View {
 
             pillRow
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 14)
     }
 
-    private var artwork: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Color.brieflySurface)
-            if let url = episode.coverImageURL {
-                CachedAsyncImage(url: url, maxPixelSize: Int(ceil(72 * UIScreen.main.scale))) { image in
-                    image
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 72, height: 72)
-                } placeholder: {
-                    fallbackArtwork.opacity(0.25)
-                } failure: {
-                    fallbackArtwork
+	    private var artwork: some View {
+	        ZStack {
+	            RoundedRectangle(cornerRadius: 16)
+	                .fill(Color.brieflySurface)
+	            if let url = episode.coverImageURL {
+	                CachedAsyncImage(url: url, maxPixelSize: Int(ceil(72 * UIScreen.main.scale))) { image in
+	                    image
+	                        .resizable()
+	                        .scaledToFill()
+	                        .frame(width: 72, height: 72)
+	                } placeholder: {
+	                    fallbackArtwork.opacity(0.25)
+	                } failure: {
+	                    fallbackArtwork
                 }
             } else {
                 fallbackArtwork
             }
-        }
-        .frame(width: 72, height: 72)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(Color.brieflyBorder, lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.24), radius: 8, x: 0, y: 4)
-    }
+	        }
+	        .frame(width: 72, height: 72)
+	        .clipShape(RoundedRectangle(cornerRadius: 16))
+	    }
 
     private var fallbackArtwork: some View {
         Image(systemName: "waveform.circle.fill")
@@ -132,8 +128,8 @@ private struct EpisodeRow: View {
         }
         .padding(.vertical, 4)
         .padding(.horizontal, 8)
-        .background(Color.brieflyDurationBackground)
-        .foregroundColor(Color.brieflyAccentSoft)
+        .background(Color.warmGrey)
+        .foregroundColor(Color.gold)
         .clipShape(Capsule())
     }
 
@@ -155,32 +151,31 @@ private struct EpisodeRow: View {
         let isCurrentlyPlaying = audioManager.isPlaying && audioManager.currentEpisode?.id == episode.id
         return HStack(spacing: 8) {
             durationPill
-            partialPlaybackStatus
-            if isCurrentlyPlaying {
-                EqualizerWaveform(isAnimating: true, color: Color.brieflyAccentSoft, barCount: 4, minHeight: 4, maxHeight: 14, barWidth: 2, spacing: 2)
-                    .accessibilityLabel("Playing")
-            } else if playbackHistory.isListened(episode.id) {
+            partialPlaybackStatus(isCurrentlyPlaying: isCurrentlyPlaying)
+            if isCurrentlyPlaying == false, playbackHistory.isListened(episode.id) {
                 listenedPill
             }
         }
     }
 
     @ViewBuilder
-    private var partialPlaybackStatus: some View {
+    private func partialPlaybackStatus(isCurrentlyPlaying: Bool) -> some View {
         if let remainingSeconds = playbackHistory.remainingSeconds(episodeID: episode.id, fallbackDurationSeconds: episode.durationDisplaySeconds),
            let fraction = playbackHistory.partialPlaybackFraction(episodeID: episode.id, fallbackDurationSeconds: episode.durationDisplaySeconds) {
             HStack(spacing: 8) {
-                Text(remainingLabel(seconds: remainingSeconds))
-                    .font(.caption.weight(.semibold))
-                    .foregroundColor(.brieflyTextMuted)
-                ProgressView(value: fraction)
-                    .progressViewStyle(.linear)
-                    .tint(Color.brieflyAccentSoft)
-                    .frame(width: 64)
-                    .scaleEffect(x: 1, y: 0.85, anchor: .center)
+                if isCurrentlyPlaying {
+                    EqualizerWaveform(isAnimating: true, color: Color.gold, barCount: 4, minHeight: 4, maxHeight: 14, barWidth: 2, spacing: 2)
+                        .accessibilityLabel("Playing")
+                } else {
+                    Text(remainingLabel(seconds: remainingSeconds))
+                        .font(.caption.weight(.medium))
+                        .foregroundColor(Color.gold)
+                }
+
+                PlaybackProgressBar(fraction: fraction, width: 64, height: 2)
             }
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("\(remainingLabel(seconds: remainingSeconds)) remaining")
+            .accessibilityLabel(isCurrentlyPlaying ? "Playing. \(remainingLabel(seconds: remainingSeconds)) remaining" : "\(remainingLabel(seconds: remainingSeconds)) remaining")
         }
     }
 
@@ -248,5 +243,26 @@ private extension EpisodesView {
         withAnimation {
             bannerMessage = nil
         }
+    }
+}
+
+private struct PlaybackProgressBar: View {
+    let fraction: Double
+    let width: CGFloat
+    let height: CGFloat
+
+    var body: some View {
+        GeometryReader { proxy in
+            let clampedFraction = min(max(fraction, 0), 1)
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: height / 2, style: .continuous)
+                    .fill(Color.brieflyProgressTrackBackground)
+                RoundedRectangle(cornerRadius: height / 2, style: .continuous)
+                    .fill(Color.gold)
+                    .frame(width: proxy.size.width * clampedFraction)
+            }
+        }
+        .frame(width: width, height: height)
+        .accessibilityHidden(true)
     }
 }

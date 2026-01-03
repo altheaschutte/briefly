@@ -29,7 +29,7 @@ struct TopicEditView: View {
                     .tint(.brieflyPrimary)
 
                 if activationWouldExceedLimit {
-                    Text("You already have \(viewModel.maxActiveTopics) active topics. Deactivate one before adding another.")
+                    Text("You already have \(viewModel.maxActiveTopics) active Briefs. Deactivate one before adding another.")
                         .font(.footnote)
                         .foregroundColor(.brieflyTextMuted)
                 }
@@ -41,7 +41,7 @@ struct TopicEditView: View {
                     Button(role: .destructive) {
                         Task { await deleteTopic() }
                     } label: {
-                        Text("Delete topic")
+                        Text("Delete Brief")
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .tint(.brieflyDestructive)
@@ -52,7 +52,7 @@ struct TopicEditView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .listRowBackground(Color.brieflyBackground)
-        .navigationTitle(isNew ? "Add Topic" : "Edit Topic")
+        .navigationTitle(isNew ? "Add Brief" : "Edit Brief")
         .navigationBarTitleDisplayMode(.inline)
         .background(Color.brieflyBackground)
         .toolbar {
@@ -88,11 +88,11 @@ struct TopicEditView: View {
 
     private var topicField: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Topic")
+            Text("Brief")
                 .font(.footnote.weight(.semibold))
                 .foregroundColor(.brieflyTextMuted)
 
-            TextField("Topic", text: $topic.originalText, axis: .vertical)
+            TextField("Brief", text: $topic.originalText, axis: .vertical)
                 .frame(minHeight: topicFieldMinHeight, alignment: .topLeading)
                 .focused($isFieldFocused)
                 .inputFieldStyle()
@@ -106,7 +106,7 @@ struct TopicEditView: View {
     private func saveTopic() async {
         let trimmed = topic.originalText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            alertMessage = "Topic text cannot be empty."
+            alertMessage = "Brief text cannot be empty."
             return
         }
 

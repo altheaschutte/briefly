@@ -1,10 +1,11 @@
 import SwiftUI
 import UIKit
-import ImageIO
 
 	struct EpisodeDetailView: View {
 	    let episodeId: UUID
 	    let onCreateEpisode: (() -> Void)?
+        let usesCustomChrome: Bool
+        let onScrollOffsetChange: ((CGFloat) -> Void)?
 	    @EnvironmentObject private var appViewModel: AppViewModel
 	    @EnvironmentObject private var audioManager: AudioPlayerManager
 	    @EnvironmentObject private var playbackHistory: PlaybackHistory
@@ -35,40 +36,43 @@ import ImageIO
 	    @State private var createdDiveDeeperEpisode: Episode?
 	    @State private var navigateToDiveDeeperEpisode: Bool = false
 
-	    init(episodeId: UUID, initialEpisode: Episode? = nil, onCreateEpisode: (() -> Void)? = nil) {
-	        self.episodeId = episodeId
-	        self.onCreateEpisode = onCreateEpisode
-	        let seed = initialEpisode ?? Episode(id: episodeId, title: "Episode", summary: "")
-	        _detailedEpisode = State(initialValue: seed)
-	        _segments = State(initialValue: seed.segments ?? [])
-	        _sources = State(initialValue: seed.sources ?? [])
-	    }
+		    init(episodeId: UUID, initialEpisode: Episode? = nil, onCreateEpisode: (() -> Void)? = nil, usesCustomChrome: Bool = false, onScrollOffsetChange: ((CGFloat) -> Void)? = nil) {
+		        self.episodeId = episodeId
+		        self.onCreateEpisode = onCreateEpisode
+                self.usesCustomChrome = usesCustomChrome
+                self.onScrollOffsetChange = onScrollOffsetChange
+		        let seed = initialEpisode ?? Episode(id: episodeId, title: "Episode", summary: "")
+		        _detailedEpisode = State(initialValue: seed)
+		        _segments = State(initialValue: seed.segments ?? [])
+		        _sources = State(initialValue: seed.sources ?? [])
+		    }
 
-    init(episode: Episode, onCreateEpisode: (() -> Void)? = nil) {
-        self.init(episodeId: episode.id, initialEpisode: episode, onCreateEpisode: onCreateEpisode)
-    }
+	    init(episode: Episode, onCreateEpisode: (() -> Void)? = nil, usesCustomChrome: Bool = false, onScrollOffsetChange: ((CGFloat) -> Void)? = nil) {
+	        self.init(episodeId: episode.id, initialEpisode: episode, onCreateEpisode: onCreateEpisode, usesCustomChrome: usesCustomChrome, onScrollOffsetChange: onScrollOffsetChange)
+	    }
 
 	    var body: some View {
 	        ZStack {
-	            NavigationLink(
-	                destination: Group {
-	                    if let createdDiveDeeperEpisode {
-	                        EpisodeDetailView(episode: createdDiveDeeperEpisode, onCreateEpisode: onCreateEpisode)
-	                    } else {
-	                        EmptyView()
-	                    }
-	                },
-	                isActive: $navigateToDiveDeeperEpisode
-	            ) { EmptyView() }
+		            NavigationLink(
+		                destination: Group {
+		                    if let createdDiveDeeperEpisode {
+		                        EpisodeDetailView(episode: createdDiveDeeperEpisode, onCreateEpisode: onCreateEpisode, onScrollOffsetChange: onScrollOffsetChange)
+		                    } else {
+		                        EmptyView()
+		                    }
+		                },
+		                isActive: $navigateToDiveDeeperEpisode
+		            ) { EmptyView() }
 	            .hidden()
 
-	            ScrollViewReader { proxy in
-	                ScrollView {
-	                    VStack(alignment: .leading, spacing: 16) {
-	                        header
-	                        playbackControls
+		            ScrollViewReader { proxy in
+		                ScrollView {
+                            scrollOffsetReader
+		                    VStack(alignment: .leading, spacing: 16) {
+		                        header
+		                        playbackControls
 //                    actionRow
-	                        diveDeeperSection
+		                        diveDeeperSection
 	                            .padding(.top, 8)
 	                        if let script = scriptContent {
 	                            scriptSection(title: script.title, body: script.body)
@@ -88,32 +92,57 @@ import ImageIO
 	                            .font(.footnote.weight(.semibold))
 	                            .padding(.top, 2)
 	                        }
-	                    }
-	                    .padding()
-	                }
-	                .onChange(of: scrollToScript) { target in
-	                    guard target else { return }
-	                    withAnimation {
-	                        proxy.scrollTo(scriptSectionID, anchor: .top)
-	                    }
+		                    }
+		                    .padding()
+		                }
+                        .coordinateSpace(name: scrollCoordinateSpace)
+                        .onPreferenceChange(EpisodeDetailScrollOffsetKey.self) { offset in
+                            onScrollOffsetChange?(offset)
+                        }
+		                .onChange(of: scrollToScript) { target in
+		                    guard target else { return }
+		                    withAnimation {
+		                        proxy.scrollTo(scriptSectionID, anchor: .top)
+		                    }
 	                    scrollToScript = false
 	                }
 	            }
 	        }
-	        .background(Color.brieflyBackground)
-	        .navigationTitle("Episode")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    showActionsSheet = true
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .imageScale(.large)
-                        .accessibilityLabel("More actions")
+	        .background(episodeDetailBackground.ignoresSafeArea())
+	        .navigationTitle(usesCustomChrome ? "" : episodeTitle)
+	        .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(episodeDetailBackground, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                if usesCustomChrome == false {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button(action: close) {
+                            Image(systemName: "chevron.down")
+                                .imageScale(.large)
+                                .foregroundStyle(episodeDetailTextPrimary)
+                                .accessibilityLabel("Close episode")
+                        }
+                    }
+
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button {
+                            showActionsSheet = true
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .imageScale(.large)
+                                .foregroundStyle(episodeDetailTextPrimary)
+                                .accessibilityLabel("More actions")
+                        }
+                    }
                 }
             }
-	        }
+            .toolbar(usesCustomChrome ? .hidden : .visible, for: .navigationBar)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if usesCustomChrome {
+                    customTopBar
+                }
+            }
 	        .task(id: episodeId) {
 	            await loadDetailsIfNeeded()
 	        }
@@ -122,9 +151,10 @@ import ImageIO
 	            queuedDiveDeeperTask = nil
 	            queuedDiveDeeperSeedID = nil
 	        }
-        .safeAreaInset(edge: .bottom) {
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             playerBarInset
         }
+        .brieflyHideTrayMiniPlayer(true)
         .sheet(isPresented: $showSpeedSheet) {
             PlaybackSpeedSheet(selectedSpeed: audioManager.playbackSpeed) { speed in
                 audioManager.setPlaybackSpeed(speed)
@@ -141,7 +171,7 @@ import ImageIO
             actionsSheet
                 .presentationDetents([.medium, .large], selection: $actionsSheetDetent)
                 .presentationCornerRadius(26)
-                .presentationBackground(Color.brieflySurface)
+                .presentationBackground(episodeDetailBackground)
                 .presentationDragIndicator(.visible)
         }
         .onChange(of: showActionsSheet) { isShowing in
@@ -168,15 +198,22 @@ import ImageIO
 }
 
 private extension EpisodeDetailView {
+    private var episodeDetailBackground: Color { .offBlack }
+    private var episodeDetailSurface: Color { .brieflyDarkSurface }
+    private var episodeDetailTextPrimary: Color { .white }
+    private var episodeDetailTextSecondary: Color { .white.opacity(0.6) }
+    private var episodeDetailDivider: Color { .white.opacity(0.14) }
+
     var header: some View {
         VStack(alignment: .leading, spacing: 10) {
             coverImageHero
                 .padding(.bottom, 12)
             Text(detailedEpisode.displayTitle)
-                .font(.title.bold())
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundColor(episodeDetailTextPrimary)
             if let date = detailedEpisode.displayDate {
                 Text(date.formatted(date: .abbreviated, time: .shortened))
-                    .foregroundColor(.brieflyTextMuted)
+                    .foregroundColor(episodeDetailTextSecondary)
             }
             summaryText
         }
@@ -184,37 +221,36 @@ private extension EpisodeDetailView {
 
     var summaryText: some View {
         Text(detailedEpisode.summary)
-            .foregroundColor(.primary)
+            .foregroundColor(episodeDetailTextSecondary)
             .multilineTextAlignment(.leading)
     }
 
     var coverImageHero: some View {
-        let heroSize = min(UIScreen.main.bounds.width - 80, 260)
+        let heroSize = min(UIScreen.main.bounds.width - 32, 273)
 
         return coverArtwork
             .frame(width: heroSize, height: heroSize)
-            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .shadow(color: Color.black.opacity(0.18), radius: 22, x: 0, y: 14)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .frame(maxWidth: .infinity)
     }
 
-    var coverArtwork: some View {
-        let heroSize = min(UIScreen.main.bounds.width - 80, 260)
-        let maxPixelSize = Int(ceil(heroSize * UIScreen.main.scale))
+	    var coverArtwork: some View {
+	        let heroSize = min(UIScreen.main.bounds.width - 32, 273)
+	        let maxPixelSize = Int(ceil(heroSize * UIScreen.main.scale))
 
-        return ZStack {
-            Color.brieflySurface
+	        return ZStack {
+	            episodeDetailSurface
 
-            if let url = detailedEpisode.coverImageURL {
-                CachedAsyncImage(url: url, maxPixelSize: maxPixelSize) { image in
-                    image
-                        .resizable()
-                        .scaledToFill()
-                } placeholder: {
-                    SkeletonBlock()
-                } failure: {
-                    fallbackArtwork
-                }
+	            if let url = detailedEpisode.coverImageURL {
+	                CachedAsyncImage(url: url, maxPixelSize: maxPixelSize) { image in
+	                    image
+	                        .resizable()
+	                        .scaledToFill()
+	                } placeholder: {
+	                    SkeletonBlock()
+	                } failure: {
+	                    fallbackArtwork
+	                }
             } else {
                 fallbackArtwork
             }
@@ -224,49 +260,45 @@ private extension EpisodeDetailView {
     var fallbackArtwork: some View {
         Image(systemName: "waveform.circle.fill")
                 .font(.system(size: 42, weight: .semibold))
-                .foregroundColor(Color.brieflySecondary)
+                .foregroundColor(episodeDetailTextSecondary)
     }
 
-    private var actionsSheet: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                actionsHeader
+	    private var actionsSheet: some View {
+	        ScrollView {
+	            VStack(alignment: .leading, spacing: 16) {
+	                actionsHeader
 
-                Divider()
-                    .overlay(Color.brieflyBorder)
+	                Divider()
+	                    .overlay(episodeDetailDivider)
 
-                VStack(spacing: 10) {
-                    ForEach(actionItems) { item in
-                        actionRow(item)
-                    }
+	                VStack(spacing: 10) {
+	                    ForEach(actionItems) { item in
+	                        actionRow(item)
+	                    }
                 }
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 18)
-            .padding(.top, 12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .background(Color.brieflySurface)
-    }
+	            .padding(.top, 12)
+	            .frame(maxWidth: .infinity, alignment: .leading)
+	        }
+	        .background(episodeDetailBackground)
+	    }
 
-    private var actionsHeader: some View {
-        HStack(alignment: .center, spacing: 12) {
-            coverArtwork
-                .frame(width: 64, height: 64)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(Color.brieflyBorder, lineWidth: 1)
-                )
+	    private var actionsHeader: some View {
+	        HStack(alignment: .center, spacing: 12) {
+	            coverArtwork
+	                .frame(width: 64, height: 64)
+	                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(detailedEpisode.displayTitle)
-                    .font(.headline)
-                    .foregroundColor(.white)
+	            VStack(alignment: .leading, spacing: 4) {
+	                Text(detailedEpisode.displayTitle)
+	                    .font(.headline)
+	                    .foregroundColor(episodeDetailTextPrimary)
                     .lineLimit(2)
                 Text(detailedEpisode.subtitle)
                     .font(.subheadline)
-                    .foregroundColor(.brieflyTextMuted)
+                    .foregroundColor(episodeDetailTextSecondary)
                     .lineLimit(2)
             }
             Spacer()
@@ -277,27 +309,27 @@ private extension EpisodeDetailView {
         Button(role: item.role) {
             performActionAndDismiss(item.action)
         } label: {
-            HStack(spacing: 12) {
-                Image(systemName: item.icon)
-                    .font(.system(size: 18, weight: .semibold))
-                    .frame(width: 32, height: 32)
-                    .foregroundColor(item.role == .destructive ? Color.brieflyDestructive : .white)
-                    .background(
-                        Circle()
-                            .fill(Color.white.opacity(0.06))
-                    )
-                Text(item.title)
-                    .font(.body.weight(.semibold))
-                    .foregroundColor(item.role == .destructive ? Color.brieflyDestructive : .white)
-                Spacer()
-            }
-            .padding(.vertical, 10)
-            .padding(.horizontal, 12)
-            .background(Color.white.opacity(0.04))
-            .cornerRadius(12)
-        }
-        .buttonStyle(.plain)
-        .disabled(item.isDisabled)
+	            HStack(spacing: 12) {
+	                Image(systemName: item.icon)
+	                    .font(.system(size: 18, weight: .semibold))
+	                    .frame(width: 32, height: 32)
+	                    .foregroundColor(item.role == .destructive ? Color.brieflyDestructive : episodeDetailTextPrimary)
+	                    .background(
+	                        Circle()
+	                            .fill(episodeDetailSurface)
+	                    )
+	                Text(item.title)
+	                    .font(.body.weight(.semibold))
+	                    .foregroundColor(item.role == .destructive ? Color.brieflyDestructive : episodeDetailTextPrimary)
+	                Spacer()
+	            }
+	            .padding(.vertical, 10)
+	            .padding(.horizontal, 12)
+	            .background(episodeDetailSurface)
+	            .cornerRadius(12)
+	        }
+	        .buttonStyle(.plain)
+	        .disabled(item.isDisabled)
         .opacity(item.isDisabled ? 0.55 : 1)
     }
 
@@ -351,7 +383,7 @@ private extension EpisodeDetailView {
                 .frame(width: 72, height: 72)
                 .background(
                     Circle()
-                        .fill(Color.brieflyPrimary)
+                        .fill(episodeDetailSurface)
                         .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 6)
                 )
         }
@@ -364,7 +396,7 @@ private extension EpisodeDetailView {
         } label: {
             Text(audioManager.playbackSpeed.playbackSpeedLabel)
                 .font(.system(size: 18, weight: .medium))
-                .foregroundColor(.white)
+                .foregroundColor(episodeDetailTextPrimary)
                 .frame(width: 44, height: 48)
         }
         .buttonStyle(.plain)
@@ -377,9 +409,17 @@ private extension EpisodeDetailView {
             playbackScrubber
             if UIDevice.current.userInterfaceIdiom == .phone {
                 HStack(spacing: 24) {
-                    skipButton(icon: "gobackward.10", direction: -10)
+                    skipButton(
+                        icon: Image("back-15-seconds"),
+                        direction: -15,
+                        accessibilityLabel: "Back 15 seconds"
+                    )
                     primaryPlayButton
-                    skipButton(icon: "goforward.10", direction: 10)
+                    skipButton(
+                        icon: Image("forward-15-seconds"),
+                        direction: 15,
+                        accessibilityLabel: "Forward 15 seconds"
+                    )
                 }
                 .frame(maxWidth: .infinity)
                 .overlay(alignment: .trailing) {
@@ -389,9 +429,17 @@ private extension EpisodeDetailView {
             } else {
                 HStack(spacing: 24) {
                     speedButton
-                    skipButton(icon: "gobackward.10", direction: -10)
+                    skipButton(
+                        icon: Image("back-15-seconds"),
+                        direction: -15,
+                        accessibilityLabel: "Back 15 seconds"
+                    )
                     primaryPlayButton
-                    skipButton(icon: "goforward.10", direction: 10)
+                    skipButton(
+                        icon: Image("forward-15-seconds"),
+                        direction: 15,
+                        accessibilityLabel: "Forward 15 seconds"
+                    )
                 }
                 .frame(maxWidth: .infinity)
             }
@@ -412,22 +460,23 @@ private extension EpisodeDetailView {
                 Text(timeString(displayedDuration))
             }
             .font(.caption2)
-            .foregroundColor(.brieflyTextMuted)
+            .foregroundColor(episodeDetailTextSecondary)
         }
     }
 
-    private func skipButton(icon: String, direction: Double) -> some View {
+    private func skipButton(icon: Image, direction: Double, accessibilityLabel: String) -> some View {
         Button(action: { skip(seconds: direction) }) {
-            Image(systemName: icon)
-                .font(.system(size: 24, weight: .semibold))
-                .foregroundColor(.primary)
+            icon
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .foregroundStyle(episodeDetailTextPrimary)
+                .frame(width: 24, height: 24)
                 .frame(width: 48, height: 48)
-                .background(
-                    Circle()
-                        .fill(Color.brieflySurface)
-                )
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
     }
 
     private func skip(seconds: Double) {
@@ -450,7 +499,7 @@ private extension EpisodeDetailView {
         Button(action: { /* TODO: Wire up action */ }) {
             Image(systemName: systemName)
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundColor(.brieflyTextMuted)
+                .foregroundColor(episodeDetailTextSecondary)
                 .frame(width: 36, height: 36)
         }
         .buttonStyle(.plain)
@@ -461,34 +510,34 @@ private extension EpisodeDetailView {
         VStack(alignment: .leading, spacing: 8) {
             Text("Show notes")
                 .font(.headline)
+                .foregroundColor(episodeDetailTextPrimary)
             markdownText(notes)
                 .font(.body)
-                .foregroundColor(.brieflyTextMuted)
+                .foregroundColor(episodeDetailTextSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding()
-        .background(Color.brieflySurface)
-        .cornerRadius(12)
     }
 
 	    func topicsSection(_ topics: [Topic]) -> some View {
 	        VStack(alignment: .leading, spacing: 8) {
 	            Text("Topics")
 	                .font(.headline)
+                    .foregroundColor(episodeDetailTextPrimary)
 	            ForEach(topics) { topic in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(topic.displayTitle)
-                            .font(.body.bold())
-                            .foregroundColor(.primary)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(episodeDetailTextPrimary)
                         Text(topic.originalText)
-                            .font(.body)
-                            .foregroundColor(.brieflyTextMuted)
+                            .font(.system(size: 15))
+                            .foregroundColor(episodeDetailTextPrimary)
                             .lineLimit(2)
                             .truncationMode(.tail)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-                    .background(Color.brieflySurface)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 18)
+                    .background(episodeDetailSurface)
                     .cornerRadius(10)
 	            }
 	        }
@@ -513,11 +562,11 @@ private extension EpisodeDetailView {
                     if isLoading && hasLoaded == false {
                         Text("Loading dive deeper items…")
                             .font(.footnote)
-                            .foregroundColor(.brieflyTextMuted)
+                            .foregroundColor(episodeDetailTextSecondary)
                     } else {
                         Text("No dive deeper items yet.")
                             .font(.footnote)
-                            .foregroundColor(.brieflyTextMuted)
+                            .foregroundColor(episodeDetailTextSecondary)
                     }
 	            } else {
                     VStack(spacing: 12) {
@@ -576,10 +625,10 @@ private extension EpisodeDetailView {
             }
             if segments.isEmpty && isLoading {
                 Text("Loading segments...")
-                    .foregroundColor(.brieflyTextMuted)
+                    .foregroundColor(episodeDetailTextSecondary)
             } else if segments.isEmpty {
                 Text("No segments available yet.")
-                    .foregroundColor(.brieflyTextMuted)
+                    .foregroundColor(episodeDetailTextSecondary)
             } else {
                 VStack(spacing: 10) {
                     ForEach(segments.sorted(by: { $0.orderIndex < $1.orderIndex })) { segment in
@@ -608,12 +657,12 @@ private extension EpisodeDetailView {
                                 }
                             }
                             .font(.caption)
-                            .foregroundColor(.brieflyTextMuted)
+                            .foregroundColor(episodeDetailTextSecondary)
                         }
 
                         Text(segment.title?.nonEmpty ?? "Segment \(segment.orderIndex + 1)")
                             .font(.subheadline.weight(.semibold))
-                            .foregroundColor(.primary)
+                            .foregroundColor(episodeDetailTextPrimary)
                             .lineLimit(2)
                     }
 
@@ -632,15 +681,15 @@ private extension EpisodeDetailView {
             } else {
                 Text("Sources will appear here when available.")
                     .font(.footnote)
-                    .foregroundColor(.brieflyTextMuted)
+                    .foregroundColor(episodeDetailTextSecondary)
             }
         }
         .padding()
-        .background(isActive ? Color.brieflySurface.opacity(0.9) : Color.brieflySurface)
+        .background(episodeDetailSurface)
         .cornerRadius(12)
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(isActive ? Color.brieflyPrimary.opacity(0.6) : Color.clear, lineWidth: 1.5)
+                .stroke(isActive ? Color.brieflyPrimary : Color.clear, lineWidth: 1.5)
         )
     }
 
@@ -648,14 +697,12 @@ private extension EpisodeDetailView {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
                 .font(.headline)
+                .foregroundColor(episodeDetailTextPrimary)
             markdownText(body)
                 .font(.body)
-                .foregroundColor(.brieflyTextMuted)
+                .foregroundColor(episodeDetailTextSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding()
-        .background(Color.brieflySurface)
-        .cornerRadius(12)
     }
 
     func sourcesList(_ list: [EpisodeSource]) -> some View {
@@ -701,18 +748,18 @@ private extension EpisodeDetailView {
     private func sourceLabel(for source: EpisodeSource) -> Text {
         guard let host = source.displayHost else {
             return Text(source.displayTitle)
-                .foregroundColor(.brieflyTextMuted)
+                .foregroundColor(episodeDetailTextSecondary)
         }
 
         let hostText = Text(host)
-            .foregroundColor(.primary)
+            .foregroundColor(episodeDetailTextPrimary)
 
         guard let path = source.displayPath else {
             return hostText
         }
 
         let pathText = Text(path)
-            .foregroundColor(Color.white.opacity(0.6))
+            .foregroundColor(episodeDetailTextSecondary)
 
         return hostText + pathText
     }
@@ -1062,54 +1109,111 @@ private extension EpisodeDetailView {
         openURL(url)
     }
 
-    func deleteEpisode() async {
-        guard isDeleting == false else { return }
-        await MainActor.run { isDeleting = true }
-        do {
-            try await appViewModel.episodeService.deleteEpisode(id: detailedEpisode.id)
-            await MainActor.run {
-                if audioManager.currentEpisode?.id == detailedEpisode.id {
-                    audioManager.stop()
-                }
-                appViewModel.prefetchedEpisodes?.removeAll { $0.id == detailedEpisode.id }
-                isDeleting = false
-                dismiss()
-            }
-        } catch {
-            await MainActor.run {
-                isDeleting = false
-                actionAlert = ActionAlert(title: "Delete failed", message: error.localizedDescription)
+	    func deleteEpisode() async {
+	        guard isDeleting == false else { return }
+	        await MainActor.run { isDeleting = true }
+	        do {
+	            try await appViewModel.episodeService.deleteEpisode(id: detailedEpisode.id)
+	            await MainActor.run {
+	                if audioManager.currentEpisode?.id == detailedEpisode.id {
+	                    audioManager.stop()
+	                }
+	                appViewModel.prefetchedEpisodes?.removeAll { $0.id == detailedEpisode.id }
+	                isDeleting = false
+	                close()
+	            }
+	        } catch {
+	            await MainActor.run {
+	                isDeleting = false
+	                actionAlert = ActionAlert(title: "Delete failed", message: error.localizedDescription)
             }
         }
     }
 
-    func sanitizedFileName(from title: String) -> String {
-        let invalid = CharacterSet.alphanumerics.union(.init(charactersIn: " _-")).inverted
-        let cleaned = title.components(separatedBy: invalid).joined(separator: " ").replacingOccurrences(of: "  ", with: " ")
-        return cleaned.isEmpty ? "episode" : cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+	    func sanitizedFileName(from title: String) -> String {
+	        let invalid = CharacterSet.alphanumerics.union(.init(charactersIn: " _-")).inverted
+	        let cleaned = title.components(separatedBy: invalid).joined(separator: " ").replacingOccurrences(of: "  ", with: " ")
+	        return cleaned.isEmpty ? "episode" : cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+	    }
+
+	    private var scriptSectionID: String { "script-section" }
+        private var scrollCoordinateSpace: String { "episode-detail-scroll" }
+
+        private var scrollOffsetReader: some View {
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: EpisodeDetailScrollOffsetKey.self,
+                    value: proxy.frame(in: .named(scrollCoordinateSpace)).minY
+                )
+            }
+            .frame(height: 0)
+        }
+
+    private var episodeTitle: String {
+        if let number = detailedEpisode.episodeNumber {
+            return "Episode \(number)"
+        }
+        return "Episode"
     }
 
-    private var scriptSectionID: String { "script-section" }
+	    private func close() {
+	        if appViewModel.presentedEpisode != nil {
+	            appViewModel.dismissEpisodeDetail()
+	        } else {
+	            dismiss()
+	        }
+	    }
+
+	        private var customTopBar: some View {
+	            HStack(spacing: 12) {
+                Button(action: close) {
+                    Image(systemName: "chevron.down")
+                        .imageScale(.large)
+                        .foregroundStyle(episodeDetailTextPrimary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                        .accessibilityLabel("Close episode")
+                }
+                .buttonStyle(.plain)
+
+                Text(episodeTitle)
+                    .font(.headline)
+                    .foregroundColor(episodeDetailTextPrimary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .center)
+
+                Button {
+                    showActionsSheet = true
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .imageScale(.large)
+                        .foregroundStyle(episodeDetailTextPrimary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                        .accessibilityLabel("More actions")
+                }
+                .buttonStyle(.plain)
+	            }
+	            .padding(.horizontal, 8)
+	            .frame(maxWidth: .infinity)
+	            .background(episodeDetailBackground)
+	        }
+		}
+
+private struct EpisodeDetailScrollOffsetKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
 }
 
 private extension EpisodeDetailView {
     @ViewBuilder
     var playerBarInset: some View {
-        let showsDiveDeeperUndo = queuedDiveDeeperSeedID != nil
-        let showsPlayerBar = audioManager.currentEpisode?.id != nil && audioManager.currentEpisode?.id != detailedEpisode.id
-
-        if showsDiveDeeperUndo || showsPlayerBar {
-            VStack(spacing: 0) {
-                if showsDiveDeeperUndo {
-                    undoDiveDeeperButton
-                }
-                if showsPlayerBar {
-                    PlayerBarView(onCreateEpisode: onCreateEpisode)
-                        .padding(.vertical, 8)
-                }
-            }
-            .background(Color.brieflyBackground)
-            .shadow(color: Color.black.opacity(0.08), radius: 8, y: -2)
+        if queuedDiveDeeperSeedID != nil {
+            undoDiveDeeperButton
+                .background(episodeDetailBackground)
+                .shadow(color: Color.black.opacity(0.08), radius: 8, y: -2)
         }
     }
 
@@ -1125,10 +1229,10 @@ private extension EpisodeDetailView {
             .font(.headline)
             .frame(maxWidth: .infinity)
             .padding()
-            .background(Color.brieflySurface)
+            .background(Color.darkerWarmGrey)
             .foregroundColor(.white)
             .tint(.white)
-            .cornerRadius(12)
+            .clipShape(Capsule())
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 16)
@@ -1235,143 +1339,4 @@ struct ShareSheet: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) { }
-}
-
-// Lightweight shared image cache so artwork doesn't re-download across screens.
-final class SharedImageCache {
-    static let shared = SharedImageCache()
-    private let cache = NSCache<NSString, UIImage>()
-
-    private init() {
-        cache.countLimit = 128
-    }
-
-    func cacheKeyString(for url: URL, maxPixelSize: Int?) -> String {
-        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
-            return url.absoluteString
-        }
-        components.query = nil
-        components.fragment = nil
-        let base = components.url?.absoluteString ?? url.absoluteString
-        let suffix = maxPixelSize.map { "#px=\($0)" } ?? "#px=full"
-        return "\(base)\(suffix)"
-    }
-
-    func image(for url: URL, maxPixelSize: Int?) -> UIImage? {
-        cache.object(forKey: cacheKey(for: url, maxPixelSize: maxPixelSize))
-    }
-
-    func insert(_ image: UIImage, for url: URL, maxPixelSize: Int?) {
-        cache.setObject(image, forKey: cacheKey(for: url, maxPixelSize: maxPixelSize))
-    }
-
-    private func cacheKey(for url: URL, maxPixelSize: Int?) -> NSString {
-        cacheKeyString(for: url, maxPixelSize: maxPixelSize) as NSString
-    }
-}
-
-final class ImageLoader: ObservableObject {
-    @Published var image: UIImage?
-    @Published var didFail = false
-    private var currentCacheKey: String?
-    private static let session: URLSession = {
-        let configuration = URLSessionConfiguration.default
-        configuration.requestCachePolicy = .useProtocolCachePolicy
-
-        let cache = URLCache(
-            memoryCapacity: 50 * 1024 * 1024,
-            diskCapacity: 200 * 1024 * 1024,
-            diskPath: "briefly-image-cache"
-        )
-        URLCache.shared = cache
-        configuration.urlCache = cache
-
-        return URLSession(configuration: configuration)
-    }()
-
-    @MainActor
-    func load(url: URL?, maxPixelSize: Int?) async {
-        let nextCacheKey = url.map { SharedImageCache.shared.cacheKeyString(for: $0, maxPixelSize: maxPixelSize) }
-        if nextCacheKey == currentCacheKey, image != nil || didFail {
-            return
-        }
-        currentCacheKey = nextCacheKey
-        didFail = false
-
-        guard let url else {
-            image = nil
-            return
-        }
-
-        if let cached = SharedImageCache.shared.image(for: url, maxPixelSize: maxPixelSize) {
-            image = cached
-            return
-        }
-
-        do {
-            image = nil
-            var request = URLRequest(url: url)
-            request.cachePolicy = .returnCacheDataElseLoad
-            let (data, _) = try await Self.session.data(for: request)
-            guard Task.isCancelled == false else { return }
-            guard let uiImage = Self.decodeImage(from: data, maxPixelSize: maxPixelSize) else {
-                throw URLError(.cannotDecodeContentData)
-            }
-            SharedImageCache.shared.insert(uiImage, for: url, maxPixelSize: maxPixelSize)
-            image = uiImage
-        } catch {
-            guard Task.isCancelled == false else { return }
-            didFail = true
-        }
-    }
-
-    private static func decodeImage(from data: Data, maxPixelSize: Int?) -> UIImage? {
-        guard let maxPixelSize, maxPixelSize > 0 else {
-            return UIImage(data: data)
-        }
-
-        let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
-        guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions) else {
-            return nil
-        }
-
-        let options: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
-        ]
-        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
-            return nil
-        }
-        return UIImage(cgImage: cgImage)
-    }
-}
-
-struct CachedAsyncImage<Content: View, Placeholder: View, Failure: View>: View {
-    let url: URL?
-    var maxPixelSize: Int? = nil
-    @ViewBuilder var content: (Image) -> Content
-    @ViewBuilder var placeholder: () -> Placeholder
-    @ViewBuilder var failure: () -> Failure
-
-    @StateObject private var loader = ImageLoader()
-
-    var body: some View {
-        let cached = url.flatMap { SharedImageCache.shared.image(for: $0, maxPixelSize: maxPixelSize) }
-        let taskID = url.map { SharedImageCache.shared.cacheKeyString(for: $0, maxPixelSize: maxPixelSize) } ?? "nil"
-
-        Group {
-            if let uiImage = loader.image ?? cached {
-                content(Image(uiImage: uiImage))
-            } else if loader.didFail {
-                failure()
-            } else {
-                placeholder()
-            }
-        }
-        .task(id: taskID) {
-            await loader.load(url: url, maxPixelSize: maxPixelSize)
-        }
-    }
 }

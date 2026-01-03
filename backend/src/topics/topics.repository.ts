@@ -5,6 +5,8 @@ export const TOPICS_REPOSITORY = 'TOPICS_REPOSITORY';
 export interface TopicUpdateInput {
   title?: string | null;
   originalText?: string;
+  classificationId?: string | null;
+  classificationShortLabel?: string | null;
   isActive?: boolean;
   orderIndex?: number;
 }

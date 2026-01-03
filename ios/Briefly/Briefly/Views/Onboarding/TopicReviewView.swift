@@ -64,7 +64,7 @@ struct TopicReviewView: View {
                     .padding(.vertical, 4)
                     .background(Color.brieflySecondary)
                     .foregroundColor(.white)
-                    .cornerRadius(10)
+                    .clipShape(Capsule())
                 } header: {
                     topicReviewHeader("Add topic")
                 }
@@ -82,7 +82,7 @@ struct TopicReviewView: View {
             }
             .background(Color.brieflyPrimary)
             .foregroundColor(.white)
-            .cornerRadius(12)
+            .clipShape(Capsule())
             .padding(.bottom, 8)
         }
         .padding()
@@ -103,7 +103,6 @@ private struct TopicReviewSectionHeader: View {
             .font(.subheadline.weight(.semibold))
             .foregroundColor(.brieflyTextMuted)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 8)
     }
 }
 
@@ -112,7 +111,7 @@ private func topicReviewHeader(_ title: String) -> some View {
         Color.brieflyBackground
         TopicReviewSectionHeader(title: title)
             .padding(.horizontal)
-            .padding(.vertical, 6)
     }
+    .frame(height: 40)
     .listRowInsets(EdgeInsets())
 }

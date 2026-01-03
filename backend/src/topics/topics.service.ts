@@ -1,9 +1,10 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { SegmentDiveDeeperSeed, Topic } from '../domain/types';
-import { TOPICS_REPOSITORY, TopicListFilter, TopicsRepository } from './topics.repository';
+import { TOPICS_REPOSITORY, TopicListFilter, TopicUpdateInput, TopicsRepository } from './topics.repository';
 import { EntitlementsService } from '../billing/entitlements.service';
 import { LlmService } from '../llm/llm.service';
 import { LlmUsageContextService } from '../llm-usage/llm-usage.context';
+import { DEFAULT_TOPIC_CLASSIFICATION, resolveTopicClassification } from './topic-classifications';
 
 @Injectable()
 export class TopicsService {
@@ -53,12 +54,26 @@ export class TopicsService {
       isSeed: options?.isSeed ?? false,
       isActive: options?.isActive ?? true,
     });
-    const generatedTitle = await this.llmUsageContext.run(
+    const generatedMeta = await this.llmUsageContext.run(
       { userId, topicId: topic.id, flow: 'topic_creation' },
-      async () => this.generateTopicTitle(trimmedOriginalText),
+      async () => this.generateTopicMeta(trimmedOriginalText),
     );
-    if (generatedTitle && generatedTitle !== topic.title) {
-      topic = (await this.repository.update(userId, topic.id, { title: generatedTitle })) ?? topic;
+    if (generatedMeta) {
+      const updates: TopicUpdateInput = {};
+      if (generatedMeta.title && generatedMeta.title !== topic.title) {
+        updates.title = generatedMeta.title;
+      }
+      if (
+        !topic.classificationId ||
+        generatedMeta.classificationId !== topic.classificationId ||
+        generatedMeta.classificationShortLabel !== topic.classificationShortLabel
+      ) {
+        updates.classificationId = generatedMeta.classificationId;
+        updates.classificationShortLabel = generatedMeta.classificationShortLabel;
+      }
+      if (Object.keys(updates).length) {
+        topic = (await this.repository.update(userId, topic.id, updates)) ?? topic;
+      }
     }
     return topic;
   }
@@ -101,13 +116,15 @@ export class TopicsService {
       updates.originalText !== undefined &&
       this.normalizeTopicText(nextOriginalText) !== this.normalizeTopicText(topic.originalText);
 
-    const nextTitle = shouldRegenerateTitle
+    const nextMeta = shouldRegenerateTitle
       ? await this.llmUsageContext.run({ userId, topicId, flow: 'topic_update' }, async () =>
-          this.generateTopicTitle(nextOriginalText),
+          this.generateTopicMeta(nextOriginalText),
         )
       : undefined;
     const updated = await this.repository.update(userId, topicId, {
-      title: nextTitle,
+      title: nextMeta?.title ?? undefined,
+      classificationId: nextMeta ? nextMeta.classificationId : undefined,
+      classificationShortLabel: nextMeta ? nextMeta.classificationShortLabel : undefined,
       originalText: nextOriginalText,
       isActive: updates.isActive ?? topic.isActive,
       orderIndex: updates.orderIndex ?? topic.orderIndex,
@@ -223,17 +240,33 @@ export class TopicsService {
     return (text || '').trim().replace(/\s+/g, ' ').toLowerCase();
   }
 
-  private async generateTopicTitle(originalText: string): Promise<string | null> {
+  private async generateTopicMeta(originalText: string): Promise<{
+    title: string | null;
+    classificationId: string;
+    classificationShortLabel: string;
+  } | null> {
     const trimmed = (originalText || '').trim();
     if (!trimmed) {
       return null;
     }
     try {
       const meta = await this.llmService.generateTopicMeta(trimmed);
-      const normalized = this.buildTopicTitleFallback(meta?.title || '');
-      return normalized || this.buildTopicTitleFallback(trimmed) || null;
+      const normalizedTitle = this.buildTopicTitleFallback(meta?.title || '');
+      const title = normalizedTitle || this.buildTopicTitleFallback(trimmed) || null;
+      const classification = resolveTopicClassification(meta?.classificationId) ?? DEFAULT_TOPIC_CLASSIFICATION;
+
+      return {
+        title,
+        classificationId: classification.id,
+        classificationShortLabel: classification.shortLabel,
+      };
     } catch {
-      return this.buildTopicTitleFallback(trimmed) || null;
+      const title = this.buildTopicTitleFallback(trimmed) || null;
+      return {
+        title,
+        classificationId: DEFAULT_TOPIC_CLASSIFICATION.id,
+        classificationShortLabel: DEFAULT_TOPIC_CLASSIFICATION.shortLabel,
+      };
     }
   }
 

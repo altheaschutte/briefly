@@ -104,7 +104,7 @@ export default function CreatePage() {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="space-y-2">
             <p className="text-sm uppercase tracking-[0.2em] text-tealSoft">Create</p>
-            <h1 className="text-3xl font-semibold text-white">Set up topics and generate a Brief</h1>
+            <h1 className="text-3xl font-semibold text-ink">Set up topics and generate a Brief</h1>
             <p className="text-sm text-muted">
               Same flow as iOS: speak or type topics, keep up to five active, and trigger a new episode when you are ready.
             </p>
@@ -125,7 +125,7 @@ export default function CreatePage() {
             </p>
             <div className="mt-4 rounded-2xl border border-borderSoft/70 bg-surface/80 p-4">
               <p className="text-xs uppercase tracking-[0.2em] text-tealSoft">Transcript</p>
-              <p className="text-sm text-white">"Find art exhibitions on the Sunshine Coast and daily AI launch news."</p>
+              <p className="text-sm text-ink">"Find art exhibitions on the Sunshine Coast and daily AI launch news."</p>
               <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted">
                 <span className="rounded-full border border-borderSoft/60 px-3 py-1">Streaming...</span>
                 <span className="rounded-full border border-borderSoft/60 px-3 py-1">Topic extraction</span>
@@ -149,7 +149,7 @@ export default function CreatePage() {
                 <p className="text-sm text-muted">Type and reorder before generating.</p>
               </div>
               <button
-                className="inline-flex items-center gap-2 rounded-full border border-borderSoft px-3 py-2 text-xs text-white transition hover:border-teal disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-full border border-borderSoft px-3 py-2 text-xs text-ink transition hover:border-accent disabled:opacity-60"
                 onClick={() => addTopic(newTopic || "New topic")}
                 disabled={saving}
               >
@@ -162,7 +162,7 @@ export default function CreatePage() {
                 Topic text
                 <div className="flex items-center gap-2 rounded-2xl border border-borderSoft/70 bg-overlay/70 px-3 py-2">
                   <input
-                    className="w-full bg-transparent text-white outline-none"
+                    className="w-full bg-transparent text-ink outline-none"
                     placeholder="e.g. Climate tech breakthroughs"
                     value={newTopic}
                     onChange={(e) => setNewTopic(e.target.value)}
@@ -180,7 +180,7 @@ export default function CreatePage() {
               {topics.slice(0, 5).map((topic) => (
                 <div key={topic.id} className="flex items-center justify-between rounded-2xl border border-borderSoft/70 bg-overlay/70 px-3 py-2">
                   <div>
-                    <p className="text-sm font-semibold text-white">{topic.originalText}</p>
+                    <p className="text-sm font-semibold text-ink">{topic.originalText}</p>
                     <p className="text-xs text-muted">Position {topic.orderIndex + 1}</p>
                   </div>
                   <CheckCircle className="h-4 w-4 text-teal" />
@@ -191,7 +191,7 @@ export default function CreatePage() {
               {suggested.map((tag) => (
                 <button
                   key={tag}
-                  className="rounded-full border border-borderSoft/60 px-3 py-1 transition hover:border-teal"
+                  className="rounded-full border border-borderSoft/60 px-3 py-1 transition hover:border-accent"
                   onClick={() => addTopic(tag)}
                 >
                   {tag}
@@ -224,12 +224,12 @@ export default function CreatePage() {
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <div className="rounded-2xl border border-borderSoft/70 bg-overlay/70 p-4">
               <p className="text-xs uppercase tracking-[0.2em] text-tealSoft">Duration</p>
-              <p className="text-lg font-semibold text-white">10 minutes</p>
+              <p className="text-lg font-semibold text-ink">10 minutes</p>
               <p className="text-xs text-muted">Great for a commute</p>
             </div>
             <div className="rounded-2xl border border-borderSoft/70 bg-overlay/70 p-4">
               <p className="text-xs uppercase tracking-[0.2em] text-tealSoft">Voice</p>
-              <p className="text-lg font-semibold text-white">Standard</p>
+              <p className="text-lg font-semibold text-ink">Standard</p>
               <p className="text-xs text-muted">Select presets on iOS or web</p>
             </div>
           </div>
@@ -245,7 +245,7 @@ export default function CreatePage() {
       </section>
 
       {error && (
-        <div className="glass-panel flex items-center gap-2 p-4 text-sm text-red-200">
+        <div className="glass-panel flex items-center gap-2 bg-red-50 p-4 text-sm text-red-700">
           <AlertCircle className="h-4 w-4" />
           {error}
         </div>

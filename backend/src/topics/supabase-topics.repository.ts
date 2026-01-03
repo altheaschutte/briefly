@@ -104,6 +104,8 @@ export class SupabaseTopicsRepository implements TopicsRepository {
         user_id: userId,
         title: options?.title ?? null,
         original_text: originalText,
+        classification_id: null,
+        classification_short_label: null,
         order_index: nextOrderIndex,
         is_active: options?.isActive ?? true,
         is_seed: options?.isSeed ?? false,
@@ -140,6 +142,12 @@ export class SupabaseTopicsRepository implements TopicsRepository {
       }
       if (updates.title !== undefined) {
         payload.title = updates.title;
+      }
+      if (updates.classificationId !== undefined) {
+        payload.classification_id = updates.classificationId;
+      }
+      if (updates.classificationShortLabel !== undefined) {
+        payload.classification_short_label = updates.classificationShortLabel;
       }
       if (updates.isActive !== undefined) {
         payload.is_active = updates.isActive;
@@ -178,6 +186,8 @@ export class SupabaseTopicsRepository implements TopicsRepository {
       userId: row.user_id,
       title: row.title ?? undefined,
       originalText: row.original_text,
+      classificationId: row.classification_id ?? undefined,
+      classificationShortLabel: row.classification_short_label ?? undefined,
       orderIndex: row.order_index,
       isActive: row.is_active,
       isSeed: row.is_seed,

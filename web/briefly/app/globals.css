@@ -3,22 +3,21 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
-  background-color: #132a3b;
+  color-scheme: light;
+  background-color: #ffffff;
 }
 
 body {
-  @apply bg-midnight text-muted antialiased font-body;
-  background-color: #0f1d2c;
+  @apply bg-midnight text-ink antialiased font-body;
   min-height: 100vh;
 }
 
 .glass-panel {
-  @apply rounded-2xl;
+  @apply rounded-2xl border border-borderSoft bg-surface shadow-sm;
 }
 
 .card-accent {
-  @apply rounded-2xl;
+  @apply rounded-2xl border border-borderSoft bg-white shadow-sm;
 }
 
 .pill {
@@ -30,7 +29,7 @@ body {
 }
 
 .section-heading {
-  @apply text-3xl font-semibold text-white md:text-4xl;
+  @apply text-3xl font-semibold text-ink md:text-4xl;
 }
 
 .section-subtitle {
@@ -38,11 +37,11 @@ body {
 }
 
 .prose {
-  @apply text-muted;
+  @apply text-ink;
 }
 
 .prose :where(h1, h2, h3, h4, h5, h6):not(:where([class~="not-prose"] *)) {
-  @apply text-white;
+  @apply text-ink;
 }
 
 .prose a {
@@ -54,7 +53,7 @@ body {
 }
 
 .prose strong {
-  @apply text-white;
+  @apply text-ink;
 }
 
 .prose blockquote {

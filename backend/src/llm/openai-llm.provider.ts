@@ -6,6 +6,12 @@ import { EpisodeMetadata, LlmProvider, SegmentDiveDeeperSeedDraft, SegmentScript
 import { EpisodeSegment, EpisodeSource } from '../domain/types';
 import { DialogueTurn, SegmentDialogueScript, TopicIntent, TopicQueryPlan } from './llm.types';
 import { LlmUsageReporter } from './llm-usage';
+import {
+  DEFAULT_TOPIC_CLASSIFICATION,
+  resolveTopicClassification,
+  resolveTopicClassificationByShortLabel,
+  TOPIC_CLASSIFICATIONS,
+} from '../topics/topic-classifications';
 
 export interface OpenAiLlmProviderOptions {
   apiKeyConfigKey?: string;
@@ -404,23 +410,34 @@ Rules:
   async generateTopicMeta(topicText: string): Promise<TopicMeta> {
     const client = this.getClient();
     const normalizedTopic = (topicText || '').trim();
+    const classificationOptions = TOPIC_CLASSIFICATIONS.map(
+      (classification) =>
+        `- ${classification.id} (${classification.shortLabel}): ${classification.classification}\n  Description: ${classification.description}\n  Classify when: ${classification.classifyingRulesPrompt}`,
+    ).join('\n');
     const response = await client.chat.completions.create({
-      model: this.queryModel,
+      model: 'gpt-4o-mini',
       temperature: 0.35,
-      max_tokens: 80,
+      max_tokens: 150,
       response_format: { type: 'json_object' },
       messages: [
         {
           role: 'system',
-          content: `You write short, distinct titles for topics in a daily AI audio briefing app.
+          content: `You write short, distinct titles and classify topics for a daily AI audio briefing app.
 
 Rules:
 - Output a 2–3 word title (as short as possible while still distinct).
 - Use plain words (no quotes, no emojis, no hashtags).
 - Avoid leading verbs like "Tell", "Update", "Share", "Highlight", "Reveal", "Dive", "Alert", "Explore", "Uncover".
 - No trailing punctuation.
+- Choose EXACTLY ONE classification, even if multiple apply; pick the best overall fit.
+- classification_id must be one of the IDs listed below.
+- classification_short_label must match the chosen classification's shortLabel exactly.
 
-Respond with JSON only: {"title":"..."}.
+Classification options:
+${classificationOptions}
+
+Respond with JSON only:
+{"title":"...","classification_id":"...","classification_short_label":"..."}.
 `,
         },
         {
@@ -443,7 +460,20 @@ Respond with JSON only: {"title":"..."}.
       throw new Error(`${this.providerLabel} did not return a valid topic title`);
     }
 
-    return { title };
+    const rawClassificationId = typeof parsed?.classification_id === 'string' ? parsed.classification_id.trim() : '';
+    const rawShortLabel =
+      typeof parsed?.classification_short_label === 'string' ? parsed.classification_short_label.trim() : '';
+
+    const classification =
+      resolveTopicClassification(rawClassificationId) ??
+      resolveTopicClassificationByShortLabel(rawShortLabel) ??
+      DEFAULT_TOPIC_CLASSIFICATION;
+
+    return {
+      title,
+      classificationId: classification.id,
+      classificationShortLabel: classification.shortLabel,
+    };
   }
 
   async generateCoverMotif(title: string, topics: string[] = []): Promise<string> {

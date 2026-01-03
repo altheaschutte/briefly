@@ -9,14 +9,14 @@ export default function SubscriptionGrid({ compact = false }: { compact?: boolea
         <div
           key={tier.name}
           className={clsx(
-            "relative overflow-hidden rounded-3xl border border-borderSoft/80 bg-gradient-to-b from-overlay via-surface to-overlay p-6 shadow-glow transition hover:-translate-y-1 hover:border-teal hover:shadow-accent",
+            "relative overflow-hidden rounded-3xl border border-borderSoft bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:border-accent/60 hover:shadow-accent",
             tier.highlight && "ring-2 ring-accent"
           )}
         >
           <div className="flex items-start justify-between">
             <div>
               <p className="text-sm uppercase tracking-[0.2em] text-tealSoft">{tier.name}</p>
-              <h3 className="mt-1 text-2xl font-semibold text-white">{tier.tagline}</h3>
+              <h3 className="mt-1 text-2xl font-semibold text-ink">{tier.tagline}</h3>
             </div>
             {tier.highlight && (
               <span className="rounded-full bg-accent px-3 py-1 text-xs font-semibold text-ink shadow-accent">
@@ -25,7 +25,7 @@ export default function SubscriptionGrid({ compact = false }: { compact?: boolea
             )}
           </div>
 
-          <div className="mt-6 flex items-baseline gap-2 text-white">
+          <div className="mt-6 flex items-baseline gap-2 text-ink">
             <span className="text-4xl font-semibold">{tier.price}</span>
             <span className="text-sm text-muted">{tier.cadence}</span>
           </div>
@@ -39,7 +39,7 @@ export default function SubscriptionGrid({ compact = false }: { compact?: boolea
             ))}
           </div>
 
-          <button className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-accent px-4 py-3 text-sm font-semibold text-ink transition hover:-translate-y-0.5 hover:brightness-105">
+          <button className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-ink px-4 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:brightness-110">
             {tier.cta}
           </button>
           {tier.note && <p className="mt-3 text-xs text-muted">{tier.note}</p>}

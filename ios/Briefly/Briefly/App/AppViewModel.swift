@@ -18,6 +18,7 @@ final class AppViewModel: ObservableObject {
     @Published var isSeedingTopics: Bool = false
     @Published var isHandlingAuthRedirect: Bool = false
     @Published var snackbarMessage: String?
+    @Published var presentedEpisode: Episode?
 
     let apiClient: APIClient
     let authManager: AuthManager
@@ -99,6 +100,14 @@ final class AppViewModel: ObservableObject {
                 await self.logout()
             }
         }
+    }
+
+    func presentEpisodeDetail(_ episode: Episode) {
+        presentedEpisode = episode
+    }
+
+    func dismissEpisodeDetail() {
+        presentedEpisode = nil
     }
 
     func bootstrap() {
@@ -242,6 +251,10 @@ final class AppViewModel: ObservableObject {
     }
 
     func preloadTopics() async {
+        if DebugFeatureFlags.forceEmptyBriefs {
+            prefetchedTopics = []
+            return
+        }
         do {
             let fetched = try await topicService.fetchTopics()
             guard isSeedingTopics == false else { return }
@@ -300,5 +313,15 @@ final class AppViewModel: ObservableObject {
         let sorted = seeded.sorted { $0.orderIndex < $1.orderIndex }
         prefetchedTopics = sorted
         return sorted
+    }
+}
+
+enum DebugFeatureFlags {
+    static var forceEmptyBriefs: Bool {
+#if DEBUG
+        ProcessInfo.processInfo.environment["BRIEFLY_FORCE_EMPTY_BRIEFS"] == "1"
+#else
+        false
+#endif
     }
 }

@@ -9,10 +9,10 @@ const legalLinks = [
 
 export default function Footer() {
   return (
-    <footer className="border-t border-[#93c8c226] bg-[#0f1d2c]/70 backdrop-blur">
+    <footer className="bg-surface">
       <div className="container flex flex-col gap-6 py-8 md:flex-row md:items-center md:justify-between">
         <div className="space-y-2">
-          <p className="text-sm font-semibold text-white">Need help?</p>
+          <p className="text-sm font-semibold text-ink">Need help?</p>
           <p className="text-sm text-muted">
             Email{" "}
             <a className="text-accent underline underline-offset-4" href="mailto:support@brieflypodcast.app">
@@ -28,7 +28,7 @@ export default function Footer() {
             <Link
               key={link.href}
               href={link.href}
-              className="rounded-full border border-transparent px-3 py-2 transition hover:border-[#93c8c226] hover:text-white"
+              className="rounded-full border border-transparent px-3 py-2 transition hover:border-borderSoft hover:text-ink"
             >
               {link.label}
             </Link>

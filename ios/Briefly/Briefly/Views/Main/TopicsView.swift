@@ -62,7 +62,7 @@ struct TopicsView: View {
                 .padding(.vertical, 6)
                 .background(Color.brieflySecondary)
                 .foregroundColor(.white)
-                .cornerRadius(10)
+                .clipShape(Capsule())
             } header: {
                 topicsHeader("Add topic")
             }
@@ -90,7 +90,6 @@ private struct TopicsSectionHeader: View {
             .font(.subheadline.weight(.semibold))
             .foregroundColor(.brieflyTextMuted)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 8)
     }
 }
 
@@ -99,7 +98,7 @@ private func topicsHeader(_ title: String) -> some View {
         Color.brieflyBackground
         TopicsSectionHeader(title: title)
             .padding(.horizontal)
-            .padding(.vertical, 6)
     }
+    .frame(height: 40)
     .listRowInsets(EdgeInsets())
 }

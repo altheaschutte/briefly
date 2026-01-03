@@ -1,8 +1,11 @@
 import SwiftUI
+import UIKit
+import ImageIO
 
 struct FeedView: View {
     @ObservedObject var viewModel: EpisodesViewModel
     @EnvironmentObject private var audioManager: AudioPlayerManager
+    @EnvironmentObject private var appViewModel: AppViewModel
     @State private var bannerMessage: String?
     let onCreateEpisode: (() -> Void)?
 
@@ -14,7 +17,7 @@ struct FeedView: View {
     var body: some View {
         ScrollView { feedContent }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .background(Color.brieflyBackground.ignoresSafeArea())
+            .background(Color.brieflyBackground)
             .navigationTitle("Your Library")
             .navigationBarTitleDisplayMode(.inline)
             .task {
@@ -22,9 +25,6 @@ struct FeedView: View {
             }
             .refreshable {
                 await refreshFeed(force: true)
-            }
-            .overlay(alignment: .bottom) {
-                playerBarOverlay
             }
             .overlay(alignment: .top) {
                 bannerView
@@ -39,6 +39,9 @@ struct FeedView: View {
 
     @ViewBuilder
     private var feedContent: some View {
+        let hasLatestSection = viewModel.latestEpisode != nil || viewModel.isLoading
+        let previousListTopPadding: CGFloat = hasLatestSection ? 12 : 0
+
         VStack(alignment: .leading, spacing: 16) {
             if let latest = viewModel.latestEpisode {
                 latestCard(for: latest)
@@ -49,29 +52,20 @@ struct FeedView: View {
             }
 
             if viewModel.previousEpisodes.isEmpty == false {
-                Text("Previous episodes")
-                    .font(.headline)
-                VStack(spacing: 0) {
-                    ForEach(Array(viewModel.previousEpisodes.enumerated()), id: \.element.id) { index, episode in
-                        NavigationLink(destination: EpisodeDetailView(episode: episode, onCreateEpisode: onCreateEpisode)) {
+                VStack(spacing: 12) {
+                    ForEach(viewModel.previousEpisodes) { episode in
+                        Button {
+                            appViewModel.presentEpisodeDetail(episode)
+                        } label: {
                             EpisodeRow(episode: episode)
                         }
                         .buttonStyle(.plain)
-                        if index < viewModel.previousEpisodes.count - 1 {
-                            Divider()
-                                .padding(.leading, 2)
-                        }
                     }
                 }
+                .padding(.top, previousListTopPadding)
             }
         }
         .padding()
-        .padding(.bottom, 140) // extra space so the player bar doesn't cover the last row
-    }
-
-    private var playerBarOverlay: some View {
-        PlayerBarView(onCreateEpisode: onCreateEpisode)
-            .padding(.bottom, 8)
     }
 
     @ViewBuilder
@@ -103,7 +97,7 @@ struct FeedView: View {
                         .padding()
                         .background(Color.brieflyPrimary)
                         .foregroundColor(.white)
-                        .cornerRadius(12)
+                        .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
             }
@@ -115,80 +109,46 @@ struct FeedView: View {
     }
 
     private func latestCard(for episode: Episode) -> some View {
-        let isCurrentlyPlaying = audioManager.isPlaying && audioManager.currentEpisode?.id == episode.id
+        let coverSize: CGFloat = 108
+        let maxPixelSize = Int(ceil(coverSize * UIScreen.main.scale))
 
-        return VStack(alignment: .center, spacing: 12) {
-            Text("Latest episode")
-                .font(.caption)
-                .foregroundColor(.brieflyTextMuted)
-                .frame(maxWidth: .infinity)
-            episodeHero(episode)
+        return Button {
+            appViewModel.presentEpisodeDetail(episode)
+        } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .bottom, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Episode Ready".uppercased())
+                            .font(.caption2.weight(.medium))
+                            .foregroundColor(.brieflyTextMuted)
+                            .tracking(1)
 
-            HStack(spacing: 12) {
-                Button(action: { togglePlay(episode) }) {
-                    Group {
-                        if isCurrentlyPlaying {
-                            EqualizerWaveform(isAnimating: true, color: .white, barCount: 4, minHeight: 5, maxHeight: 18, barWidth: 2, spacing: 2)
-                                .accessibilityLabel("Pause")
-                        } else {
-                            Label("Play", systemImage: "play.fill")
-                                .accessibilityLabel("Play")
-                        }
+                        Text(episode.displayTitle)
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(.brieflyTextPrimary)
+                            .lineLimit(3)
+                            .multilineTextAlignment(.leading)
                     }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.brieflyPrimary)
-                        .foregroundColor(.white)
-                        .cornerRadius(12)
+
+                    Spacer(minLength: 8)
+
+                    coverImage(for: episode, maxPixelSize: maxPixelSize)
+                        .frame(width: coverSize, height: coverSize)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .padding(.bottom, 4)
                 }
 
-                NavigationLink(destination: EpisodeDetailView(episode: episode, onCreateEpisode: onCreateEpisode)) {
-                    Text("Details")
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.brieflySecondary)
-                        .foregroundColor(.white)
-                        .cornerRadius(12)
-                }
-                .buttonStyle(.plain)
+                Text(episode.summary)
+                    .font(.footnote)
+                    .foregroundColor(.brieflyTextMuted)
+                    .lineLimit(3)
+                    .multilineTextAlignment(.leading)
+
+                EpisodePlaybackRow(episode: episode)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func episodeHero(_ episode: Episode) -> some View {
-        let heroSize = min(UIScreen.main.bounds.width - 80, 260)
-        let maxPixelSize = Int(ceil(heroSize * UIScreen.main.scale))
-
-        return VStack(alignment: .center, spacing: 10) {
-            coverImage(for: episode, maxPixelSize: maxPixelSize)
-                .frame(width: heroSize, height: heroSize)
-                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                .shadow(color: Color.black.opacity(0.18), radius: 22, x: 0, y: 14)
-
-            Text(episode.displayTitle)
-                .font(.title2.bold())
-                .multilineTextAlignment(.center)
-                .padding(.top, 6)
-            Text(episode.summary)
-                .foregroundColor(.brieflyTextMuted)
-                .lineLimit(3)
-                .multilineTextAlignment(.center)
-        }
-        .padding(.bottom, 8)
-    }
-
-    private func togglePlay(_ episode: Episode) {
-        if audioManager.currentEpisode?.id == episode.id {
-            if audioManager.isPlaying {
-                audioManager.pause()
-            } else {
-                audioManager.resume()
-            }
-        } else {
-            audioManager.play(episode: episode)
-        }
+        .buttonStyle(.plain)
     }
 
     private func refreshFeed(force: Bool = false) async {
@@ -248,16 +208,13 @@ struct FeedView: View {
 
 private struct EpisodeRow: View {
     let episode: Episode
-    @EnvironmentObject private var playbackHistory: PlaybackHistory
-    @EnvironmentObject private var audioManager: AudioPlayerManager
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(episode.displayDateLabel)
-                        .font(.caption)
-                        .fontWeight(.semibold)
+                        .font(.caption.weight(.medium))
                         .foregroundColor(.brieflyTextMuted)
                     Text(episode.displayTitle)
                         .font(.callout.weight(.semibold))
@@ -272,23 +229,36 @@ private struct EpisodeRow: View {
                 coverImageView
             }
 
-            pillRow
+            EpisodePlaybackRow(episode: episode)
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var coverImageView: some View {
-        let maxPixelSize = Int(ceil(72 * UIScreen.main.scale))
+	    private var coverImageView: some View {
+	        let maxPixelSize = Int(ceil(72 * UIScreen.main.scale))
 
-        return coverImage(for: episode, maxPixelSize: maxPixelSize)
-            .frame(width: 72, height: 72)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
-            .overlay(
-                RoundedRectangle(cornerRadius: 14)
-                    .stroke(Color.brieflyBorder, lineWidth: 1)
-            )
-            .shadow(color: Color.black.opacity(0.24), radius: 8, x: 0, y: 4)
+	        return coverImage(for: episode, maxPixelSize: maxPixelSize)
+	            .frame(width: 72, height: 72)
+	            .clipShape(RoundedRectangle(cornerRadius: 16))
+	    }
+}
+
+private struct EpisodePlaybackRow: View {
+    let episode: Episode
+    @EnvironmentObject private var playbackHistory: PlaybackHistory
+    @EnvironmentObject private var audioManager: AudioPlayerManager
+
+    var body: some View {
+        let isCurrentlyPlaying = audioManager.isPlaying && audioManager.currentEpisode?.id == episode.id
+
+        HStack(spacing: 8) {
+            durationPill
+            partialPlaybackStatus(isCurrentlyPlaying: isCurrentlyPlaying)
+            if isCurrentlyPlaying == false, playbackHistory.isListened(episode.id) {
+                listenedPill
+            }
+        }
     }
 
     private var durationPill: some View {
@@ -301,8 +271,8 @@ private struct EpisodeRow: View {
         }
         .padding(.vertical, 4)
         .padding(.horizontal, 8)
-        .background(Color.brieflyDurationBackground)
-        .foregroundColor(Color.brieflyAccentSoft)
+        .background(Color.warmGrey)
+        .foregroundColor(Color.gold)
         .clipShape(Capsule())
     }
 
@@ -320,36 +290,24 @@ private struct EpisodeRow: View {
         .clipShape(Capsule())
     }
 
-    private var pillRow: some View {
-        let isCurrentlyPlaying = audioManager.isPlaying && audioManager.currentEpisode?.id == episode.id
-        return HStack(spacing: 8) {
-            durationPill
-            partialPlaybackStatus
-            if isCurrentlyPlaying {
-                EqualizerWaveform(isAnimating: true, color: Color.brieflyAccentSoft, barCount: 4, minHeight: 4, maxHeight: 14, barWidth: 2, spacing: 2)
-                    .accessibilityLabel("Playing")
-            } else if playbackHistory.isListened(episode.id) {
-                listenedPill
-            }
-        }
-    }
-
     @ViewBuilder
-    private var partialPlaybackStatus: some View {
+    private func partialPlaybackStatus(isCurrentlyPlaying: Bool) -> some View {
         if let remainingSeconds = playbackHistory.remainingSeconds(episodeID: episode.id, fallbackDurationSeconds: episode.durationDisplaySeconds),
            let fraction = playbackHistory.partialPlaybackFraction(episodeID: episode.id, fallbackDurationSeconds: episode.durationDisplaySeconds) {
             HStack(spacing: 8) {
-                Text(remainingLabel(seconds: remainingSeconds))
-                    .font(.caption.weight(.semibold))
-                    .foregroundColor(.brieflyTextMuted)
-                ProgressView(value: fraction)
-                    .progressViewStyle(.linear)
-                    .tint(Color.brieflyAccentSoft)
-                    .frame(width: 64)
-                    .scaleEffect(x: 1, y: 0.85, anchor: .center)
+                if isCurrentlyPlaying {
+                    EqualizerWaveform(isAnimating: true, color: Color.gold, barCount: 4, minHeight: 4, maxHeight: 14, barWidth: 2, spacing: 2)
+                        .accessibilityLabel("Playing")
+                } else {
+                    Text(remainingLabel(seconds: remainingSeconds))
+                        .font(.caption.weight(.medium))
+                        .foregroundColor(Color.gold)
+                }
+
+                PlaybackProgressBar(fraction: fraction, width: 64, height: 2)
             }
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("\(remainingLabel(seconds: remainingSeconds)) remaining")
+            .accessibilityLabel(isCurrentlyPlaying ? "Playing. \(remainingLabel(seconds: remainingSeconds)) remaining" : "\(remainingLabel(seconds: remainingSeconds)) remaining")
         }
     }
 
@@ -371,15 +329,15 @@ private func coverImage(for episode: Episode, maxPixelSize: Int?) -> some View {
     ZStack {
         Color.brieflySurface
 
-        if let url = episode.coverImageURL {
-            CachedAsyncImage(url: url, maxPixelSize: maxPixelSize) { image in
-                image
-                    .resizable()
-                    .scaledToFill()
-            } placeholder: {
-                SkeletonBlock()
-            } failure: {
-                fallbackArtwork
+	        if let url = episode.coverImageURL {
+	            CachedAsyncImage(url: url, maxPixelSize: maxPixelSize) { image in
+	                image
+	                    .resizable()
+	                    .scaledToFill()
+	            } placeholder: {
+	                SkeletonBlock()
+	            } failure: {
+	                fallbackArtwork
             }
         } else {
             fallbackArtwork
@@ -391,6 +349,145 @@ private var fallbackArtwork: some View {
     Image(systemName: "waveform.circle.fill")
         .font(.system(size: 32, weight: .semibold))
         .foregroundColor(Color.brieflySecondary)
+}
+
+// Lightweight shared image cache so artwork doesn't re-download across screens.
+final class SharedImageCache {
+    static let shared = SharedImageCache()
+    private let cache = NSCache<NSString, UIImage>()
+
+    private init() {
+        cache.countLimit = 128
+    }
+
+    func cacheKeyString(for url: URL, maxPixelSize: Int?) -> String {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return url.absoluteString
+        }
+        components.query = nil
+        components.fragment = nil
+        let base = components.url?.absoluteString ?? url.absoluteString
+        let suffix = maxPixelSize.map { "#px=\($0)" } ?? "#px=full"
+        return "\(base)\(suffix)"
+    }
+
+    func image(for url: URL, maxPixelSize: Int?) -> UIImage? {
+        cache.object(forKey: cacheKey(for: url, maxPixelSize: maxPixelSize))
+    }
+
+    func insert(_ image: UIImage, for url: URL, maxPixelSize: Int?) {
+        cache.setObject(image, forKey: cacheKey(for: url, maxPixelSize: maxPixelSize))
+    }
+
+    private func cacheKey(for url: URL, maxPixelSize: Int?) -> NSString {
+        cacheKeyString(for: url, maxPixelSize: maxPixelSize) as NSString
+    }
+}
+
+final class ImageLoader: ObservableObject {
+    @Published var image: UIImage?
+    @Published var didFail = false
+    private var currentCacheKey: String?
+    private static let session: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        configuration.requestCachePolicy = .useProtocolCachePolicy
+
+        let cache = URLCache(
+            memoryCapacity: 50 * 1024 * 1024,
+            diskCapacity: 200 * 1024 * 1024,
+            diskPath: "briefly-image-cache"
+        )
+        URLCache.shared = cache
+        configuration.urlCache = cache
+
+        return URLSession(configuration: configuration)
+    }()
+
+    @MainActor
+    func load(url: URL?, maxPixelSize: Int?) async {
+        let nextCacheKey = url.map { SharedImageCache.shared.cacheKeyString(for: $0, maxPixelSize: maxPixelSize) }
+        if nextCacheKey == currentCacheKey, image != nil || didFail {
+            return
+        }
+        currentCacheKey = nextCacheKey
+        didFail = false
+
+        guard let url else {
+            image = nil
+            return
+        }
+
+        if let cached = SharedImageCache.shared.image(for: url, maxPixelSize: maxPixelSize) {
+            image = cached
+            return
+        }
+
+        do {
+            image = nil
+            var request = URLRequest(url: url)
+            request.cachePolicy = .returnCacheDataElseLoad
+            let (data, _) = try await Self.session.data(for: request)
+            guard Task.isCancelled == false else { return }
+            guard let uiImage = Self.decodeImage(from: data, maxPixelSize: maxPixelSize) else {
+                throw URLError(.cannotDecodeContentData)
+            }
+            SharedImageCache.shared.insert(uiImage, for: url, maxPixelSize: maxPixelSize)
+            image = uiImage
+        } catch {
+            guard Task.isCancelled == false else { return }
+            didFail = true
+        }
+    }
+
+    private static func decodeImage(from data: Data, maxPixelSize: Int?) -> UIImage? {
+        guard let maxPixelSize, maxPixelSize > 0 else {
+            return UIImage(data: data)
+        }
+
+        let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions) else {
+            return nil
+        }
+
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+        ]
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return nil
+        }
+        return UIImage(cgImage: cgImage)
+    }
+}
+
+struct CachedAsyncImage<Content: View, Placeholder: View, Failure: View>: View {
+    let url: URL?
+    var maxPixelSize: Int? = nil
+    @ViewBuilder var content: (Image) -> Content
+    @ViewBuilder var placeholder: () -> Placeholder
+    @ViewBuilder var failure: () -> Failure
+
+    @StateObject private var loader = ImageLoader()
+
+    var body: some View {
+        let cached = url.flatMap { SharedImageCache.shared.image(for: $0, maxPixelSize: maxPixelSize) }
+        let taskID = url.map { SharedImageCache.shared.cacheKeyString(for: $0, maxPixelSize: maxPixelSize) } ?? "nil"
+
+        Group {
+            if let uiImage = loader.image ?? cached {
+                content(Image(uiImage: uiImage))
+            } else if loader.didFail {
+                failure()
+            } else {
+                placeholder()
+            }
+        }
+        .task(id: taskID) {
+            await loader.load(url: url, maxPixelSize: maxPixelSize)
+        }
+    }
 }
 
 struct EqualizerWaveform: View {
@@ -427,46 +524,73 @@ struct EqualizerWaveform: View {
     }
 }
 
-private extension FeedView {
-    var latestSkeletonCard: some View {
-        let heroSize = min(UIScreen.main.bounds.width - 80, 260)
+private struct PlaybackProgressBar: View {
+    let fraction: Double
+    let width: CGFloat
+    let height: CGFloat
 
-        return VStack(alignment: .center, spacing: 12) {
-            SkeletonBlock(cornerRadius: 6)
-                .frame(width: 96, height: 12)
-                .opacity(0.85)
-                .frame(maxWidth: .infinity, alignment: .center)
-
-            SkeletonBlock(cornerRadius: 22)
-                .frame(width: heroSize, height: heroSize)
-                .shadow(color: Color.black.opacity(0.14), radius: 22, x: 0, y: 14)
-
-            VStack(spacing: 8) {
-                // Title expects to wrap to two lines.
-                SkeletonBlock(cornerRadius: 10)
-                    .frame(width: heroSize * 0.95, height: 22)
-                    .padding(.top, 6)
-                SkeletonBlock(cornerRadius: 10)
-                    .frame(width: heroSize * 0.8, height: 22)
-
-                // One subtle line for the summary intro.
-                SkeletonBlock(cornerRadius: 8)
-                    .frame(width: heroSize * 0.72, height: 16)
-            }
-            .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.bottom, 8)
-
-            HStack(spacing: 12) {
-                SkeletonBlock(cornerRadius: 12)
-                    .frame(height: 46)
-                    .frame(maxWidth: .infinity)
-                SkeletonBlock(cornerRadius: 12)
-                    .frame(height: 46)
-                    .frame(maxWidth: .infinity)
+    var body: some View {
+        GeometryReader { proxy in
+            let clampedFraction = min(max(fraction, 0), 1)
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: height / 2, style: .continuous)
+                    .fill(Color.brieflyProgressTrackBackground)
+                RoundedRectangle(cornerRadius: height / 2, style: .continuous)
+                    .fill(Color.gold)
+                    .frame(width: proxy.size.width * clampedFraction)
             }
         }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(width: width, height: height)
+        .accessibilityHidden(true)
+    }
+}
+
+private extension FeedView {
+    var latestSkeletonCard: some View {
+        let coverSize: CGFloat = 108
+
+        return VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .bottom, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        SkeletonBlock(cornerRadius: 6)
+                            .frame(width: 140, height: 12)
+                            .opacity(0.85)
+
+                        SkeletonBlock(cornerRadius: 10)
+                            .frame(height: 28)
+                        SkeletonBlock(cornerRadius: 10)
+                            .frame(width: 210, height: 28)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    SkeletonBlock(cornerRadius: 16)
+                        .frame(width: coverSize, height: coverSize)
+                        .padding(.bottom,9)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                SkeletonBlock(cornerRadius: 8)
+                    .frame(height: 16)
+                SkeletonBlock(cornerRadius: 8)
+                    .frame(width: 240, height: 16)
+
+                HStack(spacing: 12) {
+                    SkeletonBlock(cornerRadius: 999)
+                        .frame(width: 84, height: 34)
+
+                    HStack(spacing: 10) {
+                        SkeletonBlock(cornerRadius: 6)
+                            .frame(width: 64, height: 16)
+                        SkeletonBlock(cornerRadius: 999)
+                            .frame(width: 120, height: 4)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+            }
+        }
     }
 }
 

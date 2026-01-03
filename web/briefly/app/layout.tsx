@@ -37,7 +37,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={`${display.variable} ${body.variable} bg-midnight text-muted`}>
+      <body className={`${display.variable} ${body.variable} bg-midnight text-ink`}>
         <AuthProvider>
           <div className="flex min-h-screen flex-col">
             <Navigation />

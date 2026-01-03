@@ -130,7 +130,7 @@ export default function SubscriptionPage() {
     <div className="container space-y-10 ">
      
       <section className="space-y-4 flex flex-col items-center justify-center">
-        <h1 className="mb-8 text-center text-2xl font-semibold text-white">Manage your Subscription</h1>
+        <h1 className="mb-8 text-center text-2xl font-semibold text-ink">Manage your Subscription</h1>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {displayedTiers.map((tier) => {
@@ -156,31 +156,33 @@ export default function SubscriptionPage() {
               <div
                 key={tier.tier}
                 className={clsx(
-                  "group flex h-full flex-col rounded-3xl border p-5 text-left text-white shadow-lg transition hover:-translate-y-1 hover:shadow-2xl",
+                  "group flex h-full flex-col rounded-3xl border p-5 text-left text-ink shadow-sm transition hover:-translate-y-1 hover:shadow-md",
                   isCurrent
-                    ? "border-accent/80 bg-gradient-to-br from-accent/20 via-[#0c2232] to-[#08121f] ring-2 ring-accent/60"
-                    : "border-borderSoft/60 bg-gradient-to-br from-[#0f1e2d] via-[#0b1623] to-[#0a1220]"
+                    ? "border-accent bg-accent/10 ring-2 ring-accent/20"
+                    : "border-borderSoft bg-white hover:border-accent/60"
                 )}
               >
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-semibold uppercase tracking-[0.14em] text-tealSoft">{tier.name}</div>
-                  {isCurrent && <span className="rounded-full bg-accent/20 px-3 py-1 text-xs font-semibold text-accent">Current</span>}
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold uppercase tracking-[0.14em] text-tealSoft">{tier.name}</div>
+                    {isCurrent && <span className="rounded-full bg-accent/20 px-3 py-1 text-xs font-semibold text-accent">Current</span>}
+                  </div>
+                  <div className="mt-3 flex items-baseline gap-2">
+                    <span className="text-4xl font-bold tracking-tight text-ink">{priceValue}</span>
+                    <span className="text-sm font-semibold text-muted">{priceSuffix}</span>
+                  </div>
+                  <p className="mt-3 text-sm leading-relaxed text-muted">{tier.description}</p>
+                  <p className="mt-3 text-xs font-semibold uppercase tracking-[0.12em] text-tealSoft">
+                    {formatMinutes(tier.limits?.minutesPerMonth)}
+                  </p>
                 </div>
-                <div className="mt-3 flex items-baseline gap-2">
-                  <span className="text-4xl font-bold tracking-tight text-white">{priceValue}</span>
-                  <span className="text-sm font-semibold text-tealSoft/90">{priceSuffix}</span>
-                </div>
-                <p className="mt-3 text-sm leading-relaxed text-muted">{tier.description}</p>
-                <p className="mt-3 text-xs font-semibold uppercase tracking-[0.12em] text-tealSoft">
-                  {formatMinutes(tier.limits?.minutesPerMonth)}
-                </p>
                 {isCurrent ? (
                   <div className="mt-5 inline-flex w-full items-center justify-center rounded-full border border-accent/50 bg-accent/10 px-4 py-3 text-sm font-semibold text-accent">
                     Current plan
                   </div>
                 ) : (
                   <button
-                    className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-accent px-4 py-3 text-sm font-semibold text-ink shadow-accent transition hover:-translate-y-0.5 hover:brightness-110 disabled:opacity-70"
+                    className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-ink px-4 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:brightness-110 disabled:opacity-70"
                     onClick={() => handleTierClick(tier.tier)}
                     disabled={loading || portalLoading || redirectingTier === tier.tier}
                   >
@@ -200,7 +202,7 @@ export default function SubscriptionPage() {
       </section>
 
       {error && (
-        <div className="glass-panel flex items-center gap-2 p-4 text-sm text-red-200">
+        <div className="glass-panel flex items-center gap-2 bg-red-50 p-4 text-sm text-red-700">
           <AlertCircle className="h-4 w-4" />
           {error}
         </div>

@@ -42,7 +42,7 @@ export class CoverImageService {
   async buildPrompt(title?: string, segments: EpisodeSegment[] = []): Promise<string> {
     const STYLE =
       'Modern editorial podcast cover. Matte texture, pastel palette, clean flat shapes. ' +
-      'Briefly colors (midnight #132a3b, slate #1f3a4e, apricot #ffa563, teals #2a7997/#37a8ae/#93c8c2). ' +
+      'Briefly colors (warm-grey #F3EFEA, medium-warm-grey #E2DFDB, darker-warm-grey #9F9A95, off-black #2E2E2E, gold #A2845E, white). ' +
       'Minimal, calm. Full-bleed; no borders or drop shadows. No text/logos/watermarks. Avoid photorealism. ';
 
     const hero = this.pickHeroSegment(segments);
@@ -252,7 +252,7 @@ if (t.match(/weekend|lifestyle|leisure|relax|downtime/)) {
     subject:
       "a simplified car with a surfboard on the roof, or a martini glass silhouette, or kids bicycles with helmets",
     palette:
-      "midnight blue base (#132a3b) with pastel apricot (#ffa563), soft teal mist (#93c8c2), and sandy beige highlights",
+      "warm greys (#F3EFEA, #E2DFDB, #9F9A95) with off-black (#2E2E2E), gold accents (#A2845E), and white highlights",
     composition:
       "playful poster-style layout with floating objects and generous negative space",
   };
@@ -264,7 +264,7 @@ if (t.match(/hike|hiking|trail|outdoors|nature|walk|forest|mountain/)) {
     subject:
       "minimal hiking boots, winding trail lines, rolling hills, or layered mountains",
     palette:
-      "deep forest teal (#2a7997), softened moss, warm stone, and pale sky blue over a midnight #132a3b backdrop",
+      "warm greys (#F3EFEA, #E2DFDB, #9F9A95) with off-black (#2E2E2E), gold accents (#A2845E), and white highlights",
     composition:
       "layered landscape composition with depth and gentle vertical rhythm",
   };
@@ -276,7 +276,7 @@ if (t.match(/local events|what's on|nearby|community|festival|market|gig/)) {
     subject:
       "map pin or location arrow combined with simple walking shoes, bicycle, or venue outline",
     palette:
-      "teal spotlight (#37a8ae) with warm sand, midnight edges (#132a3b), and soft off-white notes",
+      "warm greys (#F3EFEA, #E2DFDB, #9F9A95) with off-black (#2E2E2E), gold accents (#A2845E), and white highlights",
     composition:
       "collage-style layout with icon layered over abstract map shapes",
   };
@@ -288,7 +288,7 @@ if (t.match(/news|breaking|headline|update|current events|today/)) {
     subject:
       "simplified world map or local map with broadcast symbols like a microphone, radio waves, or megaphone",
     palette:
-      "slate #1f3a4e with mist teal (#93c8c2), a small apricot signal (#ffa563), and cream",
+      "warm greys (#F3EFEA, #E2DFDB, #9F9A95) with off-black (#2E2E2E), gold accents (#A2845E), and white highlights",
     composition:
       "balanced editorial layout with central map form and radiating signal lines",
   };
@@ -300,7 +300,7 @@ if (t.match(/media|journalism|press|broadcast|radio|podcast/)) {
     subject:
       "vintage microphone, radio dial, newspaper blocks, or camera silhouette",
     palette:
-      "inked slate (#1f3a4e) with warm beige, pastel apricot (#ffa563) details, and off-white",
+      "warm greys (#F3EFEA, #E2DFDB, #9F9A95) with off-black (#2E2E2E), gold accents (#A2845E), and white highlights",
     composition:
       "clean poster layout with strong central object and subtle texture",
   };
@@ -312,7 +312,7 @@ if (t.match(/ai|artificial intelligence|machine learning|automation|robot|neural
     subject:
       "robotic arm, abstract neural network nodes, flowing data lines, or modular automation shapes",
     palette:
-      "midnight base (#132a3b) with pastel teal gradients (#37a8ae, #93c8c2), apricot sparks (#ffa563), and fog gray",
+      "warm greys (#F3EFEA, #E2DFDB, #9F9A95) with off-black (#2E2E2E), gold accents (#A2845E), and white highlights",
     composition:
       "asymmetrical tech collage with layered geometry and connecting lines",
   };
@@ -324,7 +324,7 @@ if (t.match(/startup|business|product|founder|growth|strategy|marketing/)) {
     subject:
       "abstract building blocks, upward paths, roadmap shapes, or stacked panels",
     palette:
-      "slate navy (#1f3a4e) with apricot highlight (#ffa563), muted teal (#2a7997), and soft cream",
+      "warm greys (#F3EFEA, #E2DFDB, #9F9A95) with off-black (#2E2E2E), gold accents (#A2845E), and white highlights",
     composition:
       "structured layout with clear directional flow suggesting progress",
   };
@@ -336,7 +336,7 @@ if (t.match(/finance|markets|stocks|investing|money|inflation|rates|economy/)) {
     subject:
       "minimal charts, rising curves, coins abstracted into circles, or layered financial graphs",
     palette:
-      "ink blue base (#132a3b) with muted emerald, apricot-gold (#ffa563), and soft teal gray (#93c8c2)",
+      "warm greys (#F3EFEA, #E2DFDB, #9F9A95) with off-black (#2E2E2E), gold accents (#A2845E), and white highlights",
     composition:
       "diagonal or upward movement with layered bands suggesting momentum",
   };
@@ -348,7 +348,7 @@ if (t.match(/food|drink|recipe|cooking|dinner|restaurant|coffee|wine|cocktail/))
     subject:
       "stylized plate, cup, wine glass, bottle, or simple ingredients arranged abstractly",
     palette:
-      "apricot sorbet (#ffa563) with herbal olive, teal glass highlights (#37a8ae), and creamy white",
+      "warm greys (#F3EFEA, #E2DFDB, #9F9A95) with off-black (#2E2E2E), gold accents (#A2845E), and white highlights",
     composition:
       "top-down or centered composition with balanced spacing like a menu illustration",
   };
@@ -360,7 +360,7 @@ if (t.match(/health|fitness|exercise|yoga|sleep|nutrition|wellness/)) {
     subject:
       "calm human silhouette, stretching figure, heart line, or flowing breath shapes",
     palette:
-      "soft teal breath (#93c8c2) with sage, warm sand, and a midnight #132a3b base",
+      "warm greys (#F3EFEA, #E2DFDB, #9F9A95) with off-black (#2E2E2E), gold accents (#A2845E), and white highlights",
     composition:
       "centered, symmetrical layout with slow flowing curves",
   };
@@ -372,7 +372,7 @@ if (t.match(/learn|education|explain|how to|guide|lesson|history/)) {
     subject:
       "open book, layered paper sheets, timeline bands, or abstract knowledge paths",
     palette:
-      "muted teal (#2a7997) and apricot ochre (#ffa563) with soft gray and cream on a midnight wash (#132a3b)",
+      "warm greys (#F3EFEA, #E2DFDB, #9F9A95) with off-black (#2E2E2E), gold accents (#A2845E), and white highlights",
     composition:
       "horizontal progression or layered stacks suggesting learning flow",
   };
@@ -383,7 +383,7 @@ if (t.match(/learn|education|explain|how to|guide|lesson|history/)) {
     subject:
       "organic abstract shapes with a single expressive line-art gesture overlay",
     palette:
-      "choose pastel takes on the Briefly palette (#132a3b, #1f3a4e, #ffa563, #2a7997, #37a8ae, #93c8c2) with one complementary accent and off-white",
+      "use the Briefly warm-neutral palette (#F3EFEA, #E2DFDB, #9F9A95) with off-black (#2E2E2E), gold accents (#A2845E), and white",
     composition:
       "asymmetrical layout with one dominant shape and supporting secondary forms",
 };

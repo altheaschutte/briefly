@@ -49,7 +49,7 @@ export default function TopicBoard({ topics, loading, maxActive, onToggle, onDel
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm uppercase tracking-[0.2em] text-tealSoft">Topics</p>
-          <h3 className="text-xl font-semibold text-white">Active lineup</h3>
+          <h3 className="text-xl font-semibold text-ink">Active lineup</h3>
         </div>
         {maxActive !== undefined && (
           <span className="rounded-full border border-borderSoft/70 px-3 py-1 text-xs text-muted">
@@ -71,7 +71,7 @@ export default function TopicBoard({ topics, loading, maxActive, onToggle, onDel
           >
             <div
               className={clsx(
-                "flex items-center gap-3 px-3 py-3 text-sm text-white transition-transform duration-200",
+                "flex items-center gap-3 px-3 py-3 text-sm text-ink transition-transform duration-200",
                 revealedId === topic.id ? "-translate-x-16" : "translate-x-0"
               )}
               onTouchStart={(e) => handleTouchStart(topic.id, e)}
@@ -89,7 +89,7 @@ export default function TopicBoard({ topics, loading, maxActive, onToggle, onDel
                     "inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition",
                     topic.isActive
                       ? "bg-accent text-ink shadow-accent"
-                      : "border border-borderSoft/70 bg-surface/80 text-muted hover:border-teal"
+                      : "border border-borderSoft/70 bg-white text-muted hover:border-accent"
                   )}
                   onClick={() => onToggle(topic)}
                 >
@@ -113,7 +113,7 @@ export default function TopicBoard({ topics, loading, maxActive, onToggle, onDel
             {onDelete && (
               <button
                 className={clsx(
-                  "absolute right-2 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 rounded-full bg-red-500 px-4 py-2 text-xs font-semibold text-white shadow-lg transition sm:hidden",
+                  "absolute right-2 top-1/2 z-10 flex -translate-y-1/2 items-center gap-1 rounded-full bg-red-600 px-4 py-2 text-xs font-semibold text-white shadow-lg transition sm:hidden",
                   revealedId === topic.id ? "translate-x-0 opacity-100" : "pointer-events-none translate-x-10 opacity-0"
                 )}
                 onClick={() => onDelete(topic)}

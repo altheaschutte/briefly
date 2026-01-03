@@ -3,7 +3,7 @@ import SwiftUI
 struct PlayerBarView: View {
     let onCreateEpisode: (() -> Void)?
     @EnvironmentObject private var audioManager: AudioPlayerManager
-    @State private var navigateToDetail: Bool = false
+    @EnvironmentObject private var appViewModel: AppViewModel
 
     init(onCreateEpisode: (() -> Void)? = nil) {
         self.onCreateEpisode = onCreateEpisode
@@ -12,39 +12,40 @@ struct PlayerBarView: View {
     var body: some View {
         Group {
             if let episode = audioManager.currentEpisode {
-                ZStack {
-                    NavigationLink(
-                        destination: EpisodeDetailView(episode: episode, onCreateEpisode: onCreateEpisode),
-                        isActive: $navigateToDetail
-                    ) { EmptyView() }
-                    .hidden()
-
-                    VStack(spacing: 8) {
-                        HStack(spacing: 12) {
-                            Button(action: { navigateToDetail = true }) {
-                                Text(episode.displayTitle)
-                                    .font(.callout.weight(.semibold))
-                                    .lineLimit(1)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .buttonStyle(.plain)
-
-                            Button(action: togglePlay) {
-                                Image(systemName: audioManager.isPlaying ? "pause.fill" : "play.fill")
-                                    .font(.title2.weight(.semibold))
-                                    .foregroundColor(.primary)
-                            }
-                            .buttonStyle(.borderless)
+                VStack(spacing: 8) {
+                    HStack(spacing: 12) {
+                        Button(action: { appViewModel.presentEpisodeDetail(episode) }) {
+                            Text(episode.displayTitle)
+                                .font(.callout.weight(.semibold))
+                                .lineLimit(1)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
+                        .buttonStyle(.plain)
 
-                        progressBar
+                        Button(action: togglePlay) {
+                            Image(systemName: audioManager.isPlaying ? "pause.fill" : "play.fill")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(width: 44, height: 44)
+                                .background(
+                                    Circle()
+                                        .fill(Color.offBlack)
+                                        .overlay(
+                                            Circle()
+                                                .stroke(Color.white.opacity(0.14), lineWidth: 1)
+                                        )
+                                )
+                        }
+                        .buttonStyle(.borderless)
                     }
-                    .padding(.vertical, 10)
-                    .padding(.horizontal, 12)
-                    .background(Color.brieflySurface)
-                    .cornerRadius(12)
-                    .padding(.horizontal)
+
+                    progressBar
                 }
+                .padding(.vertical, 10)
+                .padding(.horizontal, 12)
+                .background(Color.brieflySurface)
+                .cornerRadius(12)
+                .padding(.horizontal)
             }
         }
     }

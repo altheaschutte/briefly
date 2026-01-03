@@ -32,7 +32,7 @@ struct GenerateEpisodeView: View {
                 } else if isQueued {
                     HStack(spacing: 10) {
                         ProgressView()
-                            .tint(.white)
+                            .tint(.brieflyTextPrimary)
                         Text("Starting… Tap to undo")
                     }
                         .frame(maxWidth: .infinity)
@@ -44,8 +44,8 @@ struct GenerateEpisodeView: View {
                 }
             }
             .background(isQueued ? Color.brieflySurface : Color.brieflyPrimary)
-            .foregroundColor(.white)
-            .cornerRadius(12)
+            .foregroundColor(isQueued ? .brieflyTextPrimary : .white)
+            .clipShape(Capsule())
 
             Spacer()
         }

@@ -93,7 +93,7 @@ struct VoiceInputView: View {
             }
             .background(Color.brieflyPrimary)
             .foregroundColor(.white)
-            .cornerRadius(12)
+            .clipShape(Capsule())
             .padding(.bottom)
             .disabled(viewModel.isSubmitting || viewModel.isProcessingAudio)
 

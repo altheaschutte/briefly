@@ -34,7 +34,7 @@ struct SettingsView: View {
                 } label: {
                     HStack {
                         Text("Playback speed")
-                            .foregroundColor(.white)
+                            .foregroundColor(.brieflyTextPrimary)
                         Spacer()
                         Text(viewModel.playbackSpeed.playbackSpeedLabel)
                             .font(.body.weight(.semibold))
@@ -47,7 +47,8 @@ struct SettingsView: View {
             } header: {
                 settingsHeader("Playback")
             }
-            .listRowBackground(Color.brieflySurface)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
 
 //            Section {
 //                Text("Voice selection coming soon.")
@@ -66,14 +67,15 @@ struct SettingsView: View {
                 })) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Notify when a new episode is ready.")
-                            .foregroundColor(.white)
+                            .foregroundColor(.brieflyTextPrimary)
                             .font(.body)
                     }
                 }
             } header: {
                 settingsHeader("Notifications")
             }
-            .listRowBackground(Color.brieflySurface)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
 
             Section {
                 if viewModel.isLoadingSchedules {
@@ -89,7 +91,7 @@ struct SettingsView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("\(viewModel.formattedTime(from: schedule.localTimeMinutes)) · \(schedule.frequency.displayName)")
                                 .font(.body)
-                                .foregroundColor(.white)
+                                .foregroundColor(.brieflyTextPrimary)
                         }
                         Spacer()
                         Toggle(isOn: Binding(get: {
@@ -136,16 +138,17 @@ struct SettingsView: View {
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
             }
-            .listRowBackground(Color.brieflySurface)
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
 
             Section {
                 Button(role: .destructive, action: viewModel.logout) {
                     Label("Logout", systemImage: "rectangle.portrait.and.arrow.right")
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.vertical, 10)
-                        .foregroundColor(.white)
+                        .foregroundColor(.brieflyTextPrimary)
                         .background(Color.brieflySurface)
-                        .cornerRadius(10)
+                        .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
             }
@@ -154,7 +157,10 @@ struct SettingsView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .listRowBackground(Color.brieflyBackground)
+        .listSectionSeparator(.hidden)
+        .listRowSeparator(.hidden)
+        .listRowSeparatorTint(.clear)
+        .listRowBackground(Color.clear)
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .task {
@@ -260,6 +266,9 @@ private struct ScheduleEditor: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
+            .listSectionSeparator(.hidden)
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
             .background(Color.brieflyBackground)
             .navigationTitle("Schedule")
             .navigationBarTitleDisplayMode(.inline)
@@ -354,20 +363,19 @@ private struct SettingsSectionHeader<Trailing: View>: View {
         HStack(spacing: 8) {
             Text(title)
                 .font(.subheadline.weight(.semibold))
-                .foregroundColor(.brieflyTextMuted)
+                .foregroundColor(.offBlack)
             Spacer()
             trailing
         }
-        .padding(.vertical, 8)
     }
 }
 
 private func settingsHeader<Trailing: View>(_ title: String, @ViewBuilder trailing: () -> Trailing = { EmptyView() }) -> some View {
     ZStack {
-        Color.brieflyBackground
+        Color.warmGrey
         SettingsSectionHeader(title: title, trailing: trailing)
             .padding(.horizontal)
-            .padding(.vertical, 6)
     }
+    .frame(height: 40)
     .listRowInsets(EdgeInsets())
 }

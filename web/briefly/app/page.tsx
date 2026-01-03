@@ -3,14 +3,14 @@ import Link from "next/link";
 
 export default function RootPage() {
   return (
-    <div className="w-full">
-      <section className="relative isolate w-full overflow-visible px-0 py-12 md:py-12">
-        <div className="container relative grid items-center justify-items-center gap-12 text-center lg:grid-cols-[1.05fr_0.95fr] lg:justify-items-start lg:text-left">
+    <div className="w-full -mb-20 -mt-8 md:-mt-12">
+      <section className="relative isolate w-full min-h-[min(calc(100svh-4.5rem),52rem)] overflow-visible px-0 py-[clamp(1.75rem,4vh,3rem)]">
+        <div className="container relative grid items-center justify-items-center gap-[clamp(2rem,6vh,4rem)] text-center lg:grid-cols-[1.05fr_0.95fr] lg:justify-items-start lg:text-left">
           <div className="space-y-6">
-            <p className="inline-flex items-center gap-2 rounded-full border border-borderSoft/70 bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-tealSoft">
+            <p className="inline-flex items-center gap-2 rounded-full bg-surface px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-tealSoft">
             PROMPT TO PODCAST
             </p>
-            <h1 className="text-4xl font-semibold leading-tight text-white md:text-5xl">
+            <h1 className="text-4xl font-semibold leading-tight text-ink md:text-5xl">
             Your ideas. Ready to play.
             </h1>
             <p className="max-w-2xl text-lg text-muted md:text-xl">
@@ -21,7 +21,7 @@ export default function RootPage() {
               <Link
                 href="/#"
                 aria-label="Download Briefly app"
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-1 py-0.5 text-sm font-semibold text-ink transition hover:-translate-y-0.5 hover:opacity-95"
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-navBar px-1 py-0.5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:opacity-95"
               >
                 <span className="sr-only">Download the app</span>
                 <svg viewBox="0 0 120 40" aria-hidden="true" className="h-10">
@@ -40,14 +40,26 @@ export default function RootPage() {
 
           <div className="relative flex w-full items-center justify-center lg:justify-end">
             <div className="pointer-events-none absolute inset-0 -z-10 rounded-full bg-gradient-to-br from-accent/30 via-transparent to-teal/35 blur-3xl" />
-            <Image
-              src="/screens-staggered.svg"
-              alt="Briefly app screens"
-              width={626}
-              height={837}
-              className="w-[340px] max-w-[620px] md:w-[520px] drop-shadow-[0_30px_120px_rgba(55,168,174,0.32)]"
-              priority
-            />
+            <div className="w-[min(340px,90vw)] max-w-[620px] md:w-[520px] lg:w-[min(520px,52vh)] drop-shadow-[0_30px_120px_rgba(162,132,94,0.18)]">
+              <div className="relative aspect-[626/837]">
+                <Image
+                  src="/briefs-screen.svg"
+                  alt="Briefly briefs screen"
+                  width={450}
+                  height={920}
+                  className="absolute left-0 top-[10%] w-[56%] rounded-[28px]"
+                  priority
+                />
+                <Image
+                  src="/episode-detail-screen.svg"
+                  alt="Briefly episode detail screen"
+                  width={450}
+                  height={920}
+                  className="absolute right-0 top-0 w-[56%] rounded-[28px]"
+                  priority
+                />
+              </div>
+            </div>
           </div>
         </div>
       </section>

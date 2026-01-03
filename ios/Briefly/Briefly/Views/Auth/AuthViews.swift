@@ -19,35 +19,29 @@ struct AuthFlowView: View {
 
                     VStack(spacing: 48) {
                         VStack(spacing: 12) {
-                            Image("BrieflyLogo")
+                            Image("BrieflyWordmark")
                                 .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 72, height: 72)
-                                .cornerRadius(16)
-
-                            Text("Briefly".uppercased())
-                                .font(.system(size: 14, weight: .semibold))
-                                .tracking(3)
-                                .foregroundColor(.brieflyAccentSoft)
+                                .scaledToFit()
+                                .frame(width: 90)
                         }
 
                         VStack(alignment: .leading, spacing: 16) {
 	                            Button {
-	                                Task { await viewModel.signInWithGoogle() }
-	                            } label: {
-	                                HStack(alignment: .center, spacing: 12) {
-	                                    GoogleLogoView()
-	                                    Text("Continue with Google")
-	                                        .fontWeight(.semibold)
-	                                    Spacer()
-	                                }
+		                                Task { await viewModel.signInWithGoogle() }
+		                            } label: {
+                                HStack(alignment: .center, spacing: 12) {
+                                    GoogleLogoView()
+                                    Text("Continue with Google")
+                                        .fontWeight(.semibold)
+                                    Spacer()
+                                }
                                 .padding()
                                 .frame(maxWidth: .infinity)
-                                .background(Color.white.opacity(0.12))
-                                .foregroundColor(.white)
-                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                .background(Color.brieflySurface)
+                                .foregroundColor(.brieflyTextPrimary)
+                                .clipShape(Capsule())
                                 .overlay(
-                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    Capsule()
                                         .stroke(Color.brieflyBorder, lineWidth: 1)
                                 )
                             }
@@ -58,13 +52,13 @@ struct AuthFlowView: View {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("Email")
                                     .font(.subheadline.weight(.semibold))
-                                    .foregroundColor(.white)
+                                    .foregroundColor(.brieflyTextPrimary)
 
                                 TextField(
                                     "Email",
                                     text: $viewModel.email,
                                     prompt: Text(verbatim: "name@example.com")
-                                        .foregroundColor(.white.opacity(0.55))
+                                        .foregroundColor(.brieflyTextMuted)
                                 )
                                     .textInputAutocapitalization(.never)
                                     .keyboardType(.emailAddress)
@@ -72,20 +66,21 @@ struct AuthFlowView: View {
                                     .disableAutocorrection(true)
                                     .disabled(viewModel.codeSent || appViewModel.isHandlingAuthRedirect)
                                     .inputFieldStyle()
-                                    .foregroundColor(.white)
+                                    .tint(.black)
+                                    .foregroundColor(.brieflyTextPrimary)
                             }
 
                             if viewModel.codeSent {
                                 VStack(alignment: .leading, spacing: 8) {
                                     Text("6-digit code")
                                         .font(.subheadline.weight(.semibold))
-                                        .foregroundColor(.white)
+                                        .foregroundColor(.brieflyTextPrimary)
 
                                     TextField(
                                         "6-digit code",
                                         text: $viewModel.code,
                                         prompt: Text("••••••")
-                                            .foregroundColor(.white.opacity(0.55))
+                                            .foregroundColor(.brieflyTextMuted)
                                     )
                                         .keyboardType(.numberPad)
                                         .textContentType(.oneTimeCode)
@@ -94,7 +89,8 @@ struct AuthFlowView: View {
                                         }
                                         .disabled(appViewModel.isHandlingAuthRedirect)
                                         .inputFieldStyle()
-                                        .foregroundColor(.white)
+                                        .tint(.black)
+                                        .foregroundColor(.brieflyTextPrimary)
                                 }
                             }
 
@@ -125,12 +121,8 @@ struct AuthFlowView: View {
                                     Image(systemName: viewModel.codeSent ? "checkmark" : "arrow.right")
                                         .font(.system(size: 18, weight: .semibold))
                                 }
-                                .padding()
-                                .frame(maxWidth: .infinity)
-                                .background(Color.brieflyPrimary)
-                                .foregroundColor(.white)
-                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                             }
+                            .buttonStyle(BrieflyCapsuleButtonStyle())
                             .disabled(viewModel.isLoading || appViewModel.isHandlingAuthRedirect)
                         }
                         .frame(maxWidth: 420)
@@ -140,14 +132,14 @@ struct AuthFlowView: View {
                     Spacer()
                 }
                 if appViewModel.isHandlingAuthRedirect {
-                    Color.black.opacity(0.55)
+                    Color.warmGrey.opacity(0.9)
                         .ignoresSafeArea()
                     VStack(spacing: 12) {
                         ProgressView()
-                            .tint(.white)
+                            .tint(.brieflyPrimary)
                         Text("Signing you in...")
                             .font(.headline)
-                            .foregroundColor(.white)
+                            .foregroundColor(.brieflyTextPrimary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal)
                     }
@@ -285,17 +277,17 @@ private struct DividerWithLabel: View {
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             Rectangle()
-                .fill(Color.white.opacity(0.15))
+                .fill(Color.brieflyBorder)
                 .frame(height: 1)
 
             Text(label)
                 .font(.caption.weight(.semibold))
-                .foregroundColor(.white.opacity(0.7))
+                .foregroundColor(.brieflyTextMuted)
                 .textCase(.uppercase)
                 .tracking(2)
 
             Rectangle()
-                .fill(Color.white.opacity(0.15))
+                .fill(Color.brieflyBorder)
                 .frame(height: 1)
         }
     }

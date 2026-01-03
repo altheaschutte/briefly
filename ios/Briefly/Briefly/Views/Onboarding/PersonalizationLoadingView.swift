@@ -3,27 +3,17 @@ import SwiftUI
 struct PersonalizationLoadingView: View {
     var body: some View {
         ZStack {
-            Color.black.opacity(0.55)
+            Color.warmGrey
                 .ignoresSafeArea()
-            VStack(spacing: 16) {
+            VStack(spacing: 18) {
+                Image("BrieflyWordmark")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 180)
                 ProgressView()
-                    .tint(.white)
-                    .scaleEffect(1.2)
-                VStack(spacing: 6) {
-                    Text("We're personalizing your Briefly")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                    Text("Generating seed topics tailored to you. This usually takes a few seconds.")
-                        .font(.subheadline)
-                        .foregroundColor(.brieflyTextMuted)
-                        .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: 280)
+                    .tint(.brieflyPrimary)
+                    .scaleEffect(1.1)
             }
-            .padding(24)
-            .background(Color.brieflySurface)
-            .cornerRadius(16)
-            .shadow(radius: 12)
         }
     }
 }

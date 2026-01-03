@@ -70,6 +70,7 @@ private struct BackendTopic: Decodable {
     let title: String?
     let originalText: String
     let rewrittenQuery: String?
+    let classificationShortLabel: String?
     let isActive: Bool
     let orderIndex: Int
 
@@ -80,6 +81,8 @@ private struct BackendTopic: Decodable {
         case originalTextSnake = "original_text"
         case rewrittenQuery
         case rewrittenQuerySnake = "rewritten_query"
+        case classificationShortLabelCamel = "classificationShortLabel"
+        case classificationShortLabelSnake = "classification_short_label"
         case isActive
         case isActiveSnake = "is_active"
         case orderIndexCamel = "orderIndex"
@@ -100,6 +103,13 @@ private struct BackendTopic: Decodable {
         } else {
             rewrittenQuery = try container.decodeIfPresent(String.self, forKey: .rewrittenQuerySnake)
         }
+        if let camel = try? container.decode(String.self, forKey: .classificationShortLabelCamel) {
+            classificationShortLabel = camel
+        } else if let snake = try? container.decode(String.self, forKey: .classificationShortLabelSnake) {
+            classificationShortLabel = snake
+        } else {
+            classificationShortLabel = nil
+        }
         if let camel = try? container.decode(Bool.self, forKey: .isActive) {
             isActive = camel
         } else {
@@ -119,6 +129,7 @@ private struct BackendTopic: Decodable {
             id: UUID(uuidString: id) ?? UUID(),
             title: title,
             originalText: originalText,
+            classificationShortLabel: classificationShortLabel,
             orderIndex: orderIndex,
             isActive: isActive
         )

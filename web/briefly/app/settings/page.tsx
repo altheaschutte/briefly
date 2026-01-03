@@ -28,7 +28,7 @@ export default function SettingsPage() {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-sm uppercase tracking-[0.2em] text-tealSoft">Settings</p>
-            <h1 className="text-3xl font-semibold text-white">Playback + notifications</h1>
+            <h1 className="text-3xl font-semibold text-ink">Playback + notifications</h1>
             <p className="text-sm text-muted">
               Matches iOS defaults. Any change syncs across devices instantly. Signed in as {email ?? "unknown"}.
             </p>
@@ -42,7 +42,7 @@ export default function SettingsPage() {
 
         <div className="mt-5 grid gap-6 lg:grid-cols-2">
           <div className="glass-panel p-5">
-            <div className="flex items-center gap-2 text-white">
+            <div className="flex items-center gap-2 text-ink">
               <PlayCircle className="h-5 w-5 text-accent" />
               Playback defaults
             </div>
@@ -50,8 +50,8 @@ export default function SettingsPage() {
             <div className="mt-3 space-y-2">
               {playbackSettings.map((setting) => (
                 <div key={setting.label} className="flex items-center justify-between rounded-2xl border border-borderSoft/70 bg-overlay/70 px-3 py-2">
-                  <span className="text-sm text-white">{setting.label}</span>
-                  <button className="rounded-full border border-borderSoft px-3 py-1 text-xs text-muted transition hover:border-teal">
+                  <span className="text-sm text-ink">{setting.label}</span>
+                  <button className="rounded-full border border-borderSoft px-3 py-1 text-xs text-muted transition hover:border-accent">
                     {setting.value}
                   </button>
                 </div>
@@ -60,7 +60,7 @@ export default function SettingsPage() {
           </div>
 
           <div className="glass-panel p-5">
-            <div className="flex items-center gap-2 text-white">
+            <div className="flex items-center gap-2 text-ink">
               <Bell className="h-5 w-5 text-accent" />
               Notifications
             </div>
@@ -68,8 +68,8 @@ export default function SettingsPage() {
             <div className="mt-3 space-y-2">
               {notificationSettings.map((setting) => (
                 <div key={setting.label} className="flex items-center justify-between rounded-2xl border border-borderSoft/70 bg-overlay/70 px-3 py-2">
-                  <span className="text-sm text-white">{setting.label}</span>
-                  <button className="rounded-full border border-borderSoft px-3 py-1 text-xs text-muted transition hover:border-teal">
+                  <span className="text-sm text-ink">{setting.label}</span>
+                  <button className="rounded-full border border-borderSoft px-3 py-1 text-xs text-muted transition hover:border-accent">
                     {setting.value}
                   </button>
                 </div>
@@ -81,7 +81,7 @@ export default function SettingsPage() {
 
       <section className="grid gap-6 lg:grid-cols-3">
         <div className="glass-panel p-5">
-          <div className="flex items-center gap-2 text-white">
+          <div className="flex items-center gap-2 text-ink">
             <Volume2 className="h-5 w-5 text-accent" />
             Voice + audio
           </div>
@@ -93,7 +93,7 @@ export default function SettingsPage() {
           </div>
         </div>
         <div className="glass-panel p-5">
-          <div className="flex items-center gap-2 text-white">
+          <div className="flex items-center gap-2 text-ink">
             <Clock3 className="h-5 w-5 text-accent" />
             Quiet hours
           </div>
@@ -105,7 +105,7 @@ export default function SettingsPage() {
           </div>
         </div>
         <div className="glass-panel p-5">
-          <div className="flex items-center gap-2 text-white">
+          <div className="flex items-center gap-2 text-ink">
             <ShieldCheck className="h-5 w-5 text-accent" />
             Sessions
           </div>
@@ -120,7 +120,7 @@ export default function SettingsPage() {
 
       <section className="glass-panel flex flex-col gap-4 p-6 md:flex-row md:items-center md:justify-between">
         <div>
-          <div className="flex items-center gap-2 text-white">
+          <div className="flex items-center gap-2 text-ink">
             <Smartphone className="h-5 w-5 text-accent" />
             Device sync
           </div>

@@ -197,7 +197,7 @@ export default function EpisodeDetailPage() {
               </a>
               <div className="flex flex-col">
                 <p className="text-xs font-mono uppercase tracking-[0.2em] text-tealSoft">{date}</p>
-                <h1 className="mt-1 text-4xl font-semibold text-white">{episode?.title || "Episode"}</h1>
+                <h1 className="mt-1 text-4xl font-semibold text-ink">{episode?.title || "Episode"}</h1>
               </div>
             </div>
             {episode && (
@@ -214,13 +214,13 @@ export default function EpisodeDetailPage() {
             </div>
           )}
           {error && (
-            <div className="flex items-center gap-2 text-sm text-red-200">
+            <div className="flex items-center gap-2 text-sm text-red-700">
               <AlertCircle className="h-4 w-4" />
               {error}
             </div>
           )}
           {actionError && (
-            <div className="mt-4 flex items-center gap-2 text-sm text-red-200">
+            <div className="mt-4 flex items-center gap-2 text-sm text-red-700">
               <AlertCircle className="h-4 w-4" />
               {actionError}
             </div>
@@ -229,7 +229,7 @@ export default function EpisodeDetailPage() {
           {episode && (
             <div
               id="episode-script"
-              className="prose mt-10 max-w-none text-muted prose-headings:text-white prose-p:text-muted prose-strong:text-white prose-a:text-accent prose-li:text-muted"
+              className="prose mt-10 max-w-none prose-a:text-accent"
             >
               {episode.showNotes ? (
                 episode.showNotes.split("\n\n").map((block, idx) => (
@@ -298,10 +298,10 @@ function ActionMenu({
       onClick={onClick}
       disabled={disabled}
       className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition ${
-        danger ? "text-red-200 hover:bg-red-500/10" : "text-white hover:bg-overlay/70"
+        danger ? "text-red-700 hover:bg-red-50" : "text-ink hover:bg-overlay/60"
       } ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
     >
-      <Icon className={`h-4 w-4 ${danger ? "text-red-200" : "text-muted"}`} />
+      <Icon className={`h-4 w-4 ${danger ? "text-red-700" : "text-muted"}`} />
       <span>{label}</span>
     </button>
   );
@@ -313,7 +313,7 @@ function ActionMenu({
         aria-expanded={open}
         aria-haspopup="menu"
         onClick={onToggle}
-        className="flex h-10 w-10 items-center justify-center rounded-full border border-borderSoft/70 bg-overlay/70 text-white transition hover:border-teal"
+        className="flex h-10 w-10 items-center justify-center rounded-full border border-borderSoft/70 bg-overlay/70 text-ink transition hover:border-accent"
       >
         <MoreVertical className="h-5 w-5" />
       </button>

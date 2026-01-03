@@ -3,7 +3,7 @@ export default function SupportPage() {
     <div className="container">
       <div className="glass-panel mx-auto max-w-3xl space-y-4 p-8">
         <p className="text-sm uppercase tracking-[0.2em] text-tealSoft">Support</p>
-        <h1 className="text-3xl font-semibold text-white">Need help with Briefly on web?</h1>
+        <h1 className="text-3xl font-semibold text-ink">Need help with Briefly on web?</h1>
         <p className="text-base text-muted">
           Email support@briefly.fm with your account email and a short note. We respond fastest to playback issues,
           billing changes, and topic onboarding questions.

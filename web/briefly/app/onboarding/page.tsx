@@ -161,21 +161,21 @@ export default function OnboardingPage() {
 
   return (
     <div className="container flex min-h-[100dvh] flex-col items-center justify-start">
-      <div className="md:mt-16 w-full max-w-2xl space-y-6 rounded-xl bg-white/5 p-8 shadow-xl backdrop-blur">
-        <div className="flex items-center gap-3 text-white">
+      <div className="md:mt-16 w-full max-w-2xl space-y-6 glass-panel p-8 shadow-xl">
+        <div className="flex items-center gap-3 text-ink">
           <Sparkles className="h-5 w-5 text-accent" />
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-tealSoft">Onboarding</p>
-            <h1 className="text-3xl font-semibold text-white">Tell us about you</h1>
+            <h1 className="text-3xl font-semibold text-ink">Tell us about you</h1>
             {/* <p className="text-sm text-muted">We use this to personalise your initial topics only.</p> */}
           </div>
         </div>
 
         <form className="space-y-8 text-muted" onSubmit={handleSubmit}>
           <label className="block space-y-1 ">
-            <span className="mb-2 text-sm font-semibold text-white">First name</span>
+            <span className="mb-2 text-sm font-semibold text-ink">First name</span>
             <input
-              className="w-full rounded-lg border border-transparent bg-overlay px-3 py-2 text-white outline-none focus:border-teal focus:ring-1 focus:ring-tealSoft"
+              className="w-full rounded-lg border border-borderSoft bg-white px-3 py-2 text-ink outline-none focus:border-ink focus:ring-1 focus:ring-ink"
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
               required
@@ -184,11 +184,11 @@ export default function OnboardingPage() {
 
           <label className="block space-y-2 ">
             <div>
-              <span className="text-sm font-semibold text-white">Tell me about yourself</span>
+              <span className="text-sm font-semibold text-ink">Tell me about yourself</span>
               <p className="text-sm text-muted">What do you want to know about?</p>
             </div>
             <textarea
-              className="min-h-[140px] w-full resize-none rounded-lg border border-transparent bg-overlay px-3 py-3 text-white outline-none focus:border-teal focus:ring-1 focus:ring-tealSoft"
+              className="min-h-[140px] w-full resize-none rounded-lg border border-borderSoft bg-white px-3 py-3 text-ink outline-none focus:border-ink focus:ring-1 focus:ring-ink"
               value={aboutContext}
               onChange={(e) => setAboutContext(e.target.value)}
               required
@@ -207,21 +207,21 @@ export default function OnboardingPage() {
                     aria-pressed={selected}
                     className={`flex h-full flex-col gap-3 rounded-lg border px-4 py-3 text-left transition ${
                       selected
-                        ? "border-tealSoft/70 bg-tealSoft/10 text-white"
-                        : "border-white/10 bg-overlay text-muted hover:border-tealSoft/40 hover:bg-tealSoft/10"
+                        ? "border-accent bg-accent/10 text-ink"
+                        : "border-borderSoft bg-surface text-ink hover:border-accent/60 hover:bg-overlay/40"
                     }`}
                     onClick={() => toggleIntention(title)}
                   >
                     <div className="flex items-start gap-3">
                       <span
                         className={`flex h-10 w-10 items-center justify-center rounded-full border ${
-                          selected ? "border-tealSoft bg-tealSoft/20 text-white" : "border-white/10 bg-white/5"
+                          selected ? "border-accent bg-accent/10 text-accent" : "border-borderSoft bg-white text-muted"
                         }`}
                       >
                         <Icon className="h-5 w-5" />
                       </span>
                       <div className="space-y-1">
-                        <p className="text-base font-semibold text-white">{title}</p>
+                        <p className="text-base font-semibold text-ink">{title}</p>
                         <p className="text-sm text-muted">{description}</p>
                       </div>
                     </div>
@@ -233,7 +233,7 @@ export default function OnboardingPage() {
               <label className="block space-y-1">
                 <span className="mb-2 text-sm">Tell us more</span>
                 <input
-                  className="w-full rounded-lg border border-transparent bg-overlay px-3 py-2 text-white outline-none focus:border-teal focus:ring-1 focus:ring-tealSoft"
+                  className="w-full rounded-lg border border-borderSoft bg-white px-3 py-2 text-ink outline-none focus:border-ink focus:ring-1 focus:ring-ink"
                   value={otherIntention}
                   onChange={(e) => setOtherIntention(e.target.value)}
                   required
@@ -253,7 +253,7 @@ export default function OnboardingPage() {
         </form>
 
         {error && (
-          <div className="flex items-center gap-2 text-sm text-red-200">
+          <div className="flex items-center gap-2 text-sm text-red-600">
             <AlertCircle className="h-4 w-4" />
             {error}
           </div>

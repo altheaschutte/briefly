@@ -16,10 +16,10 @@ struct EpisodeGenerationToastView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(Color.brieflyBackground)
+        .background(Color.brieflyTabBarBackground)
         .overlay {
             Capsule()
-                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                .stroke(Color.white.opacity(0.18), lineWidth: 1)
         }
         .clipShape(Capsule())
         .shadow(color: Color.black.opacity(0.22), radius: 10, y: 6)
@@ -27,4 +27,3 @@ struct EpisodeGenerationToastView: View {
         .accessibilityLabel(text)
     }
 }
-

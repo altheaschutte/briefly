@@ -25,7 +25,6 @@ struct HomeView: View {
                     .foregroundColor(.brieflyTextMuted)
             }
             Spacer()
-            PlayerBarView()
         }
         .padding()
         .navigationTitle("Briefly")
@@ -64,7 +63,7 @@ struct HomeView: View {
                     .font(.headline)
             }
             .frame(width: 180, height: 180)
-            .background(Color.brieflyPrimary)
+            .background(Color.offBlack)
             .clipShape(Circle())
             .shadow(radius: 10)
         }

@@ -54,7 +54,7 @@ struct OnboardingProfileView: View {
                 .foregroundColor(.brieflyAccentSoft)
             Text("Tell us about you")
                 .font(.largeTitle.weight(.bold))
-                .foregroundColor(.white)
+                .foregroundColor(.brieflyTextPrimary)
          
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -64,12 +64,12 @@ struct OnboardingProfileView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("First name")
                 .font(.subheadline.weight(.semibold))
-                .foregroundColor(.white)
+                .foregroundColor(.brieflyTextPrimary)
             TextField("", text: $viewModel.firstName)
                 .textContentType(.givenName)
                 .submitLabel(.done)
                 .inputFieldStyle()
-                .foregroundColor(.white)
+                .foregroundColor(.brieflyTextPrimary)
         }
     }
 
@@ -77,7 +77,7 @@ struct OnboardingProfileView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Tell me about yourself")
                 .font(.subheadline.weight(.semibold))
-                .foregroundColor(.white)
+                .foregroundColor(.brieflyTextPrimary)
             Text("What do you want to know about?")
             .font(.subheadline)
             .foregroundColor(.brieflyTextMuted)
@@ -85,7 +85,7 @@ struct OnboardingProfileView: View {
                 .frame(minHeight: 140)
                 .scrollContentBackground(.hidden)
                 .inputFieldStyle()
-                .foregroundColor(.white)
+                .foregroundColor(.brieflyTextPrimary)
         }
     }
 
@@ -114,15 +114,15 @@ struct OnboardingProfileView: View {
                         .frame(width: 36, height: 36)
                         .background(
                             Circle()
-                                .fill(selected ? Color.brieflyAccentSoft.opacity(0.25) : Color.white.opacity(0.08))
+                                .fill(selected ? Color.brieflyAccentSoft.opacity(0.18) : Color.brieflyBorder.opacity(0.5))
                         )
-                        .foregroundColor(.white)
+                        .foregroundColor(.brieflyTextPrimary)
                     Spacer()
                 }
                 VStack(alignment: .leading, spacing: 6) {
                     Text(option.title)
                         .font(.headline)
-                        .foregroundColor(.white)
+                        .foregroundColor(.brieflyTextPrimary)
                     Text(option.description)
                         .font(.subheadline)
                         .foregroundColor(.brieflyTextMuted)
@@ -130,7 +130,7 @@ struct OnboardingProfileView: View {
             }
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(selected ? Color.brieflyAccentSoft.opacity(0.2) : Color.brieflySurface)
+            .background(selected ? Color.brieflyAccentSoft.opacity(0.12) : Color.brieflySurface)
             .overlay(
                 RoundedRectangle(cornerRadius: 14)
                     .stroke(selected ? Color.brieflyAccentSoft : Color.brieflyBorder, lineWidth: 1)
@@ -151,11 +151,11 @@ struct OnboardingProfileView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Tell us more")
                 .font(.subheadline.weight(.semibold))
-                .foregroundColor(.white)
+                .foregroundColor(.brieflyTextPrimary)
             TextField("", text: $viewModel.otherIntention, axis: .vertical)
                 .lineLimit(2...4)
                 .inputFieldStyle()
-                .foregroundColor(.white)
+                .foregroundColor(.brieflyTextPrimary)
         }
     }
 
@@ -178,7 +178,7 @@ struct OnboardingProfileView: View {
             .frame(maxWidth: .infinity)
             .background(Color.brieflyPrimary)
             .foregroundColor(.white)
-            .cornerRadius(14)
+            .clipShape(Capsule())
         }
         .buttonStyle(.plain)
         .disabled(viewModel.isSaving || appViewModel.isSeedingTopics)

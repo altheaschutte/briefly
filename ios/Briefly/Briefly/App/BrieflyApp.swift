@@ -3,6 +3,96 @@ import SwiftUI
 import UIKit
 #endif
 
+private struct EpisodeDetailOverlay: View {
+    @Binding var episode: Episode?
+    @State private var dragOffset: CGFloat = 0
+    @State private var scrollOffset: CGFloat = 0
+    @State private var isTrackingDrag: Bool = false
+    @State private var dragBeganAtTop: Bool = false
+
+    private var isAtTop: Bool { scrollOffset >= 0 }
+
+    var body: some View {
+        ZStack {
+            if episode != nil {
+                Color.black
+                    .opacity(backgroundOpacity)
+                    .ignoresSafeArea()
+                    .transition(.opacity)
+
+                content
+                    .offset(y: dragOffset)
+                    .transition(.move(edge: .bottom))
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.9), value: episode?.id)
+        .animation(.spring(response: 0.35, dampingFraction: 0.9), value: dragOffset)
+        .onChange(of: episode?.id) { _ in
+            resetState()
+        }
+    }
+
+    private var backgroundOpacity: Double {
+        let progress = min(max(dragOffset / 240, 0), 1)
+        return 0.35 * (1 - progress)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if let episode {
+            NavigationStack {
+                EpisodeDetailView(
+                    episode: episode,
+                    onCreateEpisode: nil,
+                    usesCustomChrome: true,
+                    onScrollOffsetChange: { scrollOffset = $0 }
+                )
+            }
+            .ignoresSafeArea()
+            .simultaneousGesture(dismissDragGesture)
+        }
+    }
+
+    private var dismissDragGesture: some Gesture {
+        DragGesture(minimumDistance: 12, coordinateSpace: .global)
+            .onChanged { value in
+                if isTrackingDrag == false {
+                    isTrackingDrag = true
+                    dragBeganAtTop = isAtTop
+                }
+
+                guard dragBeganAtTop else { return }
+                guard value.translation.height > 0 else { return }
+                dragOffset = value.translation.height
+            }
+            .onEnded { value in
+                defer {
+                    isTrackingDrag = false
+                    dragBeganAtTop = false
+                }
+
+                guard dragBeganAtTop else {
+                    dragOffset = 0
+                    return
+                }
+
+                let shouldDismiss = value.predictedEndTranslation.height > 220 || value.translation.height > 140
+                if shouldDismiss {
+                    episode = nil
+                } else {
+                    dragOffset = 0
+                }
+            }
+    }
+
+    private func resetState() {
+        dragOffset = 0
+        scrollOffset = 0
+        isTrackingDrag = false
+        dragBeganAtTop = false
+    }
+}
+
 @main
 struct BrieflyApp: App {
     #if os(iOS)
@@ -34,7 +124,7 @@ struct BrieflyApp: App {
                 .environmentObject(pushManager)
                 .environmentObject(episodeGenerationStatus)
                 .tint(.brieflyPrimary)
-                .preferredColorScheme(.dark)
+                .preferredColorScheme(.light)
         }
     }
 
@@ -57,34 +147,56 @@ struct BrieflyApp: App {
         UICollectionViewCell.appearance().backgroundColor = background
         UICollectionReusableView.appearance().backgroundColor = background
 
-        let chromeBackgroundColor = background.withAlphaComponent(0.65)
-        let chromeBlurEffect = UIBlurEffect(style: .systemUltraThinMaterialDark)
-
         let tabBarAppearance = UITabBarAppearance()
-        tabBarAppearance.configureWithTransparentBackground()
-        tabBarAppearance.backgroundEffect = chromeBlurEffect
-        tabBarAppearance.backgroundColor = chromeBackgroundColor
+        tabBarAppearance.configureWithOpaqueBackground()
+        tabBarAppearance.backgroundColor = UIColor(Color.brieflyTabBarBackground)
+        tabBarAppearance.shadowColor = UIColor(Color.brieflyBorder)
+
+        let tabItemAppearance = UITabBarItemAppearance()
+        tabItemAppearance.normal.iconColor = UIColor(Color.brieflyTabBarInactive)
+        tabItemAppearance.normal.titleTextAttributes = [.foregroundColor: UIColor(Color.brieflyTabBarInactive)]
+        tabItemAppearance.selected.iconColor = UIColor.white
+        tabItemAppearance.selected.titleTextAttributes = [.foregroundColor: UIColor.white]
+
+        tabBarAppearance.stackedLayoutAppearance = tabItemAppearance
+        tabBarAppearance.inlineLayoutAppearance = tabItemAppearance
+        tabBarAppearance.compactInlineLayoutAppearance = tabItemAppearance
 
         let tabBarProxy = UITabBar.appearance()
         tabBarProxy.standardAppearance = tabBarAppearance
-        tabBarProxy.isTranslucent = true
+        tabBarProxy.scrollEdgeAppearance = tabBarAppearance
+        tabBarProxy.isTranslucent = false
+        tabBarProxy.tintColor = .white
+        tabBarProxy.unselectedItemTintColor = UIColor(Color.brieflyTabBarInactive)
         if #available(iOS 15.0, *) {
             tabBarProxy.scrollEdgeAppearance = tabBarAppearance
         }
 
-        let navigationBarAppearance = UINavigationBarAppearance()
-        navigationBarAppearance.configureWithTransparentBackground()
-        navigationBarAppearance.backgroundEffect = chromeBlurEffect
-        navigationBarAppearance.backgroundColor = chromeBackgroundColor
-        navigationBarAppearance.titleTextAttributes = [.foregroundColor: UIColor.white]
-        navigationBarAppearance.largeTitleTextAttributes = [.foregroundColor: UIColor.white]
+        let blurredNavigationBarAppearance = UINavigationBarAppearance()
+        blurredNavigationBarAppearance.configureWithTransparentBackground()
+        blurredNavigationBarAppearance.backgroundEffect = UIBlurEffect(style: .systemUltraThinMaterialLight)
+        blurredNavigationBarAppearance.backgroundColor = background.withAlphaComponent(0.60)
+        blurredNavigationBarAppearance.shadowColor = .clear
+        blurredNavigationBarAppearance.shadowImage = UIImage()
+        blurredNavigationBarAppearance.titleTextAttributes = [.foregroundColor: UIColor(Color.brieflyTextPrimary)]
+        blurredNavigationBarAppearance.largeTitleTextAttributes = [.foregroundColor: UIColor(Color.brieflyTextPrimary)]
+
+        let scrollEdgeNavigationBarAppearance = UINavigationBarAppearance()
+        scrollEdgeNavigationBarAppearance.configureWithTransparentBackground()
+        scrollEdgeNavigationBarAppearance.backgroundColor = .clear
+        scrollEdgeNavigationBarAppearance.backgroundEffect = nil
+        scrollEdgeNavigationBarAppearance.shadowColor = .clear
+        scrollEdgeNavigationBarAppearance.shadowImage = UIImage()
+        scrollEdgeNavigationBarAppearance.titleTextAttributes = [.foregroundColor: UIColor(Color.brieflyTextPrimary)]
+        scrollEdgeNavigationBarAppearance.largeTitleTextAttributes = [.foregroundColor: UIColor(Color.brieflyTextPrimary)]
 
         let navigationBarProxy = UINavigationBar.appearance()
-        navigationBarProxy.standardAppearance = navigationBarAppearance
-        navigationBarProxy.compactAppearance = navigationBarAppearance
+        navigationBarProxy.standardAppearance = blurredNavigationBarAppearance
+        navigationBarProxy.compactAppearance = blurredNavigationBarAppearance
+        navigationBarProxy.tintColor = UIColor(Color.brieflyPrimary)
         if #available(iOS 15.0, *) {
-            navigationBarProxy.scrollEdgeAppearance = navigationBarAppearance
-            navigationBarProxy.compactScrollEdgeAppearance = navigationBarAppearance
+            navigationBarProxy.scrollEdgeAppearance = scrollEdgeNavigationBarAppearance
+            navigationBarProxy.compactScrollEdgeAppearance = scrollEdgeNavigationBarAppearance
         }
 
     }
@@ -135,6 +247,9 @@ struct AppRootView: View {
                     .padding(.bottom, 20)
                 }
             }
+        }
+        .overlay {
+            EpisodeDetailOverlay(episode: $appViewModel.presentedEpisode)
         }
         .onAppear {
             appViewModel.bootstrap()

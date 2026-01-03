@@ -48,7 +48,7 @@ struct ManualInputView: View {
             }
             .background(Color.brieflyPrimary)
             .foregroundColor(.white)
-            .cornerRadius(12)
+            .clipShape(Capsule())
 
             Spacer()
         }

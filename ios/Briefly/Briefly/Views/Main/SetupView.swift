@@ -10,6 +10,7 @@ struct SetupView: View {
     @ObservedObject var topicsViewModel: TopicsViewModel
     @ObservedObject private var appViewModel: AppViewModel
     @StateObject private var creationViewModel: EpisodeCreationViewModel
+    let bottomTrayInset: CGFloat
     @EnvironmentObject private var episodeGenerationStatus: EpisodeGenerationStatusCenter
     @Environment(\.openURL) private var openURL
     @Environment(\.undoManager) private var undoManager
@@ -17,10 +18,13 @@ struct SetupView: View {
     @State private var bannerMessage: String?
     @State private var editingTopic: Topic?
     @State private var showActiveLimitAlert: Bool = false
+    @State private var isShowingSeedSheet: Bool = false
+    @State private var showsNavigationTitle: Bool = false
 
-    init(topicsViewModel: TopicsViewModel, appViewModel: AppViewModel) {
+    init(topicsViewModel: TopicsViewModel, appViewModel: AppViewModel, bottomTrayInset: CGFloat = 0) {
         _topicsViewModel = ObservedObject(wrappedValue: topicsViewModel)
         _appViewModel = ObservedObject(wrappedValue: appViewModel)
+        self.bottomTrayInset = bottomTrayInset
         _creationViewModel = StateObject(
             wrappedValue: EpisodeCreationViewModel(
                 episodeService: appViewModel.episodeService,
@@ -31,12 +35,13 @@ struct SetupView: View {
 
     var body: some View {
         List {
-            createPageDescription
+            BriefsScrollOffsetReader()
+                .frame(height: 1)
+                .listRowInsets(EdgeInsets())
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
 
-            if let episode = creationViewModel.inProgressEpisode,
-               creationViewModel.hasActiveGeneration == false {
-                creationStatusSection(episode: episode)
-            }
+            briefsHeader
 
             if topicsViewModel.topics.isEmpty {
                 emptyState
@@ -49,7 +54,16 @@ struct SetupView: View {
         .scrollContentBackground(.hidden)
         .listRowBackground(Color.brieflyBackground)
         .background(Color.brieflyBackground)
-        .navigationTitle("Create")
+        .coordinateSpace(name: BriefsScrollOffsetPreferenceKey.coordinateSpaceName)
+        .onPreferenceChange(BriefsScrollOffsetPreferenceKey.self) { offset in
+            let shouldShowTitle = offset < -8
+            if shouldShowTitle != showsNavigationTitle {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    showsNavigationTitle = shouldShowTitle
+                }
+            }
+        }
+        .navigationTitle(showsNavigationTitle ? "Briefs" : "")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             Task { @MainActor in
@@ -77,6 +91,11 @@ struct SetupView: View {
         .sheet(item: $editingTopic) { topic in
             NavigationStack {
                 TopicEditView(viewModel: topicsViewModel, topic: topic)
+            }
+        }
+        .sheet(isPresented: $isShowingSeedSheet) {
+            NavigationStack {
+                BriefSeedView(topicsViewModel: topicsViewModel)
             }
         }
         .onChange(of: topicsViewModel.errorMessage) { message in
@@ -107,27 +126,24 @@ struct SetupView: View {
             case .edit(let topic):
                 TopicEditView(viewModel: topicsViewModel, topic: topic)
             case .create:
-                TopicEditView(
-                    viewModel: topicsViewModel,
-                    topic: Topic(id: nil,
-                                 originalText: "",
-                                 orderIndex: topicsViewModel.topics.count,
-                                 isActive: topicsViewModel.canAddActiveTopic),
-                    isNew: true
-                )
+                CreateBriefView(topicsViewModel: topicsViewModel)
             }
         }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 NavigationLink(value: TopicRoute.create) {
-                    Label("Add topic", systemImage: "plus")
-                        .labelStyle(.iconOnly)
+                    Text("+")
+                        .font(.system(size: 40, weight: .regular))
+                        .foregroundStyle(Color.offBlack)
                 }
-                .accessibilityLabel("Add topic")
+                .tint(.offBlack)
+                .accessibilityLabel("Create Brief")
             }
         }
-        .safeAreaInset(edge: .bottom) {
-            bottomActions
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if shouldShowBottomActions {
+                bottomActions
+            }
         }
         .overlay(alignment: .top) { bannerView }
         .overlay {
@@ -135,7 +151,7 @@ struct SetupView: View {
                topicsViewModel.topics.isEmpty,
                topicsViewModel.isLoading == false {
                 FullScreenErrorView(
-                    title: "Couldn't load your topics",
+                    title: "Couldn't load your Briefs",
                     message: message,
                     actionTitle: "Retry"
                 ) {
@@ -144,55 +160,85 @@ struct SetupView: View {
             }
         }
         .background(Color.brieflyBackground)
-        .alert("Active topic limit reached", isPresented: $showActiveLimitAlert) {
+        .alert("Active Brief limit reached", isPresented: $showActiveLimitAlert) {
             Button("OK", role: .cancel) { }
         } message: {
-            Text("You can have up to \(topicsViewModel.maxActiveTopics) active topics on your plan.")
+            Text("You can have up to \(topicsViewModel.maxActiveTopics) active Briefs on your plan.")
         }
     }
 
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Set up your Briefly")
-                .font(.headline)
-            Text("Add a few topics so we can personalize the episode we generate for you.")
-                .foregroundColor(.brieflyTextMuted)
-            NavigationLink(value: TopicRoute.create) {
-                Text("Create topics")
-                    .frame(maxWidth: .infinity)
+        VStack(alignment: .leading, spacing: 16) {
+            Text("No Briefs here yet. Create your first Brief, or let AI generate some for you.")
+                .font(.system(size: 15, weight: .regular))
+                .foregroundStyle(Color.brieflyTextPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 12) {
+                Button {
+                    isShowingSeedSheet = true
+                } label: {
+                    Label("Create for me", systemImage: "sparkles")
+                        .font(.system(size: 16, weight: .regular))
+                        .foregroundStyle(Color.brieflyTextPrimary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color.warmGrey)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+
+                NavigationLink(value: TopicRoute.create) {
+                    Text("Create Brief")
+                        .font(.system(size: 16, weight: .regular))
+                        .foregroundStyle(Color.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(Color.offBlack)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(.blue)
         }
-        .padding(.vertical, 12)
-    }
-
-    private var createPageDescription: some View {
-        Section {
-            Text("Add up to \(topicsViewModel.maxActiveTopics) active topics for your podcast, then generate. We'll source the content and notify you when it's ready.")
-                .font(.subheadline)
-                .foregroundColor(.brieflyTextMuted)
-                .padding(.vertical, 4)
-        }
-        .listRowBackground(Color.brieflyBackground)
+        .padding(.horizontal, 20)
+        .padding(.top, 8)
+        .padding(.bottom, 12)
+        .listRowInsets(EdgeInsets())
         .listRowSeparator(.hidden)
+        .listRowBackground(Color.brieflyBackground)
     }
 
-    private func creationStatusSection(episode: Episode) -> some View {
-        Section(header: setupPaddedHeader(statusHeader(for: episode))) {
-            statusCardContent(for: episode)
+    private var briefsHeader: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Your Briefs")
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(Color.offBlack)
+
+            Text("Short, personalised topics you want explained in audio")
+                .font(.system(size: 16, weight: .regular))
+                .foregroundStyle(Color.brieflyTextSecondary)
+
+            Rectangle()
+                .fill(Color.warmGrey)
+                .frame(height: 1)
+                .padding(.top, 12)
         }
+        .padding(.horizontal, 20)
+        .padding(.top, 6)
+        .padding(.bottom, 6)
+        .listRowInsets(EdgeInsets())
+        .listRowSeparator(.hidden)
         .listRowBackground(Color.brieflyBackground)
     }
 
     private var activeTopicsSection: some View {
-        Section {
+        Group {
             if topicsViewModel.activeTopics.isEmpty {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Select from inactive topics below or")
+                    Text("Select from inactive Briefs below or")
                         .foregroundColor(.brieflyTextMuted)
                     NavigationLink(value: TopicRoute.create) {
-                        Text("create a new topic")
+                        Text("create a new Brief")
                             .foregroundColor(.brieflyPrimary)
                     }
                     .buttonStyle(.plain)
@@ -208,16 +254,13 @@ struct SetupView: View {
                     Task { await topicsViewModel.persistActiveTopicOrder() }
                 }
             }
-        } header: {
-            setupPaddedHeader("Active topics")
         }
-        .textCase(nil)
     }
 
     private var inactiveTopicsSection: some View {
         Section {
             if topicsViewModel.inactiveTopics.isEmpty {
-                Text("No inactive topics.")
+                Text("No inactive Briefs.")
                     .foregroundColor(.brieflyTextMuted)
             } else {
                 ForEach(topicsViewModel.inactiveTopics) { topic in
@@ -225,7 +268,7 @@ struct SetupView: View {
                 }
             }
         } header: {
-            setupPaddedHeader("Inactive topics")
+            setupPaddedHeader("Inactive Briefs")
         } footer: {
             inactiveFooter
         }
@@ -236,97 +279,26 @@ struct SetupView: View {
     private var inactiveFooter: some View {
         Group {
             if !topicsViewModel.canAddActiveTopic && !topicsViewModel.inactiveTopics.isEmpty {
-                Text("You can have up to \(topicsViewModel.maxActiveTopics) active topics.")
+                Text("You can have up to \(topicsViewModel.maxActiveTopics) active Briefs.")
                     .foregroundColor(.brieflyTextMuted)
             }
         }
     }
 
-    private func statusCardContent(for episode: Episode) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center, spacing: 12) {
-                statusIcon(for: episode)
-                    .frame(width: 24, height: 24)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(statusTitle(for: episode))
-                        .font(.headline)
-                    Text(statusDescription(for: episode.status))
-                        .font(.subheadline)
-                        .foregroundColor(.brieflyTextMuted)
-                }
-                Spacer(minLength: 8)
-            }
-
-            if isFailed(status: episode.status), let error = episode.errorMessage {
-                Text(error)
-                    .foregroundColor(.red)
-                    .font(.footnote)
-            }
-        }
-        .padding(.vertical, 6)
-    }
-
-    private func statusHeader(for episode: Episode) -> String {
-        if isFailed(status: episode.status) {
-            return "Episode failed"
-        }
-        if let status = episode.status, status.lowercased() == "ready" {
-            return "Episode ready"
-        }
-        return "Episode in progress"
-    }
-
-    private func statusTitle(for episode: Episode) -> String {
-        if let status = episode.status?.lowercased(),
-           status == "ready" || status == "failed" {
-            let title = episode.displayTitle
-            return title.isEmpty ? "Personalized episode" : title
-        }
-
-        if let number = episode.episodeNumber, number > 0 {
-            return "Generating episode \(number)"
-        }
-        return "Generating episode"
-    }
-
-    private func statusDescription(for status: String?) -> String {
+    private func generationProgressLabel(for status: String?) -> String {
         switch status?.lowercased() {
         case "queued":
-            return "We queued your episode and are getting things ready."
+            return "Queued…"
         case "rewriting_queries":
-            return "Polishing your topic prompts for better results."
+            return "Rewriting queries…"
         case "retrieving_content":
-            return "Pulling in the latest info for your topics."
+            return "Retrieving content…"
         case "generating_script":
-            return "Writing your personalized Briefly script."
+            return "Generating script…"
         case "generating_audio":
-            return "Recording and stitching together the audio."
-        case "ready":
-            return "Your episode is ready in the library."
-        case "failed":
-            return "We hit a snag creating this episode."
+            return "Generating audio…"
         default:
-            return "Creating your episode..."
-        }
-    }
-
-    private func isFailed(status: String?) -> Bool {
-        status?.lowercased() == "failed"
-    }
-
-    @ViewBuilder
-    private func statusIcon(for episode: Episode) -> some View {
-        switch episode.status?.lowercased() {
-        case "ready":
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(.green)
-                .font(.title3)
-        case "failed":
-            Image(systemName: "xmark.octagon.fill")
-                .foregroundColor(.red)
-                .font(.title3)
-        default:
-            ProgressView()
+            return "Generating…"
         }
     }
 
@@ -338,17 +310,22 @@ struct SetupView: View {
             } label: {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(topic.displayTitle)
-                        .font(.body.bold())
-                        .foregroundColor(.primary)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.brieflyTextPrimary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text(topic.originalText)
-                        .font(.body)
-                        .foregroundColor(.brieflyTextMuted)
+                        .font(.system(size: 15))
+                        .foregroundColor(.brieflyTextPrimary)
                         .lineLimit(2)
                         .truncationMode(.tail)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
+	                    if let pillLabel = topic.classificationShortLabel?.trimmingCharacters(in: .whitespacesAndNewlines),
+	                       pillLabel.isEmpty == false {
+	                        classificationPill(label: pillLabel)
+	                            .padding(.top, 4)
+	                    }
+	                }
+	            }
             .buttonStyle(.plain)
             Spacer(minLength: 10)
             Button {
@@ -360,10 +337,10 @@ struct SetupView: View {
                     showActiveLimitAlert = true
                 }
             } label: {
-                Image(systemName: isActive ? "minus.circle" : "plus.circle.fill")
+                Image(systemName: isActive ? "minus.circle.fill" : "plus.circle.fill")
                     .foregroundStyle(
                         isActive
-                        ? Color.brieflyAccentSoft
+                        ? Color.brieflySecondary
                         : (isInactiveAtLimit ? Color.brieflyTextMuted : Color.brieflySecondary)
                     )
                     .font(.title3)
@@ -372,10 +349,10 @@ struct SetupView: View {
             .opacity(isInactiveAtLimit ? 0.5 : 1)
         }
         .contentShape(Rectangle())
-        .padding(.vertical, 8)
-        .listRowInsets(EdgeInsets(top: 8, leading: 14, bottom: 8, trailing: 16))
-        .listRowSeparator(.visible)
-        .listRowBackground(Color.brieflySurface)
+        .padding(.vertical, 12)
+        .listRowInsets(EdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 16))
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             Button(role: .destructive) {
                 Task { await topicsViewModel.deleteTopic(topic, undoManager: undoManager) }
@@ -385,9 +362,28 @@ struct SetupView: View {
             .tint(.brieflyDestructive)
         }
     }
+
+	    private func classificationPill(label: String) -> some View {
+	        Text(label)
+	            .font(.system(size: 12))
+	            .italic()
+	            .foregroundColor(.brieflyClassificationPillText)
+	            .padding(.horizontal, 10)
+	            .padding(.vertical, 3)
+	            .background(Color.warmGrey)
+	            .clipShape(Capsule())
+	            .accessibilityLabel("Classification \(label)")
+	    }
 }
 
 private extension SetupView {
+    var shouldShowBottomActions: Bool {
+        !topicsViewModel.topics.isEmpty
+        || creationViewModel.isGenerationQueued
+        || creationViewModel.hasActiveGeneration
+        || creationViewModel.inProgressEpisode != nil
+    }
+
     @ViewBuilder
     var bannerView: some View {
         if let bannerMessage {
@@ -444,9 +440,11 @@ private extension SetupView {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.top, 12)
+        .padding(.bottom, 6)
         .background(Color.brieflyBackground)
         .shadow(color: Color.black.opacity(0.08), radius: 8, y: -2)
+        .padding(.bottom, bottomTrayInset)
     }
 
     private var generateEpisodeButton: some View {
@@ -460,9 +458,8 @@ private extension SetupView {
             Group {
                 if creationViewModel.hasActiveGeneration {
                     HStack(spacing: 10) {
-                        ProgressView()
-                            .tint(.white)
-                        Text("Generating…")
+                        BrieflySpinnerIcon()
+                        Text(generationProgressLabel(for: creationViewModel.inProgressEpisode?.status))
                     }
                 } else {
                     Label(generateButtonTitle, systemImage: generateButtonIcon)
@@ -471,13 +468,27 @@ private extension SetupView {
             .font(.headline)
             .frame(maxWidth: .infinity)
             .padding()
-            .background(creationViewModel.hasActiveGeneration ? Color.brieflySurface : Color.brieflyPrimary)
-            .foregroundColor(.white)
-            .tint(.white)
-            .cornerRadius(12)
+            .background(creationViewModel.hasActiveGeneration ? Color.mediumWarmGrey : Color.offBlack)
+            .foregroundColor(creationViewModel.hasActiveGeneration ? .offBlack : .white)
+            .tint(creationViewModel.hasActiveGeneration ? .offBlack : .white)
+            .clipShape(Capsule())
         }
         .buttonStyle(.plain)
-        .disabled(creationViewModel.hasActiveGeneration)
+        .allowsHitTesting(creationViewModel.hasActiveGeneration == false)
+    }
+
+    private struct BrieflySpinnerIcon: View {
+        @State private var isAnimating = false
+
+        var body: some View {
+            Image("BrieflySpinner")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 18, height: 18)
+                .rotationEffect(.degrees(isAnimating ? 360 : 0))
+                .animation(.linear(duration: 0.9).repeatForever(autoreverses: false), value: isAnimating)
+                .onAppear { isAnimating = true }
+        }
     }
 
     private var undoGenerateEpisodeButton: some View {
@@ -492,10 +503,10 @@ private extension SetupView {
                 .font(.headline)
                 .frame(maxWidth: .infinity)
                 .padding()
-                .background(Color.brieflySurface)
+                .background(Color.darkerWarmGrey)
                 .foregroundColor(.white)
                 .tint(.white)
-                .cornerRadius(12)
+                .clipShape(Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Starting episode generation. Tap to undo.")
@@ -513,6 +524,26 @@ private extension SetupView {
         (topicsViewModel.entitlements?.isGenerationUsageExhausted ?? false) || creationViewModel.isAtGenerationLimit
     }
 
+}
+
+private struct BriefsScrollOffsetPreferenceKey: PreferenceKey {
+    static let coordinateSpaceName = "briefsScroll"
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private struct BriefsScrollOffsetReader: View {
+    var body: some View {
+        GeometryReader { proxy in
+            Color.clear.preference(
+                key: BriefsScrollOffsetPreferenceKey.self,
+                value: proxy.frame(in: .named(BriefsScrollOffsetPreferenceKey.coordinateSpaceName)).minY
+            )
+        }
+    }
 }
 
 @MainActor
@@ -726,18 +757,17 @@ private struct SetupSectionHeader: View {
     var body: some View {
         Text(title)
             .font(.subheadline.weight(.semibold))
-            .foregroundColor(.brieflyTextMuted)
+            .foregroundColor(.offBlack)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 8)
     }
 }
 
 private func setupPaddedHeader(_ title: String) -> some View {
     ZStack {
-        Color.brieflyBackground
+        Color.warmGrey
         SetupSectionHeader(title: title)
             .padding(.horizontal)
-            .padding(.vertical, 6)
     }
+    .frame(height: 40)
     .listRowInsets(EdgeInsets())
 }

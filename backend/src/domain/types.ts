@@ -3,6 +3,8 @@ export interface Topic {
   userId: string;
   title?: string;
   originalText: string;
+  classificationId?: string;
+  classificationShortLabel?: string;
   orderIndex: number;
   isActive: boolean;
   isSeed: boolean;

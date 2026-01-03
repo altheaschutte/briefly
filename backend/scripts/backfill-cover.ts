@@ -10,6 +10,7 @@ interface CliOptions {
   episodeId?: string;
   overwrite: boolean;
   includePending: boolean;
+  skipAlreadyUpdated: boolean;
 }
 
 function parseArgs(argv: string[]): CliOptions {
@@ -28,15 +29,16 @@ function parseArgs(argv: string[]): CliOptions {
   const episodeId = get('--episode', '-e') || positional[1];
   const overwrite = argv.includes('--overwrite') || argv.includes('-f');
   const includePending = argv.includes('--include-pending');
+  const skipAlreadyUpdated = argv.includes('--skip-updated');
 
   if (!userId) {
     throw new Error(
-      'Usage: ts-node scripts/backfill-cover.ts --user <userId> [--episode <episodeId>] [--overwrite] [--include-pending]\n' +
+      'Usage: ts-node scripts/backfill-cover.ts --user <userId> [--episode <episodeId>] [--overwrite] [--include-pending] [--skip-updated]\n' +
         'Positional args also supported: ts-node scripts/backfill-cover.ts <userId> [episodeId]',
     );
   }
 
-  return { userId, episodeId, overwrite, includePending };
+  return { userId, episodeId, overwrite, includePending, skipAlreadyUpdated };
 }
 
 async function run() {
@@ -52,6 +54,13 @@ async function run() {
     logger.log(`Found ${episodes.length} episode(s) to process`);
 
     for (const episode of episodes) {
+      const alreadyUpdated =
+        Boolean(episode.coverPrompt) &&
+        /#F3EFEA|#E2DFDB|#9F9A95|#2E2E2E|#A2845E/i.test(String(episode.coverPrompt));
+      if (args.skipAlreadyUpdated && alreadyUpdated) {
+        logger.log(`Skipping ${episode.id} (already updated to new palette)`);
+        continue;
+      }
       const shouldSkipCover = episode.coverImageUrl && !args.overwrite;
       if (shouldSkipCover) {
         logger.log(`Skipping ${episode.id} (already has cover)`);

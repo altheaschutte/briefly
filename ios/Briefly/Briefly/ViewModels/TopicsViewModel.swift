@@ -49,6 +49,15 @@ final class TopicsViewModel: ObservableObject {
     }
 
     func load() async {
+        if DebugFeatureFlags.forceEmptyBriefs {
+            await refreshEntitlements()
+            originalTopics = []
+            topics = []
+            hasChanges = false
+            errorMessage = nil
+            isLoading = false
+            return
+        }
         let requestVersion = topicsVersion
         isLoading = true
         errorMessage = nil
@@ -83,10 +92,45 @@ final class TopicsViewModel: ObservableObject {
         }
     }
 
+    func seedTopics(userAboutContext: String) async {
+        let requestVersion = topicsVersion
+        let trimmed = userAboutContext.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false else {
+            errorMessage = "Please enter a little context so we can generate Briefs for you."
+            return
+        }
+
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        do {
+            await refreshEntitlements()
+            let fetched = try await topicService.seedTopics(userAboutContext: trimmed)
+            let sorted = fetched.sorted { $0.orderIndex < $1.orderIndex }
+            guard requestVersion == topicsVersion else { return } // Drop stale responses when local edits occurred mid-request.
+            originalTopics = sorted
+            topics = sorted
+            hasChanges = false
+            errorMessage = nil
+        } catch let apiError as APIError {
+            if case .unauthorized = apiError {
+                return
+            }
+            let message = apiError.localizedDescription
+            errorMessage = message
+            onFatalAuthError?(message)
+        } catch {
+            let message = error.localizedDescription
+            errorMessage = message
+            onFatalAuthError?(message)
+        }
+    }
+
     func addTopic(text: String, isActive: Bool = true) async {
         errorMessage = nil
         if isActive && !canAddActiveTopic {
-            errorMessage = "You can only have up to \(maxActiveTopics) active topics."
+            errorMessage = "You can only have up to \(maxActiveTopics) active Briefs."
             return
         }
 
@@ -142,7 +186,7 @@ final class TopicsViewModel: ObservableObject {
         errorMessage = nil
         let updatedTopic = topic.withActiveState(true)
         guard canActivate(topic: updatedTopic) else {
-            errorMessage = "You can only have up to \(maxActiveTopics) active topics."
+            errorMessage = "You can only have up to \(maxActiveTopics) active Briefs."
             return
         }
         replaceTopic(updatedTopic)
@@ -181,7 +225,7 @@ final class TopicsViewModel: ObservableObject {
         guard !topicsToUpdate.isEmpty else { return }
 
         guard activeTopics.count <= maxActiveTopics else {
-            errorMessage = "You can only have up to \(maxActiveTopics) active topics."
+            errorMessage = "You can only have up to \(maxActiveTopics) active Briefs."
             return
         }
 
@@ -225,7 +269,7 @@ final class TopicsViewModel: ObservableObject {
 
     private func updateTopic(_ topic: Topic, enforceActiveLimit: Bool) async {
         if enforceActiveLimit, topic.isActive, !canActivate(topic: topic) {
-            errorMessage = "You can only have up to \(maxActiveTopics) active topics."
+            errorMessage = "You can only have up to \(maxActiveTopics) active Briefs."
             return
         }
 
@@ -322,7 +366,7 @@ final class TopicsViewModel: ObservableObject {
         undoManager.registerUndo(withTarget: self) { target in
             Task { await target.restoreDeletedTopics(snapshots, undoManager: undoManager) }
         }
-        undoManager.setActionName("Delete Topic")
+        undoManager.setActionName("Delete Brief")
     }
 
     private func restoreDeletedTopics(_ snapshots: [DeletedTopicSnapshot], undoManager: UndoManager?) async {

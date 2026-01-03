@@ -11,7 +11,7 @@ struct PlaybackSpeedSheet: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Playback speed")
                 .font(.headline)
-                .foregroundColor(.white)
+                .foregroundColor(.brieflyTextPrimary)
 
             VStack(spacing: 10) {
                 ForEach(options, id: \.self) { speed in
@@ -23,7 +23,7 @@ struct PlaybackSpeedSheet: View {
                         HStack {
                             Text(speed.playbackSpeedLabel)
                                 .font(.body.weight(.semibold))
-                                .foregroundColor(.white)
+                                .foregroundColor(.brieflyTextPrimary)
                             Spacer()
                             if isSelected {
                                 Image(systemName: "checkmark.circle.fill")
@@ -33,8 +33,8 @@ struct PlaybackSpeedSheet: View {
                         .padding(.vertical, 12)
                         .padding(.horizontal, 14)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(isSelected ? Color.brieflyPrimary.opacity(0.12) : Color.white.opacity(0.04))
-                        .cornerRadius(12)
+                        .background(isSelected ? Color.brieflyPrimary.opacity(0.12) : Color.brieflyBackground)
+                        .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
                 }
