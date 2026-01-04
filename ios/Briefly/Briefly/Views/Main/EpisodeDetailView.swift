@@ -27,7 +27,7 @@ import UIKit
     @State private var scrollToScript: Bool = false
 	    @State private var showActionsSheet: Bool = false
 	    @State private var showSpeedSheet: Bool = false
-	    @State private var actionsSheetDetent: PresentationDetent = .large
+	    @State private var actionsSheetDetent: PresentationDetent = .fraction(0.5)
 	    @State private var isCreatingDiveDeeper: Bool = false
 	    @State private var creatingDiveDeeperSeedID: UUID?
 	    @State private var queuedDiveDeeperSeedID: UUID?
@@ -68,7 +68,7 @@ import UIKit
 		            ScrollViewReader { proxy in
 		                ScrollView {
                             scrollOffsetReader
-		                    VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 16) {
 		                        header
 		                        playbackControls
 //                    actionRow
@@ -83,17 +83,19 @@ import UIKit
 	                            topicsSection(topics)
 	                        }
 	                        segmentsSection
-	                        if let errorMessage {
-	                            InlineErrorText(message: errorMessage)
-	                                .padding(.top, 4)
+		                        if let errorMessage {
+		                            InlineErrorText(message: errorMessage)
+		                                .padding(.top, 4)
 	                            Button("Retry") {
 	                                Task { await loadDetailsIfNeeded(force: true) }
 	                            }
 	                            .font(.footnote.weight(.semibold))
-	                            .padding(.top, 2)
-	                        }
+		                            .padding(.top, 2)
+		                        }
 		                    }
-		                    .padding()
+		                    .padding(.horizontal, contentHorizontalPadding)
+                            .padding(.top, 20)
+                            .padding(.bottom, 32)
 		                }
                         .coordinateSpace(name: scrollCoordinateSpace)
                         .onPreferenceChange(EpisodeDetailScrollOffsetKey.self) { offset in
@@ -129,7 +131,7 @@ import UIKit
                         Button {
                             showActionsSheet = true
                         } label: {
-                            Image(systemName: "ellipsis.circle")
+                            Image(systemName: "ellipsis")
                                 .imageScale(.large)
                                 .foregroundStyle(episodeDetailTextPrimary)
                                 .accessibilityLabel("More actions")
@@ -169,14 +171,14 @@ import UIKit
         }
         .sheet(isPresented: $showActionsSheet) {
             actionsSheet
-                .presentationDetents([.medium, .large], selection: $actionsSheetDetent)
+                .presentationDetents([.fraction(0.5), .large], selection: $actionsSheetDetent)
                 .presentationCornerRadius(26)
                 .presentationBackground(episodeDetailBackground)
                 .presentationDragIndicator(.visible)
         }
         .onChange(of: showActionsSheet) { isShowing in
             if isShowing {
-                actionsSheetDetent = .large
+                actionsSheetDetent = .fraction(0.5)
             }
         }
         .alert(item: $actionAlert) { alert in
@@ -198,44 +200,50 @@ import UIKit
 }
 
 private extension EpisodeDetailView {
-    private var episodeDetailBackground: Color { .offBlack }
+    private var episodeDetailBackground: Color { .brieflyDeepBackground }
     private var episodeDetailSurface: Color { .brieflyDarkSurface }
     private var episodeDetailTextPrimary: Color { .white }
     private var episodeDetailTextSecondary: Color { .white.opacity(0.6) }
     private var episodeDetailDivider: Color { .white.opacity(0.14) }
+    private var contentHorizontalPadding: CGFloat { 24 }
 
     var header: some View {
         VStack(alignment: .leading, spacing: 10) {
             coverImageHero
                 .padding(.bottom, 12)
+            if let date = detailedEpisode.displayDate {
+                Text(episodeDateLabel(date).uppercased())
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(episodeDetailTextSecondary)
+            }
             Text(detailedEpisode.displayTitle)
                 .font(.system(size: 20, weight: .semibold))
                 .foregroundColor(episodeDetailTextPrimary)
-            if let date = detailedEpisode.displayDate {
-                Text(date.formatted(date: .abbreviated, time: .shortened))
-                    .foregroundColor(episodeDetailTextSecondary)
-            }
             summaryText
         }
     }
 
     var summaryText: some View {
         Text(detailedEpisode.summary)
+            .font(.callout)
             .foregroundColor(episodeDetailTextSecondary)
             .multilineTextAlignment(.leading)
+            .lineLimit(nil)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     var coverImageHero: some View {
-        let heroSize = min(UIScreen.main.bounds.width - 32, 273)
+        let heroSize = min(UIScreen.main.bounds.width - (contentHorizontalPadding * 2), 273)
 
         return coverArtwork
             .frame(width: heroSize, height: heroSize)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .shadow(color: Color.black.opacity(0.35), radius: 24, x: 0, y: 16)
             .frame(maxWidth: .infinity)
     }
 
 	    var coverArtwork: some View {
-	        let heroSize = min(UIScreen.main.bounds.width - 32, 273)
+	        let heroSize = min(UIScreen.main.bounds.width - (contentHorizontalPadding * 2), 273)
 	        let maxPixelSize = Int(ceil(heroSize * UIScreen.main.scale))
 
 	        return ZStack {
@@ -286,23 +294,17 @@ private extension EpisodeDetailView {
 	    }
 
 	    private var actionsHeader: some View {
-	        HStack(alignment: .center, spacing: 12) {
-	            coverArtwork
-	                .frame(width: 64, height: 64)
-	                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-
-	            VStack(alignment: .leading, spacing: 4) {
-	                Text(detailedEpisode.displayTitle)
-	                    .font(.headline)
-	                    .foregroundColor(episodeDetailTextPrimary)
-                    .lineLimit(2)
-                Text(detailedEpisode.subtitle)
-                    .font(.subheadline)
-                    .foregroundColor(episodeDetailTextSecondary)
-                    .lineLimit(2)
-            }
-            Spacer()
-        }
+	        VStack(alignment: .leading, spacing: 4) {
+	            Text(detailedEpisode.displayTitle)
+	                .font(.headline)
+	                .foregroundColor(episodeDetailTextPrimary)
+	                .lineLimit(2)
+	            Text(detailedEpisode.subtitle)
+	                .font(.subheadline)
+	                .foregroundColor(episodeDetailTextSecondary)
+	                .lineLimit(2)
+	        }
+	        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func actionRow(_ item: EpisodeActionItem) -> some View {
@@ -375,109 +377,81 @@ private extension EpisodeDetailView {
 //        .padding(.horizontal, 4)
 //    }
 
-    private var primaryPlayButton: some View {
-        Button(action: togglePlayback) {
-            Image(systemName: isCurrentlyPlaying ? "pause.fill" : "play.fill")
-                .font(.system(size: 28, weight: .semibold))
-                .foregroundColor(.white)
-                .frame(width: 72, height: 72)
-                .background(
-                    Circle()
-                        .fill(episodeDetailSurface)
-                        .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 6)
-                )
-        }
-        .buttonStyle(.plain)
-    }
+	    private var primaryPlayButton: some View {
+	        Button(action: togglePlayback) {
+	            Image(systemName: isCurrentlyPlaying ? "pause.fill" : "play.fill")
+	                .font(.system(size: 22, weight: .semibold))
+	                .foregroundColor(.black)
+	                .frame(width: 56, height: 56)
+	                .background(
+	                    Circle()
+	                        .fill(.white)
+	                        .shadow(color: Color.black.opacity(0.18), radius: 12, x: 0, y: 8)
+	                )
+	        }
+	        .buttonStyle(.plain)
+	    }
 
-    private var speedButton: some View {
-        Button {
-            showSpeedSheet = true
-        } label: {
-            Text(audioManager.playbackSpeed.playbackSpeedLabel)
-                .font(.system(size: 18, weight: .medium))
-                .foregroundColor(episodeDetailTextPrimary)
-                .frame(width: 44, height: 48)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Playback speed")
-        .accessibilityValue(audioManager.playbackSpeed.playbackSpeedLabel)
-    }
+	    private var speedButton: some View {
+	        Button {
+	            showSpeedSheet = true
+	        } label: {
+	            Text(audioManager.playbackSpeed.playbackSpeedLabel)
+	                .font(.system(size: 16, weight: .medium))
+	                .foregroundColor(episodeDetailTextPrimary)
+	        }
+	        .buttonStyle(.plain)
+	        .accessibilityLabel("Playback speed")
+	        .accessibilityValue(audioManager.playbackSpeed.playbackSpeedLabel)
+	    }
 
-    var playbackControls: some View {
-        VStack(spacing: 14) {
-            playbackScrubber
-            if UIDevice.current.userInterfaceIdiom == .phone {
-                HStack(spacing: 24) {
-                    skipButton(
-                        icon: Image("back-15-seconds"),
-                        direction: -15,
-                        accessibilityLabel: "Back 15 seconds"
-                    )
-                    primaryPlayButton
-                    skipButton(
-                        icon: Image("forward-15-seconds"),
-                        direction: 15,
-                        accessibilityLabel: "Forward 15 seconds"
-                    )
+	    var playbackControls: some View {
+	        VStack(spacing: 18) {
+	            waveformScrubber
+                HStack {
+                    Text(timeString(displayedCurrentTime))
+                    Spacer()
+                    Text(timeString(displayedDuration))
                 }
-                .frame(maxWidth: .infinity)
-                .overlay(alignment: .trailing) {
+                .font(.caption2)
+                .foregroundColor(episodeDetailTextSecondary)
+
+                HStack(alignment: .center, spacing: 22) {
                     speedButton
-                        .padding(.trailing, 4)
-                }
-            } else {
-                HStack(spacing: 24) {
-                    speedButton
-                    skipButton(
-                        icon: Image("back-15-seconds"),
-                        direction: -15,
-                        accessibilityLabel: "Back 15 seconds"
-                    )
+                        .frame(width: 44, alignment: .leading)
+                    Spacer()
+                    skipButton(systemName: "gobackward.15", direction: -15, accessibilityLabel: "Back 15 seconds")
                     primaryPlayButton
-                    skipButton(
-                        icon: Image("forward-15-seconds"),
-                        direction: 15,
-                        accessibilityLabel: "Forward 15 seconds"
-                    )
+                    skipButton(systemName: "goforward.15", direction: 15, accessibilityLabel: "Forward 15 seconds")
+                    Spacer()
+                    Color.clear.frame(width: 44)
                 }
-                .frame(maxWidth: .infinity)
-            }
-        }
-        .frame(maxWidth: .infinity)
-    }
+	        }
+	        .frame(maxWidth: .infinity)
+	    }
 
-    private var playbackScrubber: some View {
-        VStack(spacing: 6) {
-            Slider(value: Binding(
-                get: { displayedProgress },
-                set: { newValue in seek(toProgress: newValue) }
-            ))
-            .tint(.brieflyPrimary)
-            HStack {
-                Text(timeString(displayedCurrentTime))
-                Spacer()
-                Text(timeString(displayedDuration))
+        private var waveformScrubber: some View {
+            WaveformScrubber(
+                progress: displayedProgress,
+                barColor: episodeDetailTextSecondary.opacity(0.45),
+                progressColor: .brieflyPrimary
+            ) { newProgress in
+                seek(toProgress: newProgress)
             }
-            .font(.caption2)
-            .foregroundColor(episodeDetailTextSecondary)
+            .frame(height: 26)
         }
-    }
 
-    private func skipButton(icon: Image, direction: Double, accessibilityLabel: String) -> some View {
-        Button(action: { skip(seconds: direction) }) {
-            icon
-                .renderingMode(.template)
-                .resizable()
-                .scaledToFit()
-                .foregroundStyle(episodeDetailTextPrimary)
-                .frame(width: 24, height: 24)
-                .frame(width: 48, height: 48)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(accessibilityLabel)
-    }
+	    private func skipButton(systemName: String, direction: Double, accessibilityLabel: String) -> some View {
+	        Button(action: { skip(seconds: direction) }) {
+                Image(systemName: systemName)
+                    .font(.system(size: 26, weight: .regular))
+                    .foregroundStyle(episodeDetailTextSecondary)
+                    .frame(width: 44, height: 44)
+	                .contentShape(Rectangle())
+	        }
+	        .buttonStyle(.plain)
+	        .accessibilityLabel(accessibilityLabel)
+	    }
 
     private func skip(seconds: Double) {
         let duration = displayedDuration
@@ -554,8 +528,9 @@ private extension EpisodeDetailView {
 	        let items = diveDeeperDisplayItems()
 	        return VStack(alignment: .leading, spacing: 10) {
 	            HStack {
-	                Text("Dive deeper")
+	                Text("Dive Deeper")
 	                    .font(.headline)
+                        .foregroundColor(episodeDetailTextPrimary)
 	            }
 
 	            if items.isEmpty {
@@ -592,22 +567,26 @@ private extension EpisodeDetailView {
 	            HStack(alignment: .center, spacing: 12) {
                     Text(item.seed.title)
                         .font(.callout.weight(.regular))
-                        .foregroundColor(.brieflyPrimary)
+                        .foregroundColor(episodeDetailTextPrimary)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                     if isQueued || isSending || isRequested {
                         ProgressView()
-                            .tint(.brieflyPrimary)
+                            .tint(episodeDetailTextPrimary)
                     } else {
                         Image(systemName: "sparkles")
                             .font(.callout.weight(.semibold))
-                            .foregroundColor(.brieflyPrimary)
+                            .foregroundColor(episodeDetailTextPrimary)
                     }
 	            }
-                .contentShape(Rectangle())
 	        }
+            .padding(.vertical, 14)
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(episodeDetailSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
 	        .buttonStyle(.plain)
 	        .disabled(isDisabled)
             .opacity(isDisabled ? 0.45 : 1)
@@ -977,14 +956,25 @@ private extension EpisodeDetailView {
 
     func timeString(_ seconds: Double?) -> String {
         guard let seconds, seconds.isFinite else { return "--:--" }
-        let minutes = Int(seconds) / 60
-        let secs = Int(seconds) % 60
-        return String(format: "%02d:%02d", minutes, secs)
+        let totalSeconds = max(0, Int(seconds.rounded(.down)))
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds % 3600) / 60
+        let secs = totalSeconds % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, secs)
+        }
+        return String(format: "%d:%02d", minutes, secs)
     }
 
     func durationLabel(_ seconds: Double) -> String {
         let minutes = max(Int(round(seconds / 60)), 1)
         return "\(minutes)m"
+    }
+
+    func episodeDateLabel(_ date: Date) -> String {
+        if Calendar.current.isDateInToday(date) { return "Today" }
+        if Calendar.current.isDateInYesterday(date) { return "Yesterday" }
+        return date.formatted(date: .abbreviated, time: .omitted)
     }
 
     func markdownText(_ text: String) -> some View {
@@ -1185,7 +1175,7 @@ private extension EpisodeDetailView {
                 Button {
                     showActionsSheet = true
                 } label: {
-                    Image(systemName: "ellipsis.circle")
+                    Image(systemName: "ellipsis")
                         .imageScale(.large)
                         .foregroundStyle(episodeDetailTextPrimary)
                         .frame(width: 44, height: 44)
@@ -1204,6 +1194,71 @@ private struct EpisodeDetailScrollOffsetKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()
+    }
+}
+
+private struct WaveformScrubber: View {
+    let progress: Double
+    let barColor: Color
+    let progressColor: Color
+    let onSeek: (Double) -> Void
+
+    @State private var dragProgress: Double?
+
+    private var resolvedProgress: Double {
+        let value = dragProgress ?? progress
+        return max(0, min(value, 1))
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let height = proxy.size.height
+            let barCount = 56
+            let spacing: CGFloat = 3
+            let barWidth = max(2, (width - (CGFloat(barCount - 1) * spacing)) / CGFloat(barCount))
+
+            let bars = HStack(alignment: .center, spacing: spacing) {
+                ForEach(0..<barCount, id: \.self) { index in
+                    Capsule(style: .continuous)
+                        .frame(width: barWidth, height: height * amplitude(for: index, count: barCount))
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+
+            bars
+                .foregroundStyle(barColor)
+                .overlay {
+                    bars
+                        .foregroundStyle(progressColor)
+                        .mask(alignment: .leading) {
+                            Rectangle()
+                                .frame(width: width * resolvedProgress)
+                        }
+                }
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            dragProgress = max(0, min(value.location.x / max(width, 1), 1))
+                        }
+                        .onEnded { value in
+                            let clamped = max(0, min(value.location.x / max(width, 1), 1))
+                            dragProgress = nil
+                            onSeek(clamped)
+                        }
+                )
+                .accessibilityElement()
+                .accessibilityLabel("Playback position")
+                .accessibilityValue(Text("\(Int(resolvedProgress * 100)) percent"))
+        }
+    }
+
+    private func amplitude(for index: Int, count: Int) -> CGFloat {
+        guard count > 1 else { return 0.6 }
+        let x = Double(index) / Double(count - 1)
+        let wave = abs(sin((x * 3.1 + 0.2) * .pi) * cos((x * 1.6 + 0.1) * .pi))
+        return max(0.18, min(1.0, 0.28 + (wave * 0.72)))
     }
 }
 

@@ -10,7 +10,6 @@ struct SetupView: View {
     @ObservedObject var topicsViewModel: TopicsViewModel
     @ObservedObject private var appViewModel: AppViewModel
     @StateObject private var creationViewModel: EpisodeCreationViewModel
-    let bottomTrayInset: CGFloat
     @EnvironmentObject private var episodeGenerationStatus: EpisodeGenerationStatusCenter
     @Environment(\.openURL) private var openURL
     @Environment(\.undoManager) private var undoManager
@@ -19,12 +18,13 @@ struct SetupView: View {
     @State private var editingTopic: Topic?
     @State private var showActiveLimitAlert: Bool = false
     @State private var isShowingSeedSheet: Bool = false
+    @State private var isShowingCreateBrief: Bool = false
     @State private var showsNavigationTitle: Bool = false
+    @State private var scrollOffsetBaseline: CGFloat?
 
-    init(topicsViewModel: TopicsViewModel, appViewModel: AppViewModel, bottomTrayInset: CGFloat = 0) {
+    init(topicsViewModel: TopicsViewModel, appViewModel: AppViewModel) {
         _topicsViewModel = ObservedObject(wrappedValue: topicsViewModel)
         _appViewModel = ObservedObject(wrappedValue: appViewModel)
-        self.bottomTrayInset = bottomTrayInset
         _creationViewModel = StateObject(
             wrappedValue: EpisodeCreationViewModel(
                 episodeService: appViewModel.episodeService,
@@ -56,7 +56,12 @@ struct SetupView: View {
         .background(Color.brieflyBackground)
         .coordinateSpace(name: BriefsScrollOffsetPreferenceKey.coordinateSpaceName)
         .onPreferenceChange(BriefsScrollOffsetPreferenceKey.self) { offset in
-            let shouldShowTitle = offset < -8
+            let baseline = max(scrollOffsetBaseline ?? offset, offset)
+            if baseline != scrollOffsetBaseline {
+                scrollOffsetBaseline = baseline
+            }
+
+            let shouldShowTitle = offset < baseline - 8
             if shouldShowTitle != showsNavigationTitle {
                 withAnimation(.easeInOut(duration: 0.15)) {
                     showsNavigationTitle = shouldShowTitle
@@ -129,6 +134,9 @@ struct SetupView: View {
                 CreateBriefView(topicsViewModel: topicsViewModel)
             }
         }
+        .navigationDestination(isPresented: $isShowingCreateBrief) {
+            CreateBriefView(topicsViewModel: topicsViewModel)
+        }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 NavigationLink(value: TopicRoute.create) {
@@ -140,7 +148,7 @@ struct SetupView: View {
                 .accessibilityLabel("Create Brief")
             }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        .overlay(alignment: .bottom) {
             if shouldShowBottomActions {
                 bottomActions
             }
@@ -188,7 +196,9 @@ struct SetupView: View {
                 }
                 .buttonStyle(.plain)
 
-                NavigationLink(value: TopicRoute.create) {
+                Button {
+                    isShowingCreateBrief = true
+                } label: {
                     Text("Create Brief")
                         .font(.system(size: 16, weight: .regular))
                         .foregroundStyle(Color.white)
@@ -314,8 +324,8 @@ struct SetupView: View {
                         .foregroundColor(.brieflyTextPrimary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text(topic.originalText)
-                        .font(.system(size: 15))
-                        .foregroundColor(.brieflyTextPrimary)
+                        .font(.footnote)
+                        .foregroundColor(.brieflyTextMuted)
                         .lineLimit(2)
                         .truncationMode(.tail)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -349,8 +359,8 @@ struct SetupView: View {
             .opacity(isInactiveAtLimit ? 0.5 : 1)
         }
         .contentShape(Rectangle())
-        .padding(.vertical, 12)
-        .listRowInsets(EdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 16))
+        .padding(.vertical, 10)
+        .listRowInsets(EdgeInsets(top: 10, leading: 14, bottom: 10, trailing: 16))
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -444,7 +454,6 @@ private extension SetupView {
         .padding(.bottom, 6)
         .background(Color.brieflyBackground)
         .shadow(color: Color.black.opacity(0.08), radius: 8, y: -2)
-        .padding(.bottom, bottomTrayInset)
     }
 
     private var generateEpisodeButton: some View {

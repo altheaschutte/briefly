@@ -134,7 +134,7 @@ struct SettingsView: View {
                 }
             } footer: {
                 Color.clear
-                    .frame(height: 12)
+                    .frame(height: 4)
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
             }

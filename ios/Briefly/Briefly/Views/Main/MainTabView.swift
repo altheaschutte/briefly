@@ -72,40 +72,45 @@ struct MainTabView: View {
     var body: some View {
         GeometryReader { proxy in
             let bottomSafeAreaInset = proxy.safeAreaInsets.bottom
-            let bottomTrayInset = max(0, trayHeight - bottomSafeAreaInset)
-            let contentBottomPadding = selection == .create ? 0 : bottomTrayInset
 
             ZStack(alignment: .bottom) {
+                Color.brieflyBackground.ignoresSafeArea()
+
                 TabView(selection: $selection) {
                     NavigationStack {
                         FeedView(viewModel: feedViewModel) {
                             selection = .create
                         }
                     }
+                    .ignoresSafeArea(.container, edges: .bottom)
                     .tabItem { Label("Library", systemImage: "list.bullet") }
                     .tag(Tab.feed)
 
                     NavigationStack {
                         SetupView(
                             topicsViewModel: topicsViewModel,
-                            appViewModel: appViewModel,
-                            bottomTrayInset: bottomTrayInset
+                            appViewModel: appViewModel
                         )
                     }
+                    .ignoresSafeArea(.container, edges: .bottom)
                     .tabItem { Label("Briefs", systemImage: "sparkles") }
                     .tag(Tab.create)
 
                     NavigationStack {
                         SettingsView(viewModel: settingsViewModel, email: appViewModel.currentUserEmail)
                     }
+                    .ignoresSafeArea(.container, edges: .bottom)
                     .tabItem { Label("Settings", systemImage: "gear") }
                     .tag(Tab.settings)
                 }
+                // Fill the full window and add padding equal to the custom tray height so content
+                // doesn't get compressed above an invisible system tab bar.
+                .ignoresSafeArea(.container, edges: .bottom)
                 .toolbar(.hidden, for: .tabBar)
                 .toolbarBackground(.hidden, for: .tabBar)
                 .scrollContentBackground(.hidden)
-                .safeAreaPadding(.bottom, contentBottomPadding)
                 .onPreferenceChange(BrieflyTrayChromePreferencesKey.self) { trayPreferences = $0 }
+                .background(Color.clear)
 
                 BottomTrayChrome(
                     selection: $selection,
@@ -117,12 +122,9 @@ struct MainTabView: View {
                         }
                     }
                 )
+                .background(Color.brieflyTabBarBackground.ignoresSafeArea(.container, edges: .bottom))
                 .onSizeChange { trayHeight = $0.height }
-                .animation(.spring(response: 0.35, dampingFraction: 0.86), value: trayHeight)
-                .ignoresSafeArea(.container, edges: .bottom)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.brieflyTabBarBackground.ignoresSafeArea())
         }
         .onChange(of: appViewModel.hasCompletedOnboarding) { completed in
             if completed {

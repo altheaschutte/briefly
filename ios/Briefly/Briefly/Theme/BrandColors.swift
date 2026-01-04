@@ -12,6 +12,7 @@ extension Color {
     static let brieflyBackground = Color.white
     static let brieflySurface = Color.warmGrey
     static let brieflyDarkSurface = Color(hex: 0x383838)
+    static let brieflyDeepBackground = Color(hex: 0x282828)
 
     // Accent (gold)
     static let brieflyPrimary = Color.gold
@@ -32,7 +33,7 @@ extension Color {
     static let brieflyProgressTrackBackground = Color(hex: 0xE9E9EA)
 
     // Tab bar
-    static let brieflyTabBarBackground = Color(hex: 0x2F2F2F)
+    static let brieflyTabBarBackground = Color.offBlack
     static let brieflyTabBarInactive = Color(hex: 0xB3B3B3)
 
     // Status
