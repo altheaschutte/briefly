@@ -3,7 +3,19 @@ import Combine
 import UIKit
 
 struct BrieflyTrayChromePreferences: Equatable {
+    enum TrailingButton: Equatable {
+        case tabDefault
+        case search
+    }
+
+    enum SearchContext: Equatable {
+        case episodes
+        case briefs
+    }
+
     var hideMiniPlayer: Bool = false
+    var trailingButton: TrailingButton = .tabDefault
+    var searchContext: SearchContext = .episodes
 }
 
 struct BrieflyTrayChromePreferencesKey: PreferenceKey {
@@ -12,6 +24,14 @@ struct BrieflyTrayChromePreferencesKey: PreferenceKey {
     static func reduce(value: inout BrieflyTrayChromePreferences, nextValue: () -> BrieflyTrayChromePreferences) {
         let next = nextValue()
         value.hideMiniPlayer = value.hideMiniPlayer || next.hideMiniPlayer
+
+        if next.trailingButton != .tabDefault {
+            value.trailingButton = next.trailingButton
+        }
+
+        if next.searchContext != .episodes {
+            value.searchContext = next.searchContext
+        }
     }
 }
 
@@ -30,6 +50,10 @@ extension View {
     func brieflyHideTrayMiniPlayer(_ hidden: Bool) -> some View {
         preference(key: BrieflyTrayChromePreferencesKey.self, value: .init(hideMiniPlayer: hidden))
     }
+
+    func brieflyTraySearch(context: BrieflyTrayChromePreferences.SearchContext) -> some View {
+        preference(key: BrieflyTrayChromePreferencesKey.self, value: .init(trailingButton: .search, searchContext: context))
+    }
 }
 
 struct MainTabView: View {
@@ -46,8 +70,12 @@ struct MainTabView: View {
     @State private var chromeHeight: CGFloat = 120
     @State private var trayPreferences = BrieflyTrayChromePreferences()
     @State private var isShowingCreateBrief: Bool = false
-    @State private var searchText: String = ""
+    @State private var episodeSearchText: String = ""
+    @State private var briefsSearchText: String = ""
+    @State private var searchContext: BrieflyTrayChromePreferences.SearchContext = .episodes
     @State private var isSearching: Bool = false
+    @State private var searchEditingTopic: Topic?
+    @State private var showSearchActiveLimitAlert: Bool = false
     @FocusState private var isSearchFieldFocused: Bool
     private let appViewModel: AppViewModel
     private let tabBarAppearance = UITabBar.appearance()
@@ -100,6 +128,11 @@ struct MainTabView: View {
 
                 tabContainer(bottomPadding: contentBottomPadding)
 
+                if isSearching {
+                    searchOverlay(bottomSafeAreaInset: bottomSafeAreaInset, contentBottomPadding: contentBottomPadding)
+                        .transition(.opacity)
+                }
+
                 trayFadeOverlay(height: chromeHeight + bottomSafeAreaInset + trayGradientPadding)
 
                 floatingChrome
@@ -117,14 +150,13 @@ struct MainTabView: View {
                 selection = .feed
             }
         }
+        .onChange(of: selection) { _ in
+            if isSearching {
+                searchContext = effectiveSearchContext
+            }
+        }
         .onChange(of: isSearching) { active in
             isSearchFieldFocused = active
-        }
-        .onChange(of: isSearchFieldFocused) { focused in
-            guard focused == false else { return }
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
-                isSearching = false
-            }
         }
         .onReceive(appViewModel.$prefetchedEpisodes.compactMap { $0 }) { episodes in
             feedViewModel.applyPrefetchedEpisodes(episodes)
@@ -169,7 +201,8 @@ private extension MainTabView {
                 SetupView(
                     topicsViewModel: topicsViewModel,
                     appViewModel: appViewModel,
-                    isShowingCreateBrief: $isShowingCreateBrief
+                    isShowingCreateBrief: $isShowingCreateBrief,
+                    briefsSearchText: $briefsSearchText
                 )
             }
             .ignoresSafeArea(.container, edges: .bottom)
@@ -201,52 +234,9 @@ private extension MainTabView {
     }
 
     private var searchTab: some View {
-        List {
-            if searchResults.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("No matches yet")
-                        .font(.headline)
-                        .foregroundStyle(Color.brieflyTextPrimary)
-                    Text("Search your saved Briefly episodes by title or summary.")
-                        .font(.footnote)
-                        .foregroundStyle(Color.brieflyTextMuted)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 12)
-            } else {
-                ForEach(searchResults) { episode in
-                    Button {
-                        dismissSearchFocus()
-                        appViewModel.presentEpisodeDetail(episode)
-                        selection = .feed
-                    } label: {
-                        SearchResultRow(episode: episode, isPlaying: audioManager.currentEpisode?.id == episode.id)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .background(Color.brieflyBackground)
-        .navigationTitle("Search")
-        .simultaneousGesture(
-            TapGesture()
-                .onEnded { dismissSearchFocus() }
-        )
+        episodesSearchList(contentBottomPadding: chromeHeight + contentBottomPaddingOffset, bottomSafeAreaInset: 0)
         .task {
             await feedViewModel.load(force: false)
-        }
-    }
-
-    private var searchResults: [Episode] {
-        let ready = feedViewModel.episodes.filter { $0.isReady }
-        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.isEmpty == false else { return ready }
-        let term = trimmed.lowercased()
-        return ready.filter {
-            $0.displayTitle.lowercased().contains(term) ||
-            $0.subtitle.lowercased().contains(term)
         }
     }
 
@@ -297,21 +287,21 @@ private extension MainTabView {
 
     @ViewBuilder
     private var trailingButton: some View {
-        if selection == .create {
-            createBriefButton
-        } else {
-            searchButton
-        }
+        searchButton(context: effectiveSearchContext)
     }
 
-    private var searchButton: some View {
-        let isSelected = selection == .search
+    private var effectiveSearchContext: BrieflyTrayChromePreferences.SearchContext {
+        if trayPreferences.trailingButton == .search {
+            return trayPreferences.searchContext
+        }
+        return selection == .create ? .briefs : .episodes
+    }
+
+    private func searchButton(context: BrieflyTrayChromePreferences.SearchContext = .episodes) -> some View {
+        let isSelected = isSearching && searchContext == context
+
         return Button {
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.82, blendDuration: 0.2)) {
-                selection = .search
-                isSearching = true
-            }
-            isSearchFieldFocused = true
+            startSearch(with: context)
         } label: {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 18, weight: .semibold))
@@ -333,32 +323,14 @@ private extension MainTabView {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    private var createBriefButton: some View {
-        Button {
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.82, blendDuration: 0.2)) {
-                selection = .create
-            }
-            dismissSearchFocus()
-            isShowingCreateBrief = true
-        } label: {
-            Image(systemName: "plus")
-                .font(.system(size: 18, weight: .semibold))
-                .frame(width: 24, height: 24)
-                .padding(12)
-                .foregroundStyle(Color.white)
-                .background(
-                    Circle()
-                        .fill(Color.brieflyTabBarBackground)
-                )
-                .overlay(
-                    Circle()
-                        .stroke(Color.white.opacity(0.22), lineWidth: 1.5)
-                )
+    private func startSearch(with context: BrieflyTrayChromePreferences.SearchContext) {
+        searchContext = context
+        withAnimation(.spring(response: 0.32, dampingFraction: 0.82, blendDuration: 0.2)) {
+            isSearching = true
         }
-        .buttonStyle(.plain)
-        .shadow(color: Color.black.opacity(0.22), radius: 18, x: 0, y: 10)
-        .accessibilityLabel("Create Brief")
-        .accessibilityAddTraits(.isSelected)
+        DispatchQueue.main.async {
+            isSearchFieldFocused = true
+        }
     }
 
     private func tabButton(tab: Tab, title: String, systemImage: String) -> some View {
@@ -380,24 +352,29 @@ private extension MainTabView {
     }
 
     private var searchBar: some View {
-        HStack(spacing: 10) {
+        let binding = searchFieldBinding
+        let currentText = binding.wrappedValue
+
+        return HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(Color.white.opacity(0.8))
 
-            TextField("Search your Briefs", text: $searchText)
+            TextField(searchPlaceholder, text: binding)
                 .focused($isSearchFieldFocused)
                 .textFieldStyle(.plain)
                 .foregroundStyle(Color.white.opacity(0.9))
                 .font(.system(size: 15))
                 .submitLabel(.search)
                 .onSubmit {
-                    selection = .search
+                    if searchContext == .episodes {
+                        selection = .search
+                    }
                 }
 
-            if searchText.isEmpty == false {
+            if currentText.isEmpty == false {
                 Button {
-                    searchText = ""
+                    binding.wrappedValue = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 14, weight: .semibold))
@@ -419,6 +396,391 @@ private extension MainTabView {
         .padding(.horizontal, 14)
         .frame(height: 48)
         .background(floatingBackground(cornerRadius: 24))
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    private var searchFieldBinding: Binding<String> {
+        switch searchContext {
+        case .briefs:
+            return $briefsSearchText
+        case .episodes:
+            return $episodeSearchText
+        }
+    }
+
+    private var searchPlaceholder: String {
+        switch searchContext {
+        case .briefs:
+            return "Search your Briefs"
+        case .episodes:
+            return "Search your episodes"
+        }
+    }
+
+    @ViewBuilder
+    private func searchOverlay(bottomSafeAreaInset: CGFloat, contentBottomPadding: CGFloat) -> some View {
+        Group {
+            switch searchContext {
+            case .episodes:
+                episodesSearchList(
+                    contentBottomPadding: contentBottomPadding,
+                    bottomSafeAreaInset: bottomSafeAreaInset
+                )
+            case .briefs:
+                briefsSearchList(
+                    contentBottomPadding: contentBottomPadding,
+                    bottomSafeAreaInset: bottomSafeAreaInset
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Color.brieflyBackground)
+        .animation(.easeInOut(duration: 0.2), value: isSearching)
+    }
+
+    @ViewBuilder
+    private func episodesSearchList(contentBottomPadding: CGFloat, bottomSafeAreaInset: CGFloat) -> some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(filteredEpisodeSections) { section in
+                    if section.title.isEmpty == false {
+                        Text(section.title)
+                            .font(.headline)
+                            .foregroundStyle(Color.brieflyTextPrimary)
+                            .padding(.horizontal, 20)
+                            .padding(.top, 12)
+                            .padding(.bottom, 6)
+                    }
+
+                    ForEach(section.episodes) { episode in
+                        Button {
+                            appViewModel.presentEpisodeDetail(episode)
+                        } label: {
+                            SearchEpisodeRow(episode: episode)
+                                .padding(.horizontal, 20)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                Spacer(minLength: contentBottomPadding + bottomSafeAreaInset)
+            }
+        }
+        .background(Color.brieflyBackground)
+    }
+
+    private var filteredEpisodeSections: [EpisodeSection] {
+        let ready = feedViewModel.episodes.filter { $0.isReady }
+        let trimmed = episodeSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let filtered: [Episode] = {
+            guard trimmed.isEmpty == false else { return ready }
+            let term = trimmed.lowercased()
+            return ready.filter {
+                $0.displayTitle.lowercased().contains(term) ||
+                $0.subtitle.lowercased().contains(term)
+            }
+        }()
+
+        let calendar = Calendar.current
+        let now = Date()
+        var today: [Episode] = []
+        var thisWeek: [Episode] = []
+        var older: [Episode] = []
+
+        for episode in filtered {
+            guard let date = episode.displayDate else { continue }
+            if calendar.isDateInToday(date) {
+                today.append(episode)
+            } else if let weekAgo = calendar.date(byAdding: .day, value: -7, to: now),
+                      date >= weekAgo {
+                thisWeek.append(episode)
+            } else {
+                older.append(episode)
+            }
+        }
+
+        var sections: [EpisodeSection] = []
+        if today.isEmpty == false { sections.append(EpisodeSection(title: "Today", episodes: today)) }
+        if thisWeek.isEmpty == false { sections.append(EpisodeSection(title: "This Week", episodes: thisWeek)) }
+        if older.isEmpty == false { sections.append(EpisodeSection(title: "Earlier", episodes: older)) }
+        return sections
+    }
+
+    private var filteredBriefTopics: [Topic] {
+        let ordered = topicsViewModel.topics.sorted { $0.orderIndex < $1.orderIndex }
+        let trimmed = briefsSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false else { return ordered }
+        let term = trimmed.lowercased()
+        return ordered.filter { topic in
+            topic.displayTitle.lowercased().contains(term) ||
+            topic.originalText.lowercased().contains(term) ||
+            (topic.classificationShortLabel?.lowercased().contains(term) ?? false)
+        }
+    }
+
+    struct SearchEpisodeRow: View {
+        let episode: Episode
+        @EnvironmentObject private var playbackHistory: PlaybackHistory
+        @EnvironmentObject private var audioManager: AudioPlayerManager
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .center, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(episode.displayDateLabel)
+                            .font(.caption.weight(.medium))
+                            .foregroundColor(.brieflyTextMuted)
+                        Text(episode.displayTitle)
+                            .font(.callout.weight(.semibold))
+                            .foregroundColor(.primary)
+                            .lineLimit(2)
+                        Text(episode.subtitle)
+                            .font(.footnote)
+                            .foregroundColor(.brieflyTextMuted)
+                            .lineLimit(2)
+                    }
+                    Spacer(minLength: 8)
+                    coverImageView
+                }
+
+                pillRow
+            }
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+
+        private var coverImageView: some View {
+            let maxPixelSize = Int(ceil(72 * UIScreen.main.scale))
+            return ZStack {
+                Color.brieflySurface
+                if let url = episode.coverImageURL {
+                    CachedAsyncImage(url: url, maxPixelSize: maxPixelSize) { image in
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    } placeholder: {
+                        SkeletonBlock()
+                    } failure: {
+                        fallbackArtwork
+                    }
+                } else {
+                    fallbackArtwork
+                }
+            }
+            .frame(width: 72, height: 72)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+        }
+
+        private var fallbackArtwork: some View {
+            Image(systemName: "waveform.circle.fill")
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundColor(Color.brieflySecondary)
+        }
+
+        private var pillRow: some View {
+            let isCurrentlyPlaying = audioManager.isPlaying && audioManager.currentEpisode?.id == episode.id
+            return HStack(spacing: 8) {
+                durationPill
+                partialPlaybackStatus(isCurrentlyPlaying: isCurrentlyPlaying)
+                if isCurrentlyPlaying == false, playbackHistory.isListened(episode.id) {
+                    listenedPill
+                }
+            }
+        }
+
+        private var durationPill: some View {
+            let label = durationLabel(episode.durationDisplaySeconds)
+            return HStack(spacing: 4) {
+                Image(systemName: "play.fill")
+                    .font(.caption2.weight(.semibold))
+                Text(label)
+                    .font(.caption.weight(.semibold))
+            }
+            .padding(.vertical, 4)
+            .padding(.horizontal, 8)
+            .background(Color.warmGrey)
+            .foregroundColor(Color.gold)
+            .clipShape(Capsule())
+        }
+
+        @ViewBuilder
+        private func partialPlaybackStatus(isCurrentlyPlaying: Bool) -> some View {
+            if let remainingSeconds = playbackHistory.remainingSeconds(episodeID: episode.id, fallbackDurationSeconds: episode.durationDisplaySeconds),
+               let fraction = playbackHistory.partialPlaybackFraction(episodeID: episode.id, fallbackDurationSeconds: episode.durationDisplaySeconds) {
+                HStack(spacing: 8) {
+                    if isCurrentlyPlaying {
+                        EqualizerWaveform(isAnimating: true, color: Color.gold, barCount: 4, minHeight: 4, maxHeight: 14, barWidth: 2, spacing: 2)
+                            .accessibilityLabel("Playing")
+                   } else {
+                       Text(remainingLabel(seconds: remainingSeconds))
+                           .font(.caption.weight(.medium))
+                           .foregroundColor(Color.gold)
+                   }
+
+                    progressBar(fraction: fraction, width: 64, height: 2)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(isCurrentlyPlaying ? "Playing. \(remainingLabel(seconds: remainingSeconds)) remaining" : "\(remainingLabel(seconds: remainingSeconds)) remaining")
+            }
+        }
+
+        private func progressBar(fraction: Double, width: CGFloat, height: CGFloat) -> some View {
+            let clamped = max(0, min(fraction, 1))
+            return ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.brieflyListenedBackground.opacity(0.6))
+                Capsule()
+                    .fill(Color.gold)
+                    .frame(width: width * clamped)
+            }
+            .frame(width: width, height: height)
+        }
+
+        private var listenedPill: some View {
+            HStack(spacing: 4) {
+                Image(systemName: "checkmark")
+                    .font(.caption2.weight(.semibold))
+                Text("Listened")
+                    .font(.caption.weight(.semibold))
+            }
+            .padding(.vertical, 4)
+            .padding(.horizontal, 8)
+            .background(Color.brieflyListenedBackground)
+            .foregroundColor(Color.brieflyPrimary)
+            .clipShape(Capsule())
+        }
+
+        private func durationLabel(_ seconds: Double?) -> String {
+            guard let seconds, seconds.isFinite, seconds > 0 else { return "—" }
+            let minutes = max(Int(round(seconds / 60)), 1)
+            return "\(minutes)m"
+        }
+
+        private func remainingLabel(seconds: Double) -> String {
+            guard seconds.isFinite, seconds > 0 else { return "— min left" }
+            let minutes = max(Int(ceil(seconds / 60)), 1)
+            return minutes == 1 ? "1 min left" : "\(minutes) min left"
+        }
+    }
+
+    struct SearchBriefRow: View {
+        let topic: Topic
+        let classificationLabels: [String]
+        let isInactiveAtLimit: Bool
+        let onEdit: () -> Void
+        let onToggleActive: () -> Void
+
+        var body: some View {
+            HStack(alignment: .center, spacing: 14) {
+                Button {
+                    onEdit()
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(topic.displayTitle)
+                            .font(.callout.weight(.semibold))
+                            .foregroundColor(.primary)
+                            .lineLimit(2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Text(topic.originalText)
+                            .font(.footnote)
+                            .foregroundColor(.brieflyTextMuted)
+                            .lineLimit(2)
+                            .truncationMode(.tail)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        if classificationLabels.isEmpty == false {
+                            HStack(spacing: 8) {
+                                ForEach(classificationLabels, id: \.self) { label in
+                                    Text(label)
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .italic()
+                                        .foregroundColor(.brieflyClassificationPillText)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 6)
+                                        .background(Color.warmGrey)
+                                        .clipShape(Capsule())
+                                }
+                            }
+                            .padding(.top, 2)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+
+                Spacer(minLength: 12)
+
+                Button {
+                    onToggleActive()
+                } label: {
+                    Image(systemName: topic.isActive ? "minus.circle.fill" : "plus.circle.fill")
+                        .foregroundStyle(
+                            topic.isActive
+                            ? Color.offBlack
+                            : (isInactiveAtLimit ? Color.brieflyTextMuted : Color.offBlack)
+                        )
+                        .font(.system(size: 22, weight: .semibold))
+                }
+                .buttonStyle(.borderless)
+                .opacity(isInactiveAtLimit ? 0.5 : 1)
+            }
+            .contentShape(Rectangle())
+            .padding(.vertical, 8)
+        }
+    }
+
+
+    private func classificationLabels(from rawLabel: String?) -> [String] {
+        guard let rawLabel = rawLabel?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              rawLabel.isEmpty == false else { return [] }
+
+        let normalized = rawLabel.replacingOccurrences(of: "/", with: ",")
+        let components = normalized
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { $0.isEmpty == false }
+
+        if components.isEmpty {
+            return [rawLabel]
+        }
+        return components
+    }
+
+    @ViewBuilder
+    private func briefsSearchList(contentBottomPadding: CGFloat, bottomSafeAreaInset: CGFloat) -> some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(filteredBriefTopics) { topic in
+                    SearchBriefRow(
+                        topic: topic,
+                        classificationLabels: classificationLabels(from: topic.classificationShortLabel),
+                        isInactiveAtLimit: !topic.isActive && !topicsViewModel.canAddActiveTopic,
+                        onEdit: { searchEditingTopic = topic },
+                        onToggleActive: {
+                            if topic.isActive {
+                                Task { await topicsViewModel.deactivateTopic(topic) }
+                            } else if topicsViewModel.canAddActiveTopic {
+                                Task { await topicsViewModel.activateTopic(topic) }
+                            } else {
+                                showSearchActiveLimitAlert = true
+                            }
+                        }
+                    )
+                    .padding(.horizontal, 20)
+                }
+                Spacer(minLength: contentBottomPadding + bottomSafeAreaInset)
+            }
+        }
+        .background(Color.brieflyBackground)
+        .sheet(item: $searchEditingTopic) { topic in
+            NavigationStack {
+                TopicEditView(viewModel: topicsViewModel, topic: topic)
+            }
+        }
+        .alert("Active Brief limit reached", isPresented: $showSearchActiveLimitAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("You can have up to \(topicsViewModel.maxActiveTopics) active Briefs on your plan.")
+        }
     }
 
     private func miniPlayer(for episode: Episode) -> some View {
@@ -541,67 +903,6 @@ private extension MainTabView {
         }
     }
 
-    struct SearchResultRow: View {
-        let episode: Episode
-        let isPlaying: Bool
-
-        var body: some View {
-            let coverSize: CGFloat = 56
-            let maxPixelSize = Int(ceil(coverSize * UIScreen.main.scale))
-
-            HStack(alignment: .center, spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(episode.displayTitle)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Color.brieflyTextPrimary)
-                        .lineLimit(2)
-
-                    Text(episode.subtitle)
-                        .font(.footnote)
-                        .foregroundStyle(Color.brieflyTextMuted)
-                        .lineLimit(2)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                if isPlaying {
-                    Image(systemName: "waveform")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Color.brieflyTextPrimary)
-                }
-
-                coverImage(for: episode, maxPixelSize: maxPixelSize)
-                    .frame(width: coverSize, height: coverSize)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }
-            .padding(.vertical, 10)
-        }
-
-        private func coverImage(for episode: Episode, maxPixelSize: Int?) -> some View {
-            ZStack {
-                Color.brieflySurface
-
-                if let url = episode.coverImageURL {
-                    CachedAsyncImage(url: url, maxPixelSize: maxPixelSize) { image in
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    } placeholder: {
-                        SkeletonBlock()
-                    } failure: {
-                        fallbackArtwork
-                    }
-                } else {
-                    fallbackArtwork
-                }
-            }
-        }
-
-        private var fallbackArtwork: some View {
-            Image(systemName: "waveform.circle.fill")
-                .font(.system(size: 28, weight: .semibold))
-                .foregroundColor(Color.brieflySecondary)
-        }
-    }
 }
 
 private extension View {

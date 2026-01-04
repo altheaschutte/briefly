@@ -34,12 +34,32 @@ final class EpisodesViewModel: ObservableObject {
         episodes.filter { $0.isReady }
     }
 
+    private var inProgressEpisodes: [Episode] {
+        episodes.filter { episode in
+            guard let status = episode.status?.lowercased() else { return false }
+            switch status {
+            case "ready", "failed":
+                return false
+            default:
+                return true
+            }
+        }
+    }
+
+    var inProgressEpisode: Episode? {
+        inProgressEpisodes.first
+    }
+
     var latestEpisode: Episode? {
         readyEpisodes.first
     }
 
     var previousEpisodes: [Episode] {
-        Array(readyEpisodes.dropFirst())
+        let ready = readyEpisodes
+        if inProgressEpisode != nil {
+            return ready
+        }
+        return Array(ready.dropFirst())
     }
 
     var sections: [EpisodeSection] {

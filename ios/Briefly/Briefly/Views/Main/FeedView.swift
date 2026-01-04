@@ -39,11 +39,14 @@ struct FeedView: View {
 
     @ViewBuilder
     private var feedContent: some View {
-        let hasLatestSection = viewModel.latestEpisode != nil || viewModel.isLoading
+        let featuredEpisode = viewModel.inProgressEpisode ?? viewModel.latestEpisode
+        let hasLatestSection = featuredEpisode != nil || viewModel.isLoading
         let previousListTopPadding: CGFloat = hasLatestSection ? 12 : 0
 
         VStack(alignment: .leading, spacing: 16) {
-            if let latest = viewModel.latestEpisode {
+            if let inProgress = viewModel.inProgressEpisode {
+                inProgressCard(for: inProgress)
+            } else if let latest = viewModel.latestEpisode {
                 latestCard(for: latest)
             } else if viewModel.isLoading {
                 latestSkeletonCard
@@ -52,7 +55,7 @@ struct FeedView: View {
             }
 
             if viewModel.previousEpisodes.isEmpty == false {
-                VStack(spacing: 12) {
+                VStack(spacing: 10) {
                     ForEach(viewModel.previousEpisodes) { episode in
                         Button {
                             appViewModel.presentEpisodeDetail(episode)
@@ -106,6 +109,57 @@ struct FeedView: View {
         .padding()
         .background(Color.brieflySurface)
         .cornerRadius(12)
+    }
+
+    private func inProgressCard(for episode: Episode) -> some View {
+        HStack(alignment: .center, spacing: 16) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(inProgressStatusLabel(for: episode))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundColor(.brieflyTextMuted)
+                    .tracking(1)
+
+                Text("Generating Episode")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(.brieflyTextPrimary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+
+                Text(episode.summary)
+                    .font(.footnote)
+                    .foregroundColor(.brieflyTextMuted)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
+
+            Spacer(minLength: 12)
+
+            ProgressView()
+                .progressViewStyle(.circular)
+                .tint(.offBlack)
+                .scaleEffect(1.2)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.brieflySurface)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private func inProgressStatusLabel(for episode: Episode) -> String {
+        switch episode.status?.lowercased() {
+        case "queued":
+            return "QUEUED"
+        case "rewriting_queries":
+            return "POLISHING TOPICS"
+        case "retrieving_content":
+            return "GATHERING SOURCES"
+        case "generating_script":
+            return "WRITING SCRIPT"
+        case "generating_audio":
+            return "READY IN A FEW MINUTES"
+        default:
+            return "READY SOON"
+        }
     }
 
     private func latestCard(for episode: Episode) -> some View {

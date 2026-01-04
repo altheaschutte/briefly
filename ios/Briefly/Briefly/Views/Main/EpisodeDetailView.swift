@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import WaveformScrubber
 
 	struct EpisodeDetailView: View {
 	    let episodeId: UUID
@@ -25,6 +26,7 @@ import UIKit
     @State private var actionAlert: ActionAlert?
     @State private var isDeleting: Bool = false
     @State private var scrollToScript: Bool = false
+    @State private var dragPreviewProgress: Double?
 	    @State private var showActionsSheet: Bool = false
 	    @State private var showSpeedSheet: Bool = false
 	    @State private var actionsSheetDetent: PresentationDetent = .fraction(0.5)
@@ -205,7 +207,7 @@ private extension EpisodeDetailView {
     private var episodeDetailTextPrimary: Color { .white }
     private var episodeDetailTextSecondary: Color { .white.opacity(0.6) }
     private var episodeDetailDivider: Color { .white.opacity(0.14) }
-    private var contentHorizontalPadding: CGFloat { 20 }
+    private var contentHorizontalPadding: CGFloat { 16 }
 
     var header: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -279,18 +281,18 @@ private extension EpisodeDetailView {
 	                Divider()
 	                    .overlay(episodeDetailDivider)
 
-	                VStack(spacing: 10) {
-	                    ForEach(actionItems) { item in
-	                        actionRow(item)
-	                    }
+                VStack(spacing: 10) {
+                    ForEach(actionItems) { item in
+                        actionRow(item)
+                    }
                 }
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, contentHorizontalPadding)
             .padding(.bottom, 18)
-	            .padding(.top, 12)
-	            .frame(maxWidth: .infinity, alignment: .leading)
-	        }
-	        .background(episodeDetailBackground)
+            .padding(.top, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(episodeDetailBackground)
 	    }
 
 	    private var actionsHeader: some View {
@@ -426,19 +428,73 @@ private extension EpisodeDetailView {
                     Spacer()
                     Color.clear.frame(width: 44)
                 }
-	        }
+        }
 	        .frame(maxWidth: .infinity)
 	    }
 
         private var waveformScrubber: some View {
-            WaveformScrubber(
-                progress: displayedProgress,
-                barColor: episodeDetailTextSecondary.opacity(0.45),
-                progressColor: .brieflyPrimary
-            ) { newProgress in
-                seek(toProgress: newProgress)
+            Group {
+                if let audioURL = waveformAudioURL {
+                    WaveformScrubber(
+                        config: .init(activeTint: waveformActiveColor, inactiveTint: waveformInactiveColor),
+                        drawer: BarDrawer(config: .init(barWidth: 3, spacing: 2, minBarHeight: 4, cornerRadius: 1.5)),
+                        url: audioURL,
+                        progress: waveformProgressBinding,
+                        onGestureActive: { isDragging in
+                            if isDragging == false {
+                                finishScrubIfNeeded()
+                            }
+                        }
+                    )
+                    .waveformScrubberStyle(
+                        DefaultWaveformScrubberStyle(
+                            active: waveformActiveColor,
+                            inactive: waveformInactiveColor
+                        )
+                    )
+                    .accessibilityLabel("Playback position")
+                    .accessibilityValue(Text("\(Int(waveformDisplayProgress * 100)) percent"))
+                } else {
+                    StaticWaveformPlaceholder(
+                        progress: waveformDisplayProgress,
+                        barColor: waveformInactiveColor,
+                        progressColor: waveformActiveColor
+                    )
+                }
             }
             .frame(height: 26)
+        }
+
+        private var waveformAudioURL: URL? {
+            if let url = detailedEpisode.audioURL {
+                return url
+            }
+            if audioManager.currentEpisode?.id == detailedEpisode.id {
+                return audioManager.currentEpisode?.audioURL
+            }
+            return nil
+        }
+
+        private var waveformProgressBinding: Binding<CGFloat> {
+            Binding(
+                get: { CGFloat(waveformDisplayProgress) },
+                set: { newValue in
+                    dragPreviewProgress = Double(max(0, min(newValue, 1)))
+                }
+            )
+        }
+
+        private var waveformDisplayProgress: Double {
+            max(0, min(dragPreviewProgress ?? displayedProgress, 1))
+        }
+
+        private var waveformActiveColor: Color { .brieflyPrimary }
+        private var waveformInactiveColor: Color { episodeDetailTextSecondary.opacity(0.45) }
+
+        private func finishScrubIfNeeded() {
+            guard let target = dragPreviewProgress else { return }
+            dragPreviewProgress = nil
+            seek(toProgress: target)
         }
 
 	    private func skipButton(systemName: String, direction: Double, accessibilityLabel: String) -> some View {
@@ -1183,11 +1239,11 @@ private extension EpisodeDetailView {
                         .accessibilityLabel("More actions")
                 }
                 .buttonStyle(.plain)
-	            }
-	            .padding(.horizontal, 8)
-	            .frame(maxWidth: .infinity)
-	            .background(episodeDetailBackground)
-	        }
+            }
+            .padding(.horizontal, contentHorizontalPadding)
+            .frame(maxWidth: .infinity)
+            .background(episodeDetailBackground)
+        }
 		}
 
 private struct EpisodeDetailScrollOffsetKey: PreferenceKey {
@@ -1197,18 +1253,10 @@ private struct EpisodeDetailScrollOffsetKey: PreferenceKey {
     }
 }
 
-private struct WaveformScrubber: View {
+private struct StaticWaveformPlaceholder: View {
     let progress: Double
     let barColor: Color
     let progressColor: Color
-    let onSeek: (Double) -> Void
-
-    @State private var dragProgress: Double?
-
-    private var resolvedProgress: Double {
-        let value = dragProgress ?? progress
-        return max(0, min(value, 1))
-    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -1233,24 +1281,10 @@ private struct WaveformScrubber: View {
                         .foregroundStyle(progressColor)
                         .mask(alignment: .leading) {
                             Rectangle()
-                                .frame(width: width * resolvedProgress)
+                                .frame(width: width * max(0, min(progress, 1)))
                         }
                 }
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { value in
-                            dragProgress = max(0, min(value.location.x / max(width, 1), 1))
-                        }
-                        .onEnded { value in
-                            let clamped = max(0, min(value.location.x / max(width, 1), 1))
-                            dragProgress = nil
-                            onSeek(clamped)
-                        }
-                )
-                .accessibilityElement()
-                .accessibilityLabel("Playback position")
-                .accessibilityValue(Text("\(Int(resolvedProgress * 100)) percent"))
+                .accessibilityHidden(true)
         }
     }
 

@@ -9,12 +9,12 @@ struct EpisodesView: View {
     var body: some View {
         List {
             ForEach(viewModel.sections) { section in
-                Section(header: Text(section.title)) {
+                Section {
                     ForEach(section.episodes) { episode in
                         Button {
                             appViewModel.presentEpisodeDetail(episode)
                         } label: {
-                            EpisodeRow(episode: episode)
+                            EpisodesListRow(episode: episode)
                         }
                         .buttonStyle(.plain)
                         .listRowSeparator(.hidden)
@@ -38,6 +38,9 @@ struct EpisodesView: View {
             await viewModel.load(force: true)
         }
         .listStyle(.plain)
+         .safeAreaInset(edge: .bottom, spacing: 0) {
+            Color.clear.frame(height: 120)
+        }
         .scrollContentBackground(.hidden)
         .listSectionSeparator(.hidden)
         .overlay(alignment: .top) { bannerView }
@@ -59,7 +62,7 @@ struct EpisodesView: View {
     }
 }
 
-private struct EpisodeRow: View {
+private struct EpisodesListRow: View {
     let episode: Episode
     @EnvironmentObject private var playbackHistory: PlaybackHistory
     @EnvironmentObject private var audioManager: AudioPlayerManager

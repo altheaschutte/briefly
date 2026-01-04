@@ -1,5 +1,5 @@
 {
-  "originHash" : "497b223336ae156cc4edd8c12c3d176b975452a34540e6bdf0a3cf91a248bc9c",
+  "originHash" : "ace07a2062e57e9735f2723b558c044d30050f1b2d0eca7d867cc4997906e0f5",
   "pins" : [
     {
       "identity" : "supabase-swift",
@@ -53,6 +53,15 @@
       "state" : {
         "revision" : "45eb0224913ea070ec4fba17291b9e7ecf4749ca",
         "version" : "1.5.1"
+      }
+    },
+    {
+      "identity" : "waveformscrubber",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/lkora/WaveformScrubber.git",
+      "state" : {
+        "revision" : "8eedca505a58675dbbfa1082aa9d5f073cf25a34",
+        "version" : "1.0.4"
       }
     },
     {

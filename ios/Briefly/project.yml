@@ -7,6 +7,9 @@ packages:
   Supabase:
     url: https://github.com/supabase-community/supabase-swift.git
     from: 2.0.0
+  WaveformScrubber:
+    url: https://github.com/lkora/WaveformScrubber.git
+    from: 1.0.4
 schemes:
   Briefly:
     build:
@@ -56,6 +59,7 @@ targets:
         UILaunchStoryboardName: LaunchScreen
     dependencies:
       - package: Supabase
+      - package: WaveformScrubber
     configFiles:
       Debug: Config/Debug.xcconfig
       Release: Config/Release.xcconfig

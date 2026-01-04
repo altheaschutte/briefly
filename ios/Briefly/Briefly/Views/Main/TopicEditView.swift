@@ -4,139 +4,145 @@ struct TopicEditView: View {
     @ObservedObject var viewModel: TopicsViewModel
     @State private var topic: Topic
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.undoManager) private var undoManager
-    @FocusState private var isFieldFocused: Bool
-    @State private var alertMessage: String?
-    private let isNew: Bool
-    private let wasActive: Bool
+    @Environment(\.brieflyFloatingChromeHeight) private var floatingChromeHeight
+    @FocusState private var isPromptFocused: Bool
+    @State private var errorMessage: String?
+    @State private var isSubmitting: Bool = false
 
-    init(viewModel: TopicsViewModel, topic: Topic, isNew: Bool = false) {
+    init(viewModel: TopicsViewModel, topic: Topic) {
         self.viewModel = viewModel
         _topic = State(initialValue: topic)
-        self.isNew = isNew
-        self.wasActive = topic.isActive
     }
 
     var body: some View {
-        List {
-            Section {
-                topicField
-            }
-            .listRowBackground(Color.brieflySurface)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                promptHeader
+                promptEditor
+                saveButton
 
-            Section {
-                Toggle("Active", isOn: $topic.isActive)
-                    .tint(.brieflyPrimary)
-
-                if activationWouldExceedLimit {
-                    Text("You already have \(viewModel.maxActiveTopics) active Briefs. Deactivate one before adding another.")
-                        .font(.footnote)
-                        .foregroundColor(.brieflyTextMuted)
+                if let errorMessage {
+                    InlineErrorText(message: errorMessage)
                 }
             }
-            .listRowBackground(Color.brieflySurface)
-
-            if !isNew {
-                Section {
-                    Button(role: .destructive) {
-                        Task { await deleteTopic() }
-                    } label: {
-                        Text("Delete Brief")
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .tint(.brieflyDestructive)
-                }
-                .listRowBackground(Color.brieflySurface)
-            }
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+            .padding(.bottom, contentBottomPadding)
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .listRowBackground(Color.brieflyBackground)
-        .navigationTitle(isNew ? "Add Brief" : "Edit Brief")
+        .background(Color.brieflyBackground.ignoresSafeArea())
+        .navigationTitle("Edit Brief")
         .navigationBarTitleDisplayMode(.inline)
-        .background(Color.brieflyBackground)
+        .navigationBarBackButtonHidden(true)
         .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("Cancel") {
+                    dismiss()
+                }
+                .foregroundStyle(Color.brieflyPrimary)
+            }
+
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") {
-                    Task { await saveTopic() }
+                    Task { await save() }
                 }
-                .disabled(topic.originalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .foregroundStyle(Color.offBlack)
+                .tint(.offBlack)
+                .disabled(isSaveDisabled)
             }
         }
         .onAppear {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                isFieldFocused = true
+                isPromptFocused = true
             }
         }
         .onChange(of: viewModel.errorMessage) { message in
-            alertMessage = message
-        }
-        .alert("Error", isPresented: Binding(
-            get: { alertMessage != nil },
-            set: { presented in
-                if !presented {
-                    alertMessage = nil
-                    viewModel.errorMessage = nil
-                }
+            if let message {
+                errorMessage = message
             }
-        )) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(alertMessage ?? "")
         }
     }
 
-    private var topicField: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Brief")
-                .font(.footnote.weight(.semibold))
-                .foregroundColor(.brieflyTextMuted)
+    private var promptHeader: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Prompt")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Color.brieflyTextPrimary)
 
-            TextField("Brief", text: $topic.originalText, axis: .vertical)
-                .frame(minHeight: topicFieldMinHeight, alignment: .topLeading)
-                .focused($isFieldFocused)
+            Text("Briefly describe what you want this segment to explore. Be as detailed or as vague as you like.")
+                .font(.system(size: 14, weight: .regular))
+                .foregroundStyle(Color.brieflyTextSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var promptEditor: some View {
+        ZStack(alignment: .topLeading) {
+            TextEditor(text: $topic.originalText)
+                .frame(minHeight: 160)
+                .scrollContentBackground(.hidden)
+                .focused($isPromptFocused)
                 .inputFieldStyle()
+                .foregroundStyle(Color.brieflyTextPrimary)
+
+            if topic.originalText.isEmpty {
+                Text("Find me latest research on CRISPR")
+                    .foregroundStyle(Color.brieflyTextMuted)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 18)
+                    .allowsHitTesting(false)
+            }
         }
     }
 
-    private var activationWouldExceedLimit: Bool {
-        topic.isActive && !wasActive && !viewModel.canAddActiveTopic
+    private var saveButton: some View {
+        Button {
+            Task { await save() }
+        } label: {
+            if isSubmitting {
+                ProgressView()
+                    .tint(.white)
+                    .frame(maxWidth: .infinity)
+            } else {
+                Text("Save")
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .font(.system(size: 16, weight: .semibold))
+        .buttonStyle(BrieflyCapsuleButtonStyle(background: .offBlack, foreground: .white, verticalPadding: 16))
+        .disabled(isSaveDisabled)
     }
 
-    private func saveTopic() async {
-        let trimmed = topic.originalText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            alertMessage = "Brief text cannot be empty."
+    private var isSaveDisabled: Bool {
+        isSubmitting || trimmedPrompt.isEmpty
+    }
+
+    private var trimmedPrompt: String {
+        topic.originalText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var contentBottomPadding: CGFloat {
+        max(floatingChromeHeight, 0) + 24
+    }
+
+    private func save() async {
+        let trimmed = trimmedPrompt
+        guard trimmed.isEmpty == false else {
+            errorMessage = "Prompt cannot be empty."
             return
         }
+
+        errorMessage = nil
+        viewModel.errorMessage = nil
+        isSubmitting = true
+        defer { isSubmitting = false }
 
         topic.originalText = trimmed
-        if isNew {
-            await viewModel.addTopic(text: trimmed, isActive: topic.isActive)
-        } else {
-            await viewModel.updateTopicWithLimit(topic)
-        }
-
+        await viewModel.updateTopicWithLimit(topic)
         guard viewModel.errorMessage == nil else {
-            alertMessage = viewModel.errorMessage
+            errorMessage = viewModel.errorMessage
             return
         }
 
         dismiss()
-    }
-
-    private func deleteTopic() async {
-        await viewModel.deleteTopic(topic, undoManager: undoManager)
-        guard viewModel.errorMessage == nil else {
-            alertMessage = viewModel.errorMessage
-            return
-        }
-        dismiss()
-    }
-}
-
-private extension TopicEditView {
-    var topicFieldMinHeight: CGFloat {
-        UIFont.preferredFont(forTextStyle: .body).lineHeight * 5
     }
 }

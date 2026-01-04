@@ -1,42 +1,100 @@
 import SwiftUI
 
 struct BriefsLibraryView: View {
-    @ObservedObject var topicsViewModel: TopicsViewModel
+    @ObservedObject private var topicsViewModel: TopicsViewModel
+    @Binding private var searchText: String
+    var onCreateBrief: (() -> Void)? = nil
+    var showsNavigationChrome: Bool = true
+    var bottomPadding: CGFloat = 120
     @Environment(\.undoManager) private var undoManager
     @State private var showActiveLimitAlert: Bool = false
     @State private var editingTopic: Topic?
+    @State private var isShowingCreateBrief: Bool = false
+
+    init(
+        topicsViewModel: TopicsViewModel,
+        searchText: Binding<String> = .constant(""),
+        onCreateBrief: (() -> Void)? = nil,
+        showsNavigationChrome: Bool = true,
+        bottomPadding: CGFloat = 120
+    ) {
+        _topicsViewModel = ObservedObject(wrappedValue: topicsViewModel)
+        _searchText = searchText
+        self.onCreateBrief = onCreateBrief
+        self.showsNavigationChrome = showsNavigationChrome
+        self.bottomPadding = bottomPadding
+    }
 
     private var orderedTopics: [Topic] {
         topicsViewModel.topics.sorted { $0.orderIndex < $1.orderIndex }
     }
 
+    private var filteredTopics: [Topic] {
+        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false else { return orderedTopics }
+        let term = trimmed.lowercased()
+        return orderedTopics.filter { topic in
+            topic.displayTitle.lowercased().contains(term) ||
+            topic.originalText.lowercased().contains(term) ||
+            (topic.classificationShortLabel?.lowercased().contains(term) ?? false)
+        }
+    }
+
+    private var hasSearchQuery: Bool {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    }
+
     var body: some View {
         List {
-            ForEach(orderedTopics) { topic in
-                topicRow(topic: topic)
+            if filteredTopics.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("No Briefs found")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color.brieflyTextPrimary)
+                    Text(hasSearchQuery ? "Try a different search to find your Briefs." : "Add a Brief to see it here.")
+                        .font(.footnote)
+                        .foregroundStyle(Color.brieflyTextMuted)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 12)
+                .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 20))
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+            } else {
+                ForEach(filteredTopics) { topic in
+                    topicRow(topic: topic)
+                }
             }
         }
         .listStyle(.plain)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            Color.clear.frame(height: 120)
+            Color.clear.frame(height: bottomPadding)
         }
         .scrollContentBackground(.hidden)
         .listRowBackground(Color.brieflyBackground)
         .background(Color.brieflyBackground)
-        .navigationTitle("Brief Library")
+        .navigationTitle(showsNavigationChrome ? "Brief Library" : "")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                NavigationLink {
-                    CreateBriefView(topicsViewModel: topicsViewModel)
-                } label: {
-                    Label("New", systemImage: "plus")
-                        .font(.system(size: 17, weight: .semibold))
-                        .labelStyle(.titleAndIcon)
-                        .foregroundStyle(Color.offBlack)
+            if showsNavigationChrome {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        presentCreateBrief()
+                    } label: {
+                        Label("New", systemImage: "plus")
+                            .font(.system(size: 17, weight: .semibold))
+                            .labelStyle(.titleAndIcon)
+                            .foregroundStyle(Color.offBlack)
+                    }
+                    .tint(.offBlack)
+                    .accessibilityLabel("Create Brief")
                 }
-                .tint(.offBlack)
-                .accessibilityLabel("Create Brief")
+            }
+        }
+        .toolbar(showsNavigationChrome ? .automatic : .hidden, for: .navigationBar)
+        .sheet(isPresented: $isShowingCreateBrief) {
+            NavigationStack {
+                CreateBriefView(topicsViewModel: topicsViewModel)
             }
         }
         .sheet(item: $editingTopic) { topic in
@@ -49,6 +107,7 @@ struct BriefsLibraryView: View {
         } message: {
             Text("You can have up to \(topicsViewModel.maxActiveTopics) active Briefs on your plan.")
         }
+        .brieflyTraySearch(context: .briefs)
     }
 
     private func topicRow(topic: Topic) -> some View {
@@ -153,5 +212,13 @@ struct BriefsLibraryView: View {
             return [rawLabel]
         }
         return components
+    }
+
+    private func presentCreateBrief() {
+        if let onCreateBrief {
+            onCreateBrief()
+        } else {
+            isShowingCreateBrief = true
+        }
     }
 }

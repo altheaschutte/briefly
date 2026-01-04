@@ -18,7 +18,7 @@ final class EpisodeViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.sections.first?.episodes.first?.title, "Morning Briefly")
     }
 
-    func testLatestEpisodeSkipsNonReadyEpisodes() async {
+    func testInProgressEpisodeIsFeaturedWithoutHidingLatestReady() async {
         let now = Date()
         let pending = Episode(id: UUID(),
                               title: "Pending Briefly",
@@ -40,6 +40,8 @@ final class EpisodeViewModelTests: XCTestCase {
         await viewModel.load()
 
         XCTAssertEqual(viewModel.latestEpisode?.id, ready.id)
+        XCTAssertEqual(viewModel.inProgressEpisode?.id, pending.id)
+        XCTAssertTrue(viewModel.previousEpisodes.contains(where: { $0.id == ready.id }))
         XCTAssertFalse(viewModel.previousEpisodes.contains(where: { $0.id == pending.id }))
         XCTAssertEqual(viewModel.sections.flatMap(\.episodes).count, 1)
     }

@@ -1,17 +1,12 @@
 import SwiftUI
 import Combine
 
-enum TopicRoute: Hashable {
-    case edit(Topic)
-    case create
-    case library
-}
-
 struct SetupView: View {
     @ObservedObject var topicsViewModel: TopicsViewModel
     @ObservedObject private var appViewModel: AppViewModel
     @StateObject private var creationViewModel: EpisodeCreationViewModel
     @Binding private var isShowingCreateBrief: Bool
+    @Binding private var briefsSearchText: String
     @EnvironmentObject private var episodeGenerationStatus: EpisodeGenerationStatusCenter
     @Environment(\.openURL) private var openURL
     @Environment(\.undoManager) private var undoManager
@@ -25,7 +20,12 @@ struct SetupView: View {
     @State private var showsNavigationTitle: Bool = false
     @State private var scrollOffsetBaseline: CGFloat?
 
-    init(topicsViewModel: TopicsViewModel, appViewModel: AppViewModel, isShowingCreateBrief: Binding<Bool>) {
+    init(
+        topicsViewModel: TopicsViewModel,
+        appViewModel: AppViewModel,
+        isShowingCreateBrief: Binding<Bool>,
+        briefsSearchText: Binding<String>
+    ) {
         _topicsViewModel = ObservedObject(wrappedValue: topicsViewModel)
         _appViewModel = ObservedObject(wrappedValue: appViewModel)
         _creationViewModel = StateObject(
@@ -35,6 +35,7 @@ struct SetupView: View {
             )
         )
         _isShowingCreateBrief = isShowingCreateBrief
+        _briefsSearchText = briefsSearchText
     }
 
     var body: some View {
@@ -111,6 +112,11 @@ struct SetupView: View {
                 BriefSeedView(topicsViewModel: topicsViewModel)
             }
         }
+        .sheet(isPresented: $isShowingCreateBrief) {
+            NavigationStack {
+                CreateBriefView(topicsViewModel: topicsViewModel)
+            }
+        }
         .onChange(of: topicsViewModel.errorMessage) { message in
             handleErrorChange(message)
         }
@@ -134,22 +140,11 @@ struct SetupView: View {
             guard newPhase != .active else { return }
             Task { await creationViewModel.fireQueuedGenerationIfNeeded() }
         }
-        .navigationDestination(for: TopicRoute.self) { route in
-            switch route {
-            case .edit(let topic):
-                TopicEditView(viewModel: topicsViewModel, topic: topic)
-            case .create:
-                CreateBriefView(topicsViewModel: topicsViewModel)
-            case .library:
-                BriefsLibraryView(topicsViewModel: topicsViewModel)
-            }
-        }
-        .navigationDestination(isPresented: $isShowingCreateBrief) {
-            CreateBriefView(topicsViewModel: topicsViewModel)
-        }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                NavigationLink(value: TopicRoute.create) {
+                Button {
+                    isShowingCreateBrief = true
+                } label: {
                     Label("New", systemImage: "plus")
                         .font(.system(size: 17, weight: .semibold))
                         .labelStyle(.titleAndIcon)
@@ -258,7 +253,7 @@ struct SetupView: View {
         let isInactiveAtLimit = !isActive && !topicsViewModel.canAddActiveTopic
         let classificationLabels = classificationLabels(from: topic.classificationShortLabel)
 
-        return HStack(alignment: .center, spacing: 16) {
+        return HStack(alignment: .center, spacing: 12) {
             Button {
                 editingTopic = topic
             } label: {
@@ -302,8 +297,8 @@ struct SetupView: View {
             .opacity(isInactiveAtLimit ? 0.5 : 1)
         }
         .contentShape(Rectangle())
-        .padding(.vertical, 12)
-        .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 12, trailing: 20))
+        .padding(.vertical, 8)
+        .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 20))
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -423,7 +418,11 @@ private extension SetupView {
 
     private var libraryNavigationLink: some View {
         NavigationLink(
-            destination: BriefsLibraryView(topicsViewModel: topicsViewModel),
+            destination: BriefsLibraryView(
+                topicsViewModel: topicsViewModel,
+                searchText: $briefsSearchText,
+                onCreateBrief: { isShowingCreateBrief = true }
+            ),
             isActive: $isShowingBriefsLibrary
         ) {
             EmptyView()

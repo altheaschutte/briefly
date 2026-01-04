@@ -30,13 +30,8 @@ struct CreateBriefView: View {
         .navigationBarBackButtonHidden(true)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
-                Button {
+                Button("Cancel") {
                     dismiss()
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "chevron.left")
-                        Text("Briefs")
-                    }
                 }
                 .foregroundStyle(Color.brieflyPrimary)
             }
