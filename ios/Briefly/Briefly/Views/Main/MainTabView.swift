@@ -35,12 +35,14 @@ struct MainTabView: View {
     @State private var chromeHeight: CGFloat = 120
     @State private var trayPreferences = BrieflyTrayChromePreferences()
     @State private var searchText: String = ""
-    @Namespace private var miniPlayerAnimation
+    @State private var isSearching: Bool = false
     private let appViewModel: AppViewModel
     private let tabBarAppearance = UITabBar.appearance()
+    private let miniPlayerNamespace: Namespace.ID
 
-    init(appViewModel: AppViewModel) {
+    init(appViewModel: AppViewModel, miniPlayerNamespace: Namespace.ID) {
         self.appViewModel = appViewModel
+        self.miniPlayerNamespace = miniPlayerNamespace
         let fatalAuthHandler: (String) -> Void = { [weak appViewModel] message in
             Task { @MainActor in
                 await appViewModel?.forceLogoutWithSnackbar(message)
@@ -217,17 +219,23 @@ private extension MainTabView {
 
     @ViewBuilder
     func floatingChrome() -> some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 8) {
             if let episode = audioManager.currentEpisode, trayPreferences.hideMiniPlayer == false {
                 miniPlayer(for: episode)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
-            HStack(alignment: .center, spacing: 12) {
-                tabStrip
-
-                searchButton
+            Group {
+                if isSearching {
+                    searchBar
+                } else {
+                    HStack(alignment: .center, spacing: 10) {
+                        tabStrip
+                        searchButton
+                    }
+                }
             }
+            .animation(.spring(response: 0.35, dampingFraction: 0.9), value: isSearching)
         }
     }
 
@@ -239,9 +247,10 @@ private extension MainTabView {
             Spacer(minLength: 0)
             tabButton(tab: .settings, title: "Settings", systemImage: "gearshape.fill")
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 12)
-        .background(floatingBackground(cornerRadius: 26))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .frame(height: 48)
+        .background(floatingBackground(cornerRadius: 30))
     }
 
     private var searchButton: some View {
@@ -249,24 +258,21 @@ private extension MainTabView {
         return Button {
             withAnimation(.spring(response: 0.32, dampingFraction: 0.82, blendDuration: 0.2)) {
                 selection = .search
+                isSearching = true
             }
         } label: {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 18, weight: .semibold))
                 .frame(width: 24, height: 24)
-                .padding(14)
-                .foregroundStyle(.white)
+                .padding(12)
+                .foregroundStyle(Color.white)
                 .background(
                     Circle()
-                        .fill(
-                            LinearGradient(colors: [.brieflyPrimary, Color.brieflyPrimary.opacity(0.75)],
-                                           startPoint: .topLeading,
-                                           endPoint: .bottomTrailing)
-                        )
+                        .fill(Color.brieflyTabBarBackground)
                 )
                 .overlay(
                     Circle()
-                        .stroke(isSelected ? Color.white.opacity(0.4) : Color.clear, lineWidth: 2)
+                        .stroke(isSelected ? Color.white.opacity(0.22) : Color.clear, lineWidth: 1.5)
                 )
         }
         .buttonStyle(.plain)
@@ -282,27 +288,63 @@ private extension MainTabView {
                 selection = tab
             }
         } label: {
-            VStack(spacing: 6) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 18, weight: .semibold))
-                    .frame(height: 20)
-                Text(title)
-                    .font(.caption2.weight(.semibold))
-            }
-            .frame(maxWidth: .infinity)
-            .foregroundStyle(isSelected ? Color.white : Color.brieflyTabBarInactive)
-            .padding(.vertical, 4)
-            .contentShape(Rectangle())
+            Image(systemName: systemImage)
+                .font(.system(size: 18, weight: .semibold))
+                .frame(width: 48, height: 48)
+                .foregroundStyle(isSelected ? Color.white : Color.brieflyTabBarInactive)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(title)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
+    private var searchBar: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.8))
+
+            TextField("Search your Briefs", text: $searchText)
+                .textFieldStyle(.plain)
+                .foregroundStyle(Color.white.opacity(0.9))
+                .font(.system(size: 15))
+                .submitLabel(.search)
+                .onSubmit {
+                    selection = .search
+                }
+
+            if searchText.isEmpty == false {
+                Button {
+                    searchText = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.8))
+                }
+                .buttonStyle(.plain)
+            }
+
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
+                    isSearching = false
+                }
+            } label: {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.8))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 48)
+        .background(floatingBackground(cornerRadius: 24))
+    }
+
     private func miniPlayer(for episode: Episode) -> some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+        VStack(spacing: 8) {
+            HStack(spacing: 10) {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(
                         LinearGradient(
                             colors: [.brieflyPrimary.opacity(0.9), Color.brieflyTabBarBackground.opacity(0.8)],
@@ -310,57 +352,33 @@ private extension MainTabView {
                             endPoint: .bottomTrailing
                         )
                     )
-                    .frame(width: 42, height: 42)
+                    .frame(width: 20, height: 20)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(episode.displayTitle)
-                        .font(.callout.weight(.semibold))
-                        .foregroundStyle(Color.white)
-                        .lineLimit(1)
-
-                    Text(episode.subtitle)
-                        .font(.caption)
-                        .foregroundStyle(Color.brieflyTabBarInactive)
-                        .lineLimit(1)
-                }
+                Text(episode.displayTitle)
+                    .font(.system(size: 15, weight: .regular))
+                    .foregroundStyle(Color.white.opacity(0.6))
+                    .lineLimit(1)
 
                 Spacer(minLength: 0)
 
                 Button(action: togglePlay) {
                     Image(systemName: audioManager.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Color.brieflyTabBarBackground)
-                        .frame(width: 34, height: 34)
-                        .background(
-                            Circle()
-                                .fill(Color.white)
-                        )
-                        .shadow(color: Color.black.opacity(0.12), radius: 8, x: 0, y: 4)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Color.white)
+                        .contentShape(Rectangle())
+                        .padding(.horizontal, 6)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(audioManager.isPlaying ? "Pause" : "Play")
-
-                Button(action: skipAhead) {
-                    Image(systemName: "forward.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Color.white)
-                        .frame(width: 34, height: 34)
-                        .background(
-                            Circle()
-                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                        )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Skip ahead")
             }
 
             playerProgressBar
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 22)
+        .padding(.vertical, 10)
         .frame(maxWidth: .infinity)
-        .background(floatingBackground(cornerRadius: 18))
-        .matchedGeometryEffect(id: "MINIPLAYER", in: miniPlayerAnimation)
+        .background(floatingBackground(cornerRadius: 30))
+        .matchedTransitionSource(id: "MINIPLAYER", in: miniPlayerNamespace)
         .contentShape(Rectangle())
         .onTapGesture {
             appViewModel.presentEpisodeDetail(episode)
@@ -383,25 +401,19 @@ private extension MainTabView {
 
     private func floatingBackground(cornerRadius: CGFloat) -> some View {
         ZStack {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(Color.gray.opacity(0.25))
+            Capsule(style: .continuous)
+                .fill(Color.gray.opacity(0.22))
 
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            Capsule(style: .continuous)
                 .fill(Color.brieflyTabBarBackground)
-                .padding(1.2)
+                .padding(1)
         }
-        .shadow(color: Color.black.opacity(0.3), radius: 20, x: 0, y: 12)
+        .shadow(color: Color.black.opacity(0.22), radius: 16, x: 0, y: 10)
     }
 
     private func togglePlay() {
         guard audioManager.currentEpisode != nil else { return }
         audioManager.isPlaying ? audioManager.pause() : audioManager.resume()
-    }
-
-    private func skipAhead() {
-        guard audioManager.durationSeconds.isFinite, audioManager.durationSeconds > 0 else { return }
-        let target = min(audioManager.currentTimeSeconds + 15, audioManager.durationSeconds)
-        audioManager.seek(toSeconds: target)
     }
 
     struct SizeChangeKey: PreferenceKey {

@@ -5,6 +5,7 @@ import UIKit
 
 private struct EpisodeDetailOverlay: View {
     @Binding var episode: Episode?
+    let miniPlayerNamespace: Namespace.ID
     @State private var dragOffset: CGFloat = 0
     @State private var scrollOffset: CGFloat = 0
     @State private var isTrackingDrag: Bool = false
@@ -22,7 +23,6 @@ private struct EpisodeDetailOverlay: View {
 
                 content
                     .offset(y: dragOffset)
-                    .transition(.move(edge: .bottom))
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.9), value: episode?.id)
@@ -48,6 +48,7 @@ private struct EpisodeDetailOverlay: View {
                     onScrollOffsetChange: { scrollOffset = $0 }
                 )
             }
+            .navigationTransition(.zoom(sourceID: "MINIPLAYER", in: miniPlayerNamespace))
             .ignoresSafeArea()
             .simultaneousGesture(dismissDragGesture)
         }
@@ -208,6 +209,7 @@ struct AppRootView: View {
     @EnvironmentObject private var pushManager: PushNotificationManager
     @EnvironmentObject private var episodeGenerationStatus: EpisodeGenerationStatusCenter
     @Environment(\.scenePhase) private var scenePhase
+    @Namespace private var miniPlayerNamespace
 
     var body: some View {
         ZStack {
@@ -222,7 +224,7 @@ struct AppRootView: View {
                 } else if appViewModel.hasCompletedOnboarding == false {
                     OnboardingProfileView(appViewModel: appViewModel)
                 } else {
-                    MainTabView(appViewModel: appViewModel)
+                    MainTabView(appViewModel: appViewModel, miniPlayerNamespace: miniPlayerNamespace)
                 }
             }
             .overlay {
@@ -249,7 +251,7 @@ struct AppRootView: View {
             }
         }
         .overlay {
-            EpisodeDetailOverlay(episode: $appViewModel.presentedEpisode)
+            EpisodeDetailOverlay(episode: $appViewModel.presentedEpisode, miniPlayerNamespace: miniPlayerNamespace)
         }
         .onAppear {
             appViewModel.bootstrap()
