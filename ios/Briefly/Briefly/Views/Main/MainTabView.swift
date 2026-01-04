@@ -15,6 +15,17 @@ struct BrieflyTrayChromePreferencesKey: PreferenceKey {
     }
 }
 
+private struct BrieflyFloatingChromeHeightKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+
+extension EnvironmentValues {
+    var brieflyFloatingChromeHeight: CGFloat {
+        get { self[BrieflyFloatingChromeHeightKey.self] }
+        set { self[BrieflyFloatingChromeHeightKey.self] = newValue }
+    }
+}
+
 extension View {
     func brieflyHideTrayMiniPlayer(_ hidden: Bool) -> some View {
         preference(key: BrieflyTrayChromePreferencesKey.self, value: .init(hideMiniPlayer: hidden))
@@ -97,6 +108,7 @@ struct MainTabView: View {
                     .animation(.spring(response: 0.4, dampingFraction: 0.85), value: audioManager.currentEpisode?.id)
                     .animation(.spring(response: 0.35, dampingFraction: 0.9), value: selection)
             }
+            .environment(\.brieflyFloatingChromeHeight, chromeHeight + bottomSafeAreaInset)
         }
         .onChange(of: appViewModel.hasCompletedOnboarding) { completed in
             if completed {

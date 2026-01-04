@@ -12,8 +12,6 @@ struct BriefsLibraryView: View {
 
     var body: some View {
         List {
-            libraryHeader
-
             ForEach(orderedTopics) { topic in
                 topicRow(topic: topic)
             }
@@ -22,15 +20,19 @@ struct BriefsLibraryView: View {
         .scrollContentBackground(.hidden)
         .listRowBackground(Color.brieflyBackground)
         .background(Color.brieflyBackground)
-        .navigationTitle("Briefs Library")
+        .navigationTitle("Brief Library")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                NavigationLink(value: TopicRoute.create) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 20, weight: .semibold))
+                NavigationLink {
+                    CreateBriefView(topicsViewModel: topicsViewModel)
+                } label: {
+                    Label("New", systemImage: "plus")
+                        .font(.system(size: 17, weight: .semibold))
+                        .labelStyle(.titleAndIcon)
                         .foregroundStyle(Color.offBlack)
                 }
+                .tint(.offBlack)
                 .accessibilityLabel("Create Brief")
             }
         }
@@ -46,40 +48,26 @@ struct BriefsLibraryView: View {
         }
     }
 
-    private var libraryHeader: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("All Briefs")
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(Color.offBlack)
-            Text("Tap + to activate, – to deactivate. Ordered by creation.")
-                .font(.system(size: 14))
-                .foregroundStyle(Color.brieflyTextSecondary)
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 10)
-        .listRowInsets(EdgeInsets())
-        .listRowSeparator(.hidden)
-        .listRowBackground(Color.brieflyBackground)
-    }
-
     private func topicRow(topic: Topic) -> some View {
         let isActive = topic.isActive
         let isInactiveAtLimit = !isActive && !topicsViewModel.canAddActiveTopic
         let classificationLabels = classificationLabels(from: topic.classificationShortLabel)
 
-        return HStack(alignment: .center, spacing: 16) {
+        return HStack(alignment: .center, spacing: 14) {
             Button {
                 editingTopic = topic
             } label: {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(topic.displayTitle)
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(.brieflyTextPrimary)
+                        .font(.callout.weight(.semibold))
+                        .foregroundColor(.primary)
+                        .lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text(topic.originalText)
-                        .font(.system(size: 15, weight: .regular))
+                        .font(.footnote)
                         .foregroundColor(.brieflyTextMuted)
-                        .lineLimit(3)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     if classificationLabels.isEmpty == false {
                         classificationPills(for: classificationLabels)
@@ -112,8 +100,8 @@ struct BriefsLibraryView: View {
             .opacity(isInactiveAtLimit ? 0.5 : 1)
         }
         .contentShape(Rectangle())
-        .padding(.vertical, 12)
-        .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 12, trailing: 20))
+        .padding(.vertical, 8)
+        .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 20))
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {

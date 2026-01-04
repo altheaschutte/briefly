@@ -16,10 +16,12 @@ struct SetupView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.undoManager) private var undoManager
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.brieflyFloatingChromeHeight) private var floatingChromeHeight
     @State private var bannerMessage: String?
     @State private var editingTopic: Topic?
     @State private var showActiveLimitAlert: Bool = false
     @State private var isShowingSeedSheet: Bool = false
+    @State private var isShowingBriefsLibrary: Bool = false
     @State private var showsNavigationTitle: Bool = false
     @State private var scrollOffsetBaseline: CGFloat?
 
@@ -145,8 +147,9 @@ struct SetupView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 NavigationLink(value: TopicRoute.create) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 22, weight: .semibold))
+                    Label("New", systemImage: "plus")
+                        .font(.system(size: 17, weight: .semibold))
+                        .labelStyle(.titleAndIcon)
                         .foregroundStyle(Color.offBlack)
                 }
                 .tint(.offBlack)
@@ -172,6 +175,9 @@ struct SetupView: View {
             Button("OK", role: .cancel) { }
         } message: {
             Text("You can have up to \(topicsViewModel.maxActiveTopics) active Briefs on your plan.")
+        }
+        .safeAreaInset(edge: .bottom) {
+            Color.clear.frame(height: createScreenBottomPadding)
         }
     }
 
@@ -253,15 +259,16 @@ struct SetupView: View {
             Button {
                 editingTopic = topic
             } label: {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text(topic.displayTitle)
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(.brieflyTextPrimary)
+                        .font(.callout.weight(.semibold))
+                        .foregroundColor(.primary)
+                        .lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text(topic.originalText)
-                        .font(.system(size: 15, weight: .regular))
+                        .font(.footnote)
                         .foregroundColor(.brieflyTextMuted)
-                        .lineLimit(3)
+                        .lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     if classificationLabels.isEmpty == false {
                         classificationPills(for: classificationLabels)
@@ -402,6 +409,7 @@ private extension SetupView {
                 InlineErrorText(message: error)
             }
         }
+        .background(libraryNavigationLink)
         .padding(.horizontal, 20)
         .padding(.vertical, 16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -410,8 +418,20 @@ private extension SetupView {
         .listRowBackground(Color.brieflyBackground)
     }
 
+    private var libraryNavigationLink: some View {
+        NavigationLink(
+            destination: BriefsLibraryView(topicsViewModel: topicsViewModel),
+            isActive: $isShowingBriefsLibrary
+        ) {
+            EmptyView()
+        }
+        .hidden()
+    }
+
     private var addBriefButton: some View {
-        NavigationLink(value: TopicRoute.library) {
+        Button {
+            isShowingBriefsLibrary = true
+        } label: {
             HStack(spacing: 12) {
                 Image(systemName: "plus")
                     .font(.system(size: 18, weight: .semibold))
@@ -518,6 +538,10 @@ private extension SetupView {
 
     private var hasActiveTopics: Bool {
         topicsViewModel.activeTopics.isEmpty == false
+    }
+
+    private var createScreenBottomPadding: CGFloat {
+        max(floatingChromeHeight, 0) + 24
     }
 
 }

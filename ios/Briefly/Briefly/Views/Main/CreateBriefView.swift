@@ -3,6 +3,7 @@ import SwiftUI
 struct CreateBriefView: View {
     @ObservedObject var topicsViewModel: TopicsViewModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.brieflyFloatingChromeHeight) private var floatingChromeHeight
     @FocusState private var isPromptFocused: Bool
     @State private var prompt: String = ""
     @State private var errorMessage: String?
@@ -21,7 +22,7 @@ struct CreateBriefView: View {
             }
             .padding(.horizontal, 20)
             .padding(.top, 16)
-            .padding(.bottom, 24)
+            .padding(.bottom, contentBottomPadding)
         }
         .background(Color.brieflyBackground.ignoresSafeArea())
         .navigationTitle("Create Brief")
@@ -117,6 +118,10 @@ struct CreateBriefView: View {
 
     private var trimmedPrompt: String {
         prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var contentBottomPadding: CGFloat {
+        max(floatingChromeHeight, 0) + 24
     }
 
     private func save() async {
