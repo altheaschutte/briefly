@@ -22,7 +22,7 @@ extension View {
 
 struct MainTabView: View {
     fileprivate enum Tab {
-        case feed, create, settings
+        case feed, create, settings, search
     }
 
     @EnvironmentObject private var audioManager: AudioPlayerManager
@@ -31,9 +31,12 @@ struct MainTabView: View {
     @StateObject private var settingsViewModel: SettingsViewModel
     @State private var selection: Tab
     @State private var hasEvaluatedInitialLanding: Bool
-    @State private var trayHeight: CGFloat = 0
+    @State private var chromeHeight: CGFloat = 120
     @State private var trayPreferences = BrieflyTrayChromePreferences()
+    @State private var searchText: String = ""
+    @Namespace private var miniPlayerAnimation
     private let appViewModel: AppViewModel
+    private let tabBarAppearance = UITabBar.appearance()
 
     init(appViewModel: AppViewModel) {
         self.appViewModel = appViewModel
@@ -76,55 +79,17 @@ struct MainTabView: View {
             ZStack(alignment: .bottom) {
                 Color.brieflyBackground.ignoresSafeArea()
 
-                TabView(selection: $selection) {
-                    NavigationStack {
-                        FeedView(viewModel: feedViewModel) {
-                            selection = .create
-                        }
-                    }
-                    .ignoresSafeArea(.container, edges: .bottom)
-                    .tabItem { Label("Library", systemImage: "list.bullet") }
-                    .tag(Tab.feed)
+                tabContainer(bottomPadding: chromeHeight)
 
-                    NavigationStack {
-                        SetupView(
-                            topicsViewModel: topicsViewModel,
-                            appViewModel: appViewModel
-                        )
-                    }
-                    .ignoresSafeArea(.container, edges: .bottom)
-                    .tabItem { Label("Briefs", systemImage: "sparkles") }
-                    .tag(Tab.create)
-
-                    NavigationStack {
-                        SettingsView(viewModel: settingsViewModel, email: appViewModel.currentUserEmail)
-                    }
-                    .ignoresSafeArea(.container, edges: .bottom)
-                    .tabItem { Label("Settings", systemImage: "gear") }
-                    .tag(Tab.settings)
-                }
-                // Fill the full window and add padding equal to the custom tray height so content
-                // doesn't get compressed above an invisible system tab bar.
-                .ignoresSafeArea(.container, edges: .bottom)
-                .toolbar(.hidden, for: .tabBar)
-                .toolbarBackground(.hidden, for: .tabBar)
-                .scrollContentBackground(.hidden)
-                .onPreferenceChange(BrieflyTrayChromePreferencesKey.self) { trayPreferences = $0 }
-                .background(Color.clear)
-
-                BottomTrayChrome(
-                    selection: $selection,
-                    bottomSafeAreaInset: bottomSafeAreaInset,
-                    showsMiniPlayer: audioManager.currentEpisode != nil && trayPreferences.hideMiniPlayer == false,
-                    onMiniPlayerTap: {
-                        if let episode = audioManager.currentEpisode {
-                            appViewModel.presentEpisodeDetail(episode)
-                        }
-                    }
-                )
-                .background(Color.brieflyTabBarBackground.ignoresSafeArea(.container, edges: .bottom))
-                .onSizeChange { trayHeight = $0.height }
+                floatingChrome()
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, max(bottomSafeAreaInset, 16))
+                    .padding(.top, 8)
+                    .onSizeChange { chromeHeight = $0.height }
+                    .animation(.spring(response: 0.4, dampingFraction: 0.85), value: audioManager.currentEpisode?.id)
+                    .animation(.spring(response: 0.35, dampingFraction: 0.9), value: selection)
             }
+            .ignoresSafeArea(.keyboard, edges: .bottom)
         }
         .onChange(of: appViewModel.hasCompletedOnboarding) { completed in
             if completed {
@@ -137,7 +102,9 @@ struct MainTabView: View {
         }
         .onAppear {
             evaluateInitialLanding(with: appViewModel.prefetchedEpisodes)
+            tabBarAppearance.isHidden = true
         }
+        .onDisappear { tabBarAppearance.isHidden = false }
     }
 
     private func evaluateInitialLanding(with episodes: [Episode]?) {
@@ -155,159 +122,328 @@ struct MainTabView: View {
 }
 
 private extension MainTabView {
-    fileprivate struct BottomTrayChrome: View {
-        struct Style {
-            var horizontalInset: CGFloat = 0
-            var cornerRadius: CGFloat = 28
-            var shadowOpacity: Double = 0
-            var bottomContentInset: CGFloat = 0
-            var bottomContentInsetWithHomeIndicator: CGFloat = 0
-        }
-
-        @Binding fileprivate var selection: Tab
-        let bottomSafeAreaInset: CGFloat
-        let showsMiniPlayer: Bool
-        let onMiniPlayerTap: () -> Void
-
-        @EnvironmentObject private var audioManager: AudioPlayerManager
-
-        private let style = Style()
-
-        var body: some View {
-            let bottomInset = bottomSafeAreaInset > 0 ? style.bottomContentInsetWithHomeIndicator : style.bottomContentInset
-            VStack(spacing: 0) {
-                if showsMiniPlayer {
-                    miniPlayer
-                        .padding(.top, 6)
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 6)
-
-                    Divider()
-                        .overlay(Color.white.opacity(0.10))
+    @ViewBuilder
+    func tabContainer(bottomPadding: CGFloat) -> some View {
+        TabView(selection: $selection) {
+            NavigationStack {
+                FeedView(viewModel: feedViewModel) {
+                    selection = .create
                 }
+            }
+            .ignoresSafeArea(.container, edges: .bottom)
+            .tabItem { Label("Library", systemImage: "music.note.list") }
+            .tag(Tab.feed)
 
-                tabBar
-                    .padding(.top, showsMiniPlayer ? 10 : 12)
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, bottomInset)
+            NavigationStack {
+                SetupView(
+                    topicsViewModel: topicsViewModel,
+                    appViewModel: appViewModel
+                )
+            }
+            .ignoresSafeArea(.container, edges: .bottom)
+            .tabItem { Label("Briefs", systemImage: "sparkles") }
+            .tag(Tab.create)
+
+            NavigationStack {
+                SettingsView(viewModel: settingsViewModel, email: appViewModel.currentUserEmail)
+            }
+            .ignoresSafeArea(.container, edges: .bottom)
+            .tabItem { Label("Settings", systemImage: "gear") }
+            .tag(Tab.settings)
+
+            NavigationStack {
+                searchTab
+            }
+            .ignoresSafeArea(.container, edges: .bottom)
+            .tabItem { Label("Search", systemImage: "magnifyingglass") }
+            .tag(Tab.search)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Color.clear.frame(height: bottomPadding)
+        }
+        .tabViewStyle(.automatic)
+        .toolbar(.hidden, for: .tabBar)
+        .toolbarBackground(.hidden, for: .tabBar)
+        .scrollContentBackground(.hidden)
+        .onPreferenceChange(BrieflyTrayChromePreferencesKey.self) { trayPreferences = $0 }
+    }
+
+    private var searchTab: some View {
+        List {
+            if searchResults.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("No matches yet")
+                        .font(.headline)
+                        .foregroundStyle(Color.brieflyTextPrimary)
+                    Text("Search your saved Briefly episodes by title or summary.")
+                        .font(.footnote)
+                        .foregroundStyle(Color.brieflyTextMuted)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 12)
+            } else {
+                ForEach(searchResults) { episode in
+                    Button {
+                        appViewModel.presentEpisodeDetail(episode)
+                        selection = .feed
+                    } label: {
+                        SearchResultRow(episode: episode, isPlaying: audioManager.currentEpisode?.id == episode.id)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(Color.brieflyBackground)
+        .navigationTitle("Search")
+        .searchable(text: $searchText, placement: .toolbar, prompt: Text("Search your Briefs"))
+        .task {
+            await feedViewModel.load(force: false)
+        }
+    }
+
+    private var searchResults: [Episode] {
+        let ready = feedViewModel.episodes.filter { $0.isReady }
+        let trimmed = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.isEmpty == false else { return ready }
+        let term = trimmed.lowercased()
+        return ready.filter {
+            $0.displayTitle.lowercased().contains(term) ||
+            $0.subtitle.lowercased().contains(term)
+        }
+    }
+
+    @ViewBuilder
+    func floatingChrome() -> some View {
+        VStack(spacing: 14) {
+            if let episode = audioManager.currentEpisode, trayPreferences.hideMiniPlayer == false {
+                miniPlayer(for: episode)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+
+            HStack(alignment: .center, spacing: 12) {
+                tabStrip
+
+                searchButton
+            }
+        }
+    }
+
+    private var tabStrip: some View {
+        HStack(spacing: 0) {
+            tabButton(tab: .feed, title: "Library", systemImage: "house.fill")
+            Spacer(minLength: 0)
+            tabButton(tab: .create, title: "Briefs", systemImage: "sparkles")
+            Spacer(minLength: 0)
+            tabButton(tab: .settings, title: "Settings", systemImage: "gearshape.fill")
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .background(floatingBackground(cornerRadius: 26))
+    }
+
+    private var searchButton: some View {
+        let isSelected = selection == .search
+        return Button {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.82, blendDuration: 0.2)) {
+                selection = .search
+            }
+        } label: {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 18, weight: .semibold))
+                .frame(width: 24, height: 24)
+                .padding(14)
+                .foregroundStyle(.white)
+                .background(
+                    Circle()
+                        .fill(
+                            LinearGradient(colors: [.brieflyPrimary, Color.brieflyPrimary.opacity(0.75)],
+                                           startPoint: .topLeading,
+                                           endPoint: .bottomTrailing)
+                        )
+                )
+                .overlay(
+                    Circle()
+                        .stroke(isSelected ? Color.white.opacity(0.4) : Color.clear, lineWidth: 2)
+                )
+        }
+        .buttonStyle(.plain)
+        .shadow(color: Color.black.opacity(0.22), radius: 18, x: 0, y: 10)
+        .accessibilityLabel("Search")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private func tabButton(tab: Tab, title: String, systemImage: String) -> some View {
+        let isSelected = selection == tab
+        return Button {
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.85, blendDuration: 0.2)) {
+                selection = tab
+            }
+        } label: {
+            VStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 18, weight: .semibold))
+                    .frame(height: 20)
+                Text(title)
+                    .font(.caption2.weight(.semibold))
             }
             .frame(maxWidth: .infinity)
-            .background(trayBackground)
-            .padding(.horizontal, style.horizontalInset)
-            .accessibilityElement(children: .contain)
+            .foregroundStyle(isSelected ? Color.white : Color.brieflyTabBarInactive)
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
 
-        private var trayBackground: some View {
-            let shape = UnevenRoundedRectangle(
-                topLeadingRadius: style.cornerRadius,
-                bottomLeadingRadius: 0,
-                bottomTrailingRadius: 0,
-                topTrailingRadius: style.cornerRadius,
-                style: .continuous
-            )
-            return Color.brieflyTabBarBackground
-                .clipShape(shape)
-                .shadow(color: Color.black.opacity(style.shadowOpacity), radius: 24, x: 0, y: 12)
-        }
+    private func miniPlayer(for episode: Episode) -> some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 12) {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [.brieflyPrimary.opacity(0.9), Color.brieflyTabBarBackground.opacity(0.8)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 42, height: 42)
 
-        private var miniPlayer: some View {
-            Group {
-                if let episode = audioManager.currentEpisode {
-                    VStack(spacing: 6) {
-                        HStack(spacing: 10) {
-                            Text(episode.displayTitle)
-                                .font(.system(size: 11, weight: .regular))
-                                .foregroundColor(.brieflyTabBarInactive)
-                                .lineLimit(1)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(episode.displayTitle)
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(Color.white)
+                        .lineLimit(1)
 
-                            Button(action: togglePlay) {
-                                Image(systemName: audioManager.isPlaying ? "pause.fill" : "play.fill")
-                                    .font(.system(size: 14, weight: .regular))
-                                    .foregroundColor(.white)
-                                    .frame(width: 28, height: 28)
-                            }
-                            .contentShape(Rectangle().inset(by: -8))
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(audioManager.isPlaying ? "Pause" : "Play")
-                        }
-
-                        progressBar
-                    }
-                    .contentShape(Rectangle())
-                    .onTapGesture(perform: onMiniPlayerTap)
-                    .accessibilityElement(children: .combine)
-                    .accessibilityAddTraits(.isButton)
+                    Text(episode.subtitle)
+                        .font(.caption)
+                        .foregroundStyle(Color.brieflyTabBarInactive)
+                        .lineLimit(1)
                 }
-            }
-        }
 
-        private var progressBar: some View {
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(Color.white.opacity(0.14))
-                    Capsule()
-                        .fill(Color.brieflyPrimary)
-                        .frame(width: max(0, min(audioManager.progress, 1)) * geo.size.width)
-                }
-            }
-            .frame(height: 4)
-        }
-
-        private var tabBar: some View {
-            HStack {
-                tabButton(
-                    tab: .feed,
-                    title: "Library",
-                    systemImage: "list.bullet"
-                )
                 Spacer(minLength: 0)
-                tabButton(
-                    tab: .create,
-                    title: "Briefs",
-                    systemImage: "sparkles"
-                )
-                Spacer(minLength: 0)
-                tabButton(
-                    tab: .settings,
-                    title: "Settings",
-                    systemImage: "gear"
-                )
-            }
-        }
 
-        private func tabButton(tab: Tab, title: String, systemImage: String) -> some View {
-            let isSelected = selection == tab
-            return Button {
-                selection = tab
-            } label: {
-                VStack(spacing: 4) {
-                    Image(systemName: systemImage)
-                        .font(.system(size: 20, weight: .semibold))
-                        .frame(height: 22)
-                    Text(title)
-                        .font(.caption2.weight(.semibold))
+                Button(action: togglePlay) {
+                    Image(systemName: audioManager.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color.brieflyTabBarBackground)
+                        .frame(width: 34, height: 34)
+                        .background(
+                            Circle()
+                                .fill(Color.white)
+                        )
+                        .shadow(color: Color.black.opacity(0.12), radius: 8, x: 0, y: 4)
                 }
-                .foregroundColor(isSelected ? .white : .brieflyTabBarInactive)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 4)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(title)
-            .accessibilityAddTraits(isSelected ? .isSelected : [])
-        }
+                .buttonStyle(.plain)
+                .accessibilityLabel(audioManager.isPlaying ? "Pause" : "Play")
 
-        private func togglePlay() {
-            guard audioManager.currentEpisode != nil else { return }
-            audioManager.isPlaying ? audioManager.pause() : audioManager.resume()
+                Button(action: skipAhead) {
+                    Image(systemName: "forward.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color.white)
+                        .frame(width: 34, height: 34)
+                        .background(
+                            Circle()
+                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Skip ahead")
+            }
+
+            playerProgressBar
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity)
+        .background(floatingBackground(cornerRadius: 18))
+        .matchedGeometryEffect(id: "MINIPLAYER", in: miniPlayerAnimation)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            appViewModel.presentEpisodeDetail(episode)
+        }
+    }
+
+    private var playerProgressBar: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.white.opacity(0.2))
+
+                Capsule()
+                    .fill(Color.brieflyPrimary)
+                    .frame(width: max(0, min(audioManager.progress, 1)) * proxy.size.width)
+            }
+        }
+        .frame(height: 4)
+    }
+
+    private func floatingBackground(cornerRadius: CGFloat) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(Color.gray.opacity(0.25))
+
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(Color.brieflyTabBarBackground)
+                .padding(1.2)
+        }
+        .shadow(color: Color.black.opacity(0.3), radius: 20, x: 0, y: 12)
+    }
+
+    private func togglePlay() {
+        guard audioManager.currentEpisode != nil else { return }
+        audioManager.isPlaying ? audioManager.pause() : audioManager.resume()
+    }
+
+    private func skipAhead() {
+        guard audioManager.durationSeconds.isFinite, audioManager.durationSeconds > 0 else { return }
+        let target = min(audioManager.currentTimeSeconds + 15, audioManager.durationSeconds)
+        audioManager.seek(toSeconds: target)
     }
 
     struct SizeChangeKey: PreferenceKey {
         static var defaultValue: CGSize = .zero
         static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
             value = nextValue()
+        }
+    }
+
+    struct SearchResultRow: View {
+        let episode: Episode
+        let isPlaying: Bool
+
+        var body: some View {
+            HStack(spacing: 12) {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color.brieflyTabBarBackground.opacity(0.9))
+                    .frame(width: 44, height: 44)
+                    .overlay(
+                        Image(systemName: isPlaying ? "waveform" : "sparkles")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Color.white)
+                    )
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(episode.displayTitle)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.brieflyTextPrimary)
+                        .lineLimit(2)
+
+                    Text(episode.subtitle)
+                        .font(.caption)
+                        .foregroundStyle(Color.brieflyTextMuted)
+                        .lineLimit(2)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.forward")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.brieflyTabBarInactive)
+            }
+            .padding(.vertical, 8)
         }
     }
 }
