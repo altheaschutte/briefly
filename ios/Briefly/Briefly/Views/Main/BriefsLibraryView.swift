@@ -65,32 +65,31 @@ struct BriefsLibraryView: View {
     private func topicRow(topic: Topic) -> some View {
         let isActive = topic.isActive
         let isInactiveAtLimit = !isActive && !topicsViewModel.canAddActiveTopic
+        let classificationLabels = classificationLabels(from: topic.classificationShortLabel)
 
         return HStack(alignment: .center, spacing: 16) {
             Button {
                 editingTopic = topic
             } label: {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 8) {
                     Text(topic.displayTitle)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(size: 17, weight: .semibold))
                         .foregroundColor(.brieflyTextPrimary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text(topic.originalText)
-                        .font(.footnote)
+                        .font(.system(size: 15, weight: .regular))
                         .foregroundColor(.brieflyTextMuted)
-                        .lineLimit(2)
-                        .truncationMode(.tail)
+                        .lineLimit(3)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    if let pillLabel = topic.classificationShortLabel?.trimmingCharacters(in: .whitespacesAndNewlines),
-                       pillLabel.isEmpty == false {
-                        classificationPill(label: pillLabel)
-                            .padding(.top, 4)
+                    if classificationLabels.isEmpty == false {
+                        classificationPills(for: classificationLabels)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
 
-            Spacer(minLength: 10)
+            Spacer(minLength: 12)
 
             Button {
                 if isActive {
@@ -104,17 +103,17 @@ struct BriefsLibraryView: View {
                 Image(systemName: isActive ? "minus.circle.fill" : "plus.circle.fill")
                     .foregroundStyle(
                         isActive
-                        ? Color.brieflySecondary
-                        : (isInactiveAtLimit ? Color.brieflyTextMuted : Color.brieflySecondary)
+                        ? Color.offBlack
+                        : (isInactiveAtLimit ? Color.brieflyTextMuted : Color.offBlack)
                     )
-                    .font(.title3)
+                    .font(.system(size: 22, weight: .semibold))
             }
             .buttonStyle(.borderless)
             .opacity(isInactiveAtLimit ? 0.5 : 1)
         }
         .contentShape(Rectangle())
-        .padding(.vertical, 10)
-        .listRowInsets(EdgeInsets(top: 10, leading: 14, bottom: 10, trailing: 16))
+        .padding(.vertical, 12)
+        .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 12, trailing: 20))
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -129,13 +128,39 @@ struct BriefsLibraryView: View {
 
     private func classificationPill(label: String) -> some View {
         Text(label)
-            .font(.system(size: 12))
+            .font(.system(size: 13, weight: .semibold))
             .italic()
             .foregroundColor(.brieflyClassificationPillText)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 3)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
             .background(Color.warmGrey)
             .clipShape(Capsule())
             .accessibilityLabel("Classification \(label)")
+    }
+
+    private func classificationPills(for labels: [String]) -> some View {
+        HStack(spacing: 8) {
+            ForEach(labels, id: \.self) { label in
+                classificationPill(label: label)
+            }
+        }
+        .padding(.top, 2)
+    }
+
+    private func classificationLabels(from rawLabel: String?) -> [String] {
+        guard let rawLabel = rawLabel?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              rawLabel.isEmpty == false else { return [] }
+
+        let normalized = rawLabel.replacingOccurrences(of: "/", with: ",")
+        let components = normalized
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { $0.isEmpty == false }
+
+        if components.isEmpty {
+            return [rawLabel]
+        }
+        return components
     }
 }

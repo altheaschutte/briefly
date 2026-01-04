@@ -249,7 +249,7 @@ struct SetupView: View {
         let isInactiveAtLimit = !isActive && !topicsViewModel.canAddActiveTopic
         let classificationLabels = classificationLabels(from: topic.classificationShortLabel)
 
-        return HStack(alignment: .top, spacing: 16) {
+        return HStack(alignment: .center, spacing: 16) {
             Button {
                 editingTopic = topic
             } label: {
@@ -260,7 +260,7 @@ struct SetupView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text(topic.originalText)
                         .font(.system(size: 15, weight: .regular))
-                        .foregroundColor(.brieflyTextPrimary)
+                        .foregroundColor(.brieflyTextMuted)
                         .lineLimit(3)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     if classificationLabels.isEmpty == false {
@@ -289,7 +289,6 @@ struct SetupView: View {
                     .font(.system(size: 22, weight: .semibold))
             }
             .buttonStyle(.borderless)
-            .padding(.top, 4)
             .opacity(isInactiveAtLimit ? 0.5 : 1)
         }
         .contentShape(Rectangle())

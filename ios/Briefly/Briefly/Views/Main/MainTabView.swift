@@ -89,7 +89,7 @@ struct MainTabView: View {
 
                 trayFadeOverlay(height: chromeHeight + bottomSafeAreaInset + 140)
 
-                floatingChrome()
+                floatingChrome
                     .padding(.horizontal, chromeHorizontalPadding)
                     .padding(.bottom, isSearchFieldFocused ? 12 : 0)
                     .padding(.top, 0)
@@ -237,10 +237,11 @@ private extension MainTabView {
     }
 
     @ViewBuilder
-    func floatingChrome() -> some View {
+    var floatingChrome: some View {
         VStack(spacing: 8) {
             if let episode = audioManager.currentEpisode, trayPreferences.hideMiniPlayer == false {
                 miniPlayer(for: episode)
+                    .background(floatingBackground(cornerRadius: 30))
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
@@ -259,14 +260,16 @@ private extension MainTabView {
     }
 
     private var tabStrip: some View {
-        HStack(spacing: 14) {
+        let tabStripHeight = 48 + (2 / UIScreen.main.scale)
+
+        return HStack(spacing: 14) {
             tabButton(tab: .feed, title: "Library", systemImage: "house.fill")
             tabButton(tab: .create, title: "Briefs", systemImage: "sparkles")
             tabButton(tab: .settings, title: "Settings", systemImage: "gearshape.fill")
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
-        .frame(height: 48)
+        .frame(height: tabStripHeight)
         .background(floatingBackground(cornerRadius: 30))
     }
 
@@ -397,7 +400,9 @@ private extension MainTabView {
     }
 
     private func miniPlayer(for episode: Episode) -> some View {
-        VStack(spacing: 8) {
+        let miniPlayerShape = Capsule(style: .continuous)
+
+        return VStack(spacing: 8) {
             HStack(spacing: 10) {
                 Text(episode.displayTitle)
                     .font(.system(size: 15, weight: .regular))
@@ -421,9 +426,9 @@ private extension MainTabView {
         }
         .padding(.horizontal, 22)
         .padding(.vertical, 10)
-        .background(floatingBackground(cornerRadius: 30))
+        .clipShape(miniPlayerShape) // mask inner content so shadows from children don't show sharp corners
         .matchedTransitionSource(id: "MINIPLAYER", in: miniPlayerNamespace)
-        .contentShape(Rectangle())
+        .contentShape(miniPlayerShape)
         .onTapGesture {
             appViewModel.presentEpisodeDetail(episode)
         }
@@ -461,7 +466,7 @@ private extension MainTabView {
     }
 
     private func trayFadeOverlay(height: CGFloat) -> some View {
-        LinearGradient(
+        let gradient = LinearGradient(
             colors: [
                 Color.brieflyBackground,
                 Color.brieflyBackground.opacity(0.9),
@@ -470,6 +475,30 @@ private extension MainTabView {
             startPoint: .bottom,
             endPoint: .top
         )
+        let showDebugGradient = false
+
+        return ZStack {
+            // Blur the content beneath while preserving the fade shape.
+            Rectangle()
+                .fill(.regularMaterial)
+                .mask(gradient)
+                .frame(maxWidth: .infinity)
+
+            // Subtle tint to keep the fade aligned with the background color.
+            gradient.opacity(0.15)
+
+            if showDebugGradient {
+                LinearGradient(
+                    colors: [
+                        Color.red.opacity(0.35),
+                        Color.red.opacity(0.15),
+                        Color.red.opacity(0.0)
+                    ],
+                    startPoint: .bottom,
+                    endPoint: .top
+                )
+            }
+        }
         .frame(height: max(height, 120))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
         .allowsHitTesting(false)
