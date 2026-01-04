@@ -36,9 +36,11 @@ struct MainTabView: View {
     @State private var trayPreferences = BrieflyTrayChromePreferences()
     @State private var searchText: String = ""
     @State private var isSearching: Bool = false
+    @FocusState private var isSearchFieldFocused: Bool
     private let appViewModel: AppViewModel
     private let tabBarAppearance = UITabBar.appearance()
     private let miniPlayerNamespace: Namespace.ID
+    private let chromeHorizontalPadding: CGFloat = 16
 
     init(appViewModel: AppViewModel, miniPlayerNamespace: Namespace.ID) {
         self.appViewModel = appViewModel
@@ -85,18 +87,26 @@ struct MainTabView: View {
                 tabContainer(bottomPadding: chromeHeight)
 
                 floatingChrome()
-                    .padding(.horizontal, 6)
-                    .padding(.bottom, 0)
+                    .padding(.horizontal, chromeHorizontalPadding)
+                    .padding(.bottom, isSearchFieldFocused ? 12 : 0)
                     .padding(.top, 0)
                     .onSizeChange { chromeHeight = $0.height }
                     .animation(.spring(response: 0.4, dampingFraction: 0.85), value: audioManager.currentEpisode?.id)
                     .animation(.spring(response: 0.35, dampingFraction: 0.9), value: selection)
             }
-            .ignoresSafeArea(.keyboard, edges: .bottom)
         }
         .onChange(of: appViewModel.hasCompletedOnboarding) { completed in
             if completed {
                 selection = .feed
+            }
+        }
+        .onChange(of: isSearching) { active in
+            isSearchFieldFocused = active
+        }
+        .onChange(of: isSearchFieldFocused) { focused in
+            guard focused == false else { return }
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
+                isSearching = false
             }
         }
         .onReceive(appViewModel.$prefetchedEpisodes.compactMap { $0 }) { episodes in
@@ -108,6 +118,7 @@ struct MainTabView: View {
             tabBarAppearance.isHidden = true
         }
         .onDisappear { tabBarAppearance.isHidden = false }
+        .ignoreKeyboardSafeArea(isSearching == false)
     }
 
     private func evaluateInitialLanding(with episodes: [Episode]?) {
@@ -187,6 +198,7 @@ private extension MainTabView {
             } else {
                 ForEach(searchResults) { episode in
                     Button {
+                        dismissSearchFocus()
                         appViewModel.presentEpisodeDetail(episode)
                         selection = .feed
                     } label: {
@@ -200,7 +212,10 @@ private extension MainTabView {
         .scrollContentBackground(.hidden)
         .background(Color.brieflyBackground)
         .navigationTitle("Search")
-        .searchable(text: $searchText, placement: .toolbar, prompt: Text("Search your Briefs"))
+        .simultaneousGesture(
+            TapGesture()
+                .onEnded { dismissSearchFocus() }
+        )
         .task {
             await feedViewModel.load(force: false)
         }
@@ -260,6 +275,7 @@ private extension MainTabView {
                 selection = .search
                 isSearching = true
             }
+            isSearchFieldFocused = true
         } label: {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 18, weight: .semibold))
@@ -306,6 +322,7 @@ private extension MainTabView {
                 .foregroundStyle(Color.white.opacity(0.8))
 
             TextField("Search your Briefs", text: $searchText)
+                .focused($isSearchFieldFocused)
                 .textFieldStyle(.plain)
                 .foregroundStyle(Color.white.opacity(0.9))
                 .font(.system(size: 15))
@@ -326,15 +343,14 @@ private extension MainTabView {
             }
 
             Button {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
-                    isSearching = false
-                }
+                dismissSearchFocus()
             } label: {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(Color.white.opacity(0.8))
             }
             .buttonStyle(.plain)
+            .padding(.trailing, 4)
         }
         .padding(.horizontal, 14)
         .frame(height: 48)
@@ -344,16 +360,6 @@ private extension MainTabView {
     private func miniPlayer(for episode: Episode) -> some View {
         VStack(spacing: 8) {
             HStack(spacing: 10) {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [.brieflyPrimary.opacity(0.9), Color.brieflyTabBarBackground.opacity(0.8)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 20, height: 20)
-
                 Text(episode.displayTitle)
                     .font(.system(size: 15, weight: .regular))
                     .foregroundStyle(Color.white.opacity(0.6))
@@ -416,6 +422,13 @@ private extension MainTabView {
         audioManager.isPlaying ? audioManager.pause() : audioManager.resume()
     }
 
+    private func dismissSearchFocus() {
+        isSearchFieldFocused = false
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
+            isSearching = false
+        }
+    }
+
     struct SizeChangeKey: PreferenceKey {
         static var defaultValue: CGSize = .zero
         static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
@@ -428,35 +441,60 @@ private extension MainTabView {
         let isPlaying: Bool
 
         var body: some View {
-            HStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.brieflyTabBarBackground.opacity(0.9))
-                    .frame(width: 44, height: 44)
-                    .overlay(
-                        Image(systemName: isPlaying ? "waveform" : "sparkles")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(Color.white)
-                    )
+            let coverSize: CGFloat = 56
+            let maxPixelSize = Int(ceil(coverSize * UIScreen.main.scale))
 
+            HStack(alignment: .center, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(episode.displayTitle)
-                        .font(.subheadline.weight(.semibold))
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(Color.brieflyTextPrimary)
                         .lineLimit(2)
 
                     Text(episode.subtitle)
-                        .font(.caption)
+                        .font(.footnote)
                         .foregroundStyle(Color.brieflyTextMuted)
                         .lineLimit(2)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-                Spacer()
+                if isPlaying {
+                    Image(systemName: "waveform")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Color.brieflyTextPrimary)
+                }
 
-                Image(systemName: "chevron.forward")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.brieflyTabBarInactive)
+                coverImage(for: episode, maxPixelSize: maxPixelSize)
+                    .frame(width: coverSize, height: coverSize)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, 10)
+        }
+
+        private func coverImage(for episode: Episode, maxPixelSize: Int?) -> some View {
+            ZStack {
+                Color.brieflySurface
+
+                if let url = episode.coverImageURL {
+                    CachedAsyncImage(url: url, maxPixelSize: maxPixelSize) { image in
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    } placeholder: {
+                        SkeletonBlock()
+                    } failure: {
+                        fallbackArtwork
+                    }
+                } else {
+                    fallbackArtwork
+                }
+            }
+        }
+
+        private var fallbackArtwork: some View {
+            Image(systemName: "waveform.circle.fill")
+                .font(.system(size: 28, weight: .semibold))
+                .foregroundColor(Color.brieflySecondary)
         }
     }
 }
@@ -469,5 +507,14 @@ private extension View {
             }
         )
         .onPreferenceChange(MainTabView.SizeChangeKey.self, perform: action)
+    }
+
+    @ViewBuilder
+    func ignoreKeyboardSafeArea(_ ignore: Bool) -> some View {
+        if ignore {
+            self.ignoresSafeArea(.keyboard, edges: .bottom)
+        } else {
+            self
+        }
     }
 }
