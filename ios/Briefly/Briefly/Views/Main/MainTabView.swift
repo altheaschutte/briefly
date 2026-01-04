@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import UIKit
 
 struct BrieflyTrayChromePreferences: Equatable {
     var hideMiniPlayer: Bool = false
@@ -82,9 +83,9 @@ struct MainTabView: View {
                 tabContainer(bottomPadding: chromeHeight)
 
                 floatingChrome()
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, max(bottomSafeAreaInset, 16))
-                    .padding(.top, 8)
+                    .padding(.horizontal, 6)
+                    .padding(.bottom, 0)
+                    .padding(.top, 0)
                     .onSizeChange { chromeHeight = $0.height }
                     .animation(.spring(response: 0.4, dampingFraction: 0.85), value: audioManager.currentEpisode?.id)
                     .animation(.spring(response: 0.35, dampingFraction: 0.9), value: selection)
@@ -216,7 +217,7 @@ private extension MainTabView {
 
     @ViewBuilder
     func floatingChrome() -> some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 10) {
             if let episode = audioManager.currentEpisode, trayPreferences.hideMiniPlayer == false {
                 miniPlayer(for: episode)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -239,7 +240,7 @@ private extension MainTabView {
             tabButton(tab: .settings, title: "Settings", systemImage: "gearshape.fill")
         }
         .padding(.horizontal, 18)
-        .padding(.vertical, 14)
+        .padding(.vertical, 12)
         .background(floatingBackground(cornerRadius: 26))
     }
 
