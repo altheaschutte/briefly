@@ -87,6 +87,8 @@ struct MainTabView: View {
 
                 tabContainer(bottomPadding: chromeHeight)
 
+                trayFadeOverlay(height: chromeHeight + bottomSafeAreaInset + 140)
+
                 floatingChrome()
                     .padding(.horizontal, chromeHorizontalPadding)
                     .padding(.bottom, isSearchFieldFocused ? 12 : 0)
@@ -456,6 +458,22 @@ private extension MainTabView {
     private func togglePlay() {
         guard audioManager.currentEpisode != nil else { return }
         audioManager.isPlaying ? audioManager.pause() : audioManager.resume()
+    }
+
+    private func trayFadeOverlay(height: CGFloat) -> some View {
+        LinearGradient(
+            colors: [
+                Color.brieflyBackground,
+                Color.brieflyBackground.opacity(0.9),
+                Color.brieflyBackground.opacity(0.0)
+            ],
+            startPoint: .bottom,
+            endPoint: .top
+        )
+        .frame(height: max(height, 120))
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .allowsHitTesting(false)
+        .ignoresSafeArea()
     }
 
     private func dismissSearchFocus() {
