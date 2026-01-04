@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 63;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -29,6 +29,7 @@
 		416F51D467EFD635C8C5245E /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 584E1244EB65224EA58EDEB1 /* SettingsViewModel.swift */; };
 		44C658FFA21B1880A8BB77F5 /* PlaybackSpeedSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53870B2C7F84E9C52647A8F6 /* PlaybackSpeedSheet.swift */; };
 		473611263F5F7611B00656E8 /* TopicsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F28F1C20034EFD05EF4BED35 /* TopicsViewModel.swift */; };
+		47ADB20E26CA89B55FB0DA71 /* BriefsLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03B4090DFA8CA6FE01A4C707 /* BriefsLibraryView.swift */; };
 		4BA56CBFC459C7112AA4AB1B /* OnboardingViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CC39B80732ECD6962B13DF2 /* OnboardingViewModel.swift */; };
 		4D580C9AB04601BAAECA2EE7 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB3E5DD914DD7716500A8023 /* WelcomeView.swift */; };
 		5008F51569C988DE8AFEE653 /* SetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4062B8F2C543C872C5CC9368 /* SetupView.swift */; };
@@ -91,13 +92,14 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		03B4090DFA8CA6FE01A4C707 /* BriefsLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefsLibraryView.swift; sourceTree = "<group>"; };
 		03ED7FDCAC26E6C9D24A2E7E /* TopicsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicsView.swift; sourceTree = "<group>"; };
 		06D8BA5B7A68003280522619 /* OnboardingProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingProfileView.swift; sourceTree = "<group>"; };
 		11D6C22A037DC65BC3E00D31 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		14A5B9BD3287AACD7A479D84 /* TopicEditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicEditView.swift; sourceTree = "<group>"; };
 		1616907FCCE387339D9688B5 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 		29B1C5516761B3DEEA90A250 /* PushNotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushNotificationManager.swift; sourceTree = "<group>"; };
-		2A811620458B382ACAE7F725 /* BrieflyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BrieflyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		2A811620458B382ACAE7F725 /* BrieflyTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BrieflyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2CFC8479DCA5A5047484F0C8 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		331A882EF133505EB6529F31 /* EpisodesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpisodesView.swift; sourceTree = "<group>"; };
 		3C4A14B87B010835262E94D4 /* EpisodeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpisodeService.swift; sourceTree = "<group>"; };
@@ -136,7 +138,7 @@
 		AE87E225F2E1CF6238C42229 /* CreateBriefView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateBriefView.swift; sourceTree = "<group>"; };
 		B0DD4D4E6F9A2EB4673FDE74 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		B35B34F3155A4D275C414C4D /* HomeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeViewModel.swift; sourceTree = "<group>"; };
-		B613613FFDC08358178A03DD /* Briefly.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Briefly.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B613613FFDC08358178A03DD /* Briefly.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Briefly.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B853CD5207AB0C294D0B3537 /* GenerateEpisodeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerateEpisodeView.swift; sourceTree = "<group>"; };
 		B93DF56B57AC465AF673E57C /* Entitlements.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Entitlements.swift; sourceTree = "<group>"; };
 		BCC91EED92951E6A6B580745 /* SupabaseAuthProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupabaseAuthProvider.swift; sourceTree = "<group>"; };
@@ -242,6 +244,7 @@
 			isa = PBXGroup;
 			children = (
 				3CC3F727CF2DC9AE77796445 /* BriefSeedView.swift */,
+				03B4090DFA8CA6FE01A4C707 /* BriefsLibraryView.swift */,
 				AE87E225F2E1CF6238C42229 /* CreateBriefView.swift */,
 				98CBE22CD2E1C5FDF6AC3DE2 /* EpisodeDetailView.swift */,
 				331A882EF133505EB6529F31 /* EpisodesView.swift */,
@@ -424,6 +427,7 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					B5FD20A9A2866C1561A200FB = {
+						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -441,6 +445,7 @@
 			packageReferences = (
 				AF9783519DF07C6AC769B37A /* XCRemoteSwiftPackageReference "supabase-swift" */,
 			);
+			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -491,6 +496,7 @@
 				F0C8F45A266870C8E6004A1F /* BrandColors.swift in Sources */,
 				0C4E00C18168C7C8223AE21B /* BriefSeedView.swift in Sources */,
 				C9E4D1AB6DC6C7E14D849FB1 /* BrieflyApp.swift in Sources */,
+				47ADB20E26CA89B55FB0DA71 /* BriefsLibraryView.swift in Sources */,
 				B1F01B29B9FD8F7E617CCE8E /* CreateBriefView.swift in Sources */,
 				19455D5167C50553DDC75B94 /* Entitlements.swift in Sources */,
 				F6245ED5B1F11716913119CE /* EntitlementsService.swift in Sources */,
@@ -563,15 +569,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = WCZU83335J;
+				DEVELOPMENT_TEAM = "";
 				INFOPLIST_FILE = Briefly/Resources/Info.plist;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = brieflypodcast.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.briefly.app;
 				SDKROOT = iphoneos;
 				SUPPORTS_MACCATALYST = NO;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -643,7 +647,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -661,15 +665,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = WCZU83335J;
+				DEVELOPMENT_TEAM = "";
 				INFOPLIST_FILE = Briefly/Resources/Info.plist;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = brieflypodcast.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.briefly.app;
 				SDKROOT = iphoneos;
 				SUPPORTS_MACCATALYST = NO;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -747,7 +749,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

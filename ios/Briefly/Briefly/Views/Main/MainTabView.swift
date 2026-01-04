@@ -34,6 +34,7 @@ struct MainTabView: View {
     @State private var hasEvaluatedInitialLanding: Bool
     @State private var chromeHeight: CGFloat = 120
     @State private var trayPreferences = BrieflyTrayChromePreferences()
+    @State private var isShowingCreateBrief: Bool = false
     @State private var searchText: String = ""
     @State private var isSearching: Bool = false
     @FocusState private var isSearchFieldFocused: Bool
@@ -151,11 +152,12 @@ private extension MainTabView {
             NavigationStack {
                 SetupView(
                     topicsViewModel: topicsViewModel,
-                    appViewModel: appViewModel
+                    appViewModel: appViewModel,
+                    isShowingCreateBrief: $isShowingCreateBrief
                 )
             }
             .ignoresSafeArea(.container, edges: .bottom)
-            .tabItem { Label("Briefs", systemImage: "sparkles") }
+            .tabItem { Label("Create", systemImage: "sparkles") }
             .tag(Tab.create)
 
             NavigationStack {
@@ -246,7 +248,7 @@ private extension MainTabView {
                 } else {
                     HStack(alignment: .center, spacing: 10) {
                         tabStrip
-                        searchButton
+                        trailingButton
                     }
                 }
             }
@@ -255,17 +257,24 @@ private extension MainTabView {
     }
 
     private var tabStrip: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 14) {
             tabButton(tab: .feed, title: "Library", systemImage: "house.fill")
-            Spacer(minLength: 0)
             tabButton(tab: .create, title: "Briefs", systemImage: "sparkles")
-            Spacer(minLength: 0)
             tabButton(tab: .settings, title: "Settings", systemImage: "gearshape.fill")
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
         .frame(height: 48)
         .background(floatingBackground(cornerRadius: 30))
+    }
+
+    @ViewBuilder
+    private var trailingButton: some View {
+        if selection == .create {
+            createBriefButton
+        } else {
+            searchButton
+        }
     }
 
     private var searchButton: some View {
@@ -295,6 +304,34 @@ private extension MainTabView {
         .shadow(color: Color.black.opacity(0.22), radius: 18, x: 0, y: 10)
         .accessibilityLabel("Search")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private var createBriefButton: some View {
+        Button {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.82, blendDuration: 0.2)) {
+                selection = .create
+            }
+            dismissSearchFocus()
+            isShowingCreateBrief = true
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 18, weight: .semibold))
+                .frame(width: 24, height: 24)
+                .padding(12)
+                .foregroundStyle(Color.white)
+                .background(
+                    Circle()
+                        .fill(Color.brieflyTabBarBackground)
+                )
+                .overlay(
+                    Circle()
+                        .stroke(Color.white.opacity(0.22), lineWidth: 1.5)
+                )
+        }
+        .buttonStyle(.plain)
+        .shadow(color: Color.black.opacity(0.22), radius: 18, x: 0, y: 10)
+        .accessibilityLabel("Create Brief")
+        .accessibilityAddTraits(.isSelected)
     }
 
     private func tabButton(tab: Tab, title: String, systemImage: String) -> some View {
@@ -382,7 +419,6 @@ private extension MainTabView {
         }
         .padding(.horizontal, 22)
         .padding(.vertical, 10)
-        .frame(maxWidth: .infinity)
         .background(floatingBackground(cornerRadius: 30))
         .matchedTransitionSource(id: "MINIPLAYER", in: miniPlayerNamespace)
         .contentShape(Rectangle())

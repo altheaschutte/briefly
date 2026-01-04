@@ -16,13 +16,7 @@ private struct EpisodeDetailOverlay: View {
     var body: some View {
         ZStack {
             if episode != nil {
-                Color.black
-                    .opacity(backgroundOpacity)
-                    .ignoresSafeArea()
-                    .transition(.opacity)
-
-                content
-                    .offset(y: dragOffset)
+                overlayContent
             }
         }
         .animation(.spring(response: 0.35, dampingFraction: 0.9), value: episode?.id)
@@ -37,8 +31,24 @@ private struct EpisodeDetailOverlay: View {
         return 0.35 * (1 - progress)
     }
 
+    private var detailTransition: AnyTransition {
+        .move(edge: .bottom).combined(with: .opacity)
+    }
+
+    private var overlayContent: some View {
+        ZStack {
+            Color.black
+                .opacity(backgroundOpacity)
+                .ignoresSafeArea()
+
+            detailContent
+                .offset(y: dragOffset)
+        }
+        .transition(detailTransition)
+    }
+
     @ViewBuilder
-    private var content: some View {
+    private var detailContent: some View {
         if let episode {
             NavigationStack {
                 EpisodeDetailView(

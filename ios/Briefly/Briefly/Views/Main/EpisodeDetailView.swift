@@ -205,7 +205,7 @@ private extension EpisodeDetailView {
     private var episodeDetailTextPrimary: Color { .white }
     private var episodeDetailTextSecondary: Color { .white.opacity(0.6) }
     private var episodeDetailDivider: Color { .white.opacity(0.14) }
-    private var contentHorizontalPadding: CGFloat { 24 }
+    private var contentHorizontalPadding: CGFloat { 20 }
 
     var header: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -1290,7 +1290,7 @@ private extension EpisodeDetailView {
             .clipShape(Capsule())
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 16)
+        .padding(.horizontal, contentHorizontalPadding)
         .padding(.vertical, 12)
         .accessibilityLabel("Starting dive deeper. Tap to undo.")
     }
