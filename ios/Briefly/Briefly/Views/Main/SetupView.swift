@@ -56,6 +56,9 @@ struct SetupView: View {
             actionButtonsSection
         }
         .listStyle(.plain)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Color.clear.frame(height: 70)
+        }
         .scrollContentBackground(.hidden)
         .listRowBackground(Color.brieflyBackground)
         .background(Color.brieflyBackground)

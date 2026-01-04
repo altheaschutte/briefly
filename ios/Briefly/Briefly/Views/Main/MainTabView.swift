@@ -53,6 +53,7 @@ struct MainTabView: View {
     private let tabBarAppearance = UITabBar.appearance()
     private let miniPlayerNamespace: Namespace.ID
     private let chromeHorizontalPadding: CGFloat = 16
+    private let contentBottomPaddingOffset: CGFloat = 16
 
     init(appViewModel: AppViewModel, miniPlayerNamespace: Namespace.ID) {
         self.appViewModel = appViewModel
@@ -92,13 +93,14 @@ struct MainTabView: View {
     var body: some View {
         GeometryReader { proxy in
             let bottomSafeAreaInset = proxy.safeAreaInsets.bottom
+            let contentBottomPadding = chromeHeight + contentBottomPaddingOffset
 
             ZStack(alignment: .bottom) {
                 Color.brieflyBackground.ignoresSafeArea()
 
-                tabContainer(bottomPadding: chromeHeight)
+                tabContainer(bottomPadding: contentBottomPadding)
 
-                trayFadeOverlay(height: chromeHeight + bottomSafeAreaInset + 140)
+                trayFadeOverlay(height: chromeHeight + bottomSafeAreaInset + trayGradientPadding)
 
                 floatingChrome
                     .padding(.horizontal, chromeHorizontalPadding)
@@ -269,6 +271,14 @@ private extension MainTabView {
             }
             .animation(.spring(response: 0.35, dampingFraction: 0.9), value: isSearching)
         }
+    }
+
+    private var trayGradientPadding: CGFloat {
+        isMiniPlayerVisible ? 140 : 60
+    }
+
+    private var isMiniPlayerVisible: Bool {
+        audioManager.currentEpisode != nil && trayPreferences.hideMiniPlayer == false
     }
 
     private var tabStrip: some View {

@@ -17,6 +17,9 @@ struct BriefsLibraryView: View {
             }
         }
         .listStyle(.plain)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Color.clear.frame(height: 120)
+        }
         .scrollContentBackground(.hidden)
         .listRowBackground(Color.brieflyBackground)
         .background(Color.brieflyBackground)
