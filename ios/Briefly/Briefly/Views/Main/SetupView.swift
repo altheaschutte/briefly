@@ -71,7 +71,7 @@ struct SetupView: View {
                 }
             }
         }
-        .navigationTitle(showsNavigationTitle ? "Create episode" : "")
+        .navigationTitle(showsNavigationTitle ? "Create Episode" : "")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             Task { @MainActor in
@@ -145,8 +145,8 @@ struct SetupView: View {
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 NavigationLink(value: TopicRoute.create) {
-                    Text("+")
-                        .font(.system(size: 40, weight: .regular))
+                    Image(systemName: "plus")
+                        .font(.system(size: 22, weight: .semibold))
                         .foregroundStyle(Color.offBlack)
                 }
                 .tint(.offBlack)
@@ -193,27 +193,24 @@ struct SetupView: View {
     }
 
     private var briefsHeader: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Create episode")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Color.brieflyTextSecondary)
-
-            Text("Create your Briefly episode")
-                .font(.system(size: 24, weight: .semibold))
+        VStack(alignment: .center, spacing: 10) {
+            Text("Create Episode")
+                .font(.system(size: 28, weight: .semibold))
                 .foregroundStyle(Color.offBlack)
 
-            Text("Select up to 5 briefs and generate your episode.")
+            Text("Select up to \(topicsViewModel.maxActiveTopics) briefs and generate your episode.")
                 .font(.system(size: 16, weight: .regular))
                 .foregroundStyle(Color.brieflyTextSecondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 12)
 
-            Rectangle()
-                .fill(Color.warmGrey)
-                .frame(height: 1)
-                .padding(.top, 12)
+            Divider()
+                .overlay(Color.mediumWarmGrey)
+                .padding(.top, 8)
         }
         .padding(.horizontal, 20)
-        .padding(.top, 6)
-        .padding(.bottom, 6)
+        .padding(.top, 8)
+        .padding(.bottom, 12)
         .listRowInsets(EdgeInsets())
         .listRowSeparator(.hidden)
         .listRowBackground(Color.brieflyBackground)
@@ -250,30 +247,30 @@ struct SetupView: View {
 
     private func topicRow(topic: Topic, isActive: Bool) -> some View {
         let isInactiveAtLimit = !isActive && !topicsViewModel.canAddActiveTopic
-        return HStack(alignment: .center, spacing: 16) {
+        let classificationLabels = classificationLabels(from: topic.classificationShortLabel)
+
+        return HStack(alignment: .top, spacing: 16) {
             Button {
                 editingTopic = topic
             } label: {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 8) {
                     Text(topic.displayTitle)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(size: 17, weight: .semibold))
                         .foregroundColor(.brieflyTextPrimary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text(topic.originalText)
-                        .font(.footnote)
-                        .foregroundColor(.brieflyTextMuted)
-                        .lineLimit(2)
-                        .truncationMode(.tail)
+                        .font(.system(size: 15, weight: .regular))
+                        .foregroundColor(.brieflyTextPrimary)
+                        .lineLimit(3)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    if let pillLabel = topic.classificationShortLabel?.trimmingCharacters(in: .whitespacesAndNewlines),
-                       pillLabel.isEmpty == false {
-                        classificationPill(label: pillLabel)
-                            .padding(.top, 4)
+                    if classificationLabels.isEmpty == false {
+                        classificationPills(for: classificationLabels)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
-            Spacer(minLength: 10)
+            Spacer(minLength: 12)
             Button {
                 if isActive {
                     Task { await topicsViewModel.deactivateTopic(topic) }
@@ -286,17 +283,18 @@ struct SetupView: View {
                 Image(systemName: isActive ? "minus.circle.fill" : "plus.circle.fill")
                     .foregroundStyle(
                         isActive
-                        ? Color.brieflySecondary
-                        : (isInactiveAtLimit ? Color.brieflyTextMuted : Color.brieflySecondary)
+                        ? Color.offBlack
+                        : (isInactiveAtLimit ? Color.brieflyTextMuted : Color.offBlack)
                     )
-                    .font(.title3)
+                    .font(.system(size: 22, weight: .semibold))
             }
             .buttonStyle(.borderless)
+            .padding(.top, 4)
             .opacity(isInactiveAtLimit ? 0.5 : 1)
         }
         .contentShape(Rectangle())
-        .padding(.vertical, 10)
-        .listRowInsets(EdgeInsets(top: 10, leading: 14, bottom: 10, trailing: 16))
+        .padding(.vertical, 12)
+        .listRowInsets(EdgeInsets(top: 12, leading: 20, bottom: 12, trailing: 20))
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -311,14 +309,40 @@ struct SetupView: View {
 
     private func classificationPill(label: String) -> some View {
         Text(label)
-            .font(.system(size: 12))
+            .font(.system(size: 13, weight: .semibold))
             .italic()
             .foregroundColor(.brieflyClassificationPillText)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 3)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
             .background(Color.warmGrey)
             .clipShape(Capsule())
             .accessibilityLabel("Classification \(label)")
+    }
+
+    private func classificationPills(for labels: [String]) -> some View {
+        HStack(spacing: 8) {
+            ForEach(labels, id: \.self) { label in
+                classificationPill(label: label)
+            }
+        }
+        .padding(.top, 2)
+    }
+
+    private func classificationLabels(from rawLabel: String?) -> [String] {
+        guard let rawLabel = rawLabel?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              rawLabel.isEmpty == false else { return [] }
+
+        let normalized = rawLabel.replacingOccurrences(of: "/", with: ",")
+        let components = normalized
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { $0.isEmpty == false }
+
+        if components.isEmpty {
+            return [rawLabel]
+        }
+        return components
     }
 }
 
@@ -379,8 +403,8 @@ private extension SetupView {
                 InlineErrorText(message: error)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .listRowInsets(EdgeInsets())
         .listRowSeparator(.hidden)
@@ -389,13 +413,17 @@ private extension SetupView {
 
     private var addBriefButton: some View {
         NavigationLink(value: TopicRoute.library) {
-            Label("Add Brief", systemImage: "plus.circle.fill")
-                .font(.headline)
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color.offBlack)
-                .foregroundColor(.white)
-                .clipShape(Capsule())
+            HStack(spacing: 12) {
+                Image(systemName: "plus")
+                    .font(.system(size: 18, weight: .semibold))
+                Text("Add Briefs")
+                    .font(.system(size: 17, weight: .semibold))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .background(Color.warmGrey)
+            .foregroundColor(.offBlack)
+            .clipShape(Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Add Brief")
@@ -404,13 +432,11 @@ private extension SetupView {
     private var generateEpisodeButton: some View {
         let isGenerateDisabled = creationViewModel.hasActiveGeneration
             || (!shouldShowManageAccount && hasActiveTopics == false)
+        let isBusy = creationViewModel.hasActiveGeneration
         let backgroundColor: Color = isGenerateDisabled ? .mediumWarmGrey : .offBlack
         let foregroundColor: Color = {
-            if creationViewModel.hasActiveGeneration {
-                return .offBlack
-            } else if isGenerateDisabled {
-                return .brieflyTextMuted
-            }
+            if isBusy { return .white }
+            if isGenerateDisabled { return .brieflyTextMuted }
             return .white
         }()
 
@@ -423,7 +449,7 @@ private extension SetupView {
             }
         } label: {
             Group {
-                if creationViewModel.hasActiveGeneration {
+                if isBusy {
                     HStack(spacing: 10) {
                         BrieflySpinnerIcon()
                         Text(generationProgressLabel(for: creationViewModel.inProgressEpisode?.status))
@@ -432,9 +458,9 @@ private extension SetupView {
                     Label(generateButtonTitle, systemImage: generateButtonIcon)
                 }
             }
-            .font(.headline)
+            .font(.system(size: 17, weight: .semibold))
             .frame(maxWidth: .infinity)
-            .padding()
+            .padding(.vertical, 16)
             .background(backgroundColor)
             .foregroundColor(foregroundColor)
             .tint(foregroundColor)
@@ -467,20 +493,20 @@ private extension SetupView {
                     .tint(.white)
                 Text("Starting… Tap to undo")
             }
-                .font(.headline)
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color.darkerWarmGrey)
-                .foregroundColor(.white)
-                .tint(.white)
-                .clipShape(Capsule())
+            .font(.system(size: 17, weight: .semibold))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .background(Color.darkerWarmGrey)
+            .foregroundColor(.white)
+            .tint(.white)
+            .clipShape(Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Starting episode generation. Tap to undo.")
     }
 
     private var generateButtonTitle: String {
-        shouldShowManageAccount ? "Manage account" : "Generate episode"
+        shouldShowManageAccount ? "Manage account" : "Generate Episode"
     }
 
     private var generateButtonIcon: String {
