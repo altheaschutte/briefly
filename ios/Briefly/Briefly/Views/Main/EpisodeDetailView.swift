@@ -408,7 +408,7 @@ private extension EpisodeDetailView {
 	    }
 
 	    var playbackControls: some View {
-	        VStack(spacing: 18) {
+	        VStack(spacing: 10) {
 	            waveformScrubber
                 HStack {
                     Text(timeString(displayedCurrentTime))
@@ -1266,7 +1266,7 @@ private struct EpisodeWaveformScrubber: View {
             )
         }
         .frame(height: 34)
-        .padding(.vertical, 2)
+        .padding(.vertical, 0)
         .accessibilityElement()
         .accessibilityLabel("Playback position")
         .accessibilityValue("\(Int(progress.clamped(to: 0...1) * 100)) percent")
