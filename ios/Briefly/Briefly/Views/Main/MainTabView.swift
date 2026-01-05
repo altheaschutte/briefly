@@ -121,6 +121,7 @@ struct MainTabView: View {
     var body: some View {
         GeometryReader { proxy in
             let bottomSafeAreaInset = proxy.safeAreaInsets.bottom
+            let topSafeAreaInset = proxy.safeAreaInsets.top
             let contentBottomPadding = chromeHeight + contentBottomPaddingOffset
 
             ZStack(alignment: .bottom) {
@@ -129,7 +130,11 @@ struct MainTabView: View {
                 tabContainer(bottomPadding: contentBottomPadding)
 
                 if isSearching {
-                    searchOverlay(bottomSafeAreaInset: bottomSafeAreaInset, contentBottomPadding: contentBottomPadding)
+                    searchOverlay(
+                        bottomSafeAreaInset: bottomSafeAreaInset,
+                        contentBottomPadding: contentBottomPadding,
+                        topSafeAreaInset: topSafeAreaInset
+                    )
                         .transition(.opacity)
                 }
 
@@ -137,7 +142,6 @@ struct MainTabView: View {
 
                 floatingChrome
                     .padding(.horizontal, chromeHorizontalPadding)
-                    .padding(.bottom, isSearchFieldFocused ? 12 : 0)
                     .padding(.top, 0)
                     .onSizeChange { chromeHeight = $0.height }
                     .animation(.spring(response: 0.4, dampingFraction: 0.85), value: audioManager.currentEpisode?.id)
@@ -249,17 +253,10 @@ private extension MainTabView {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
-            Group {
-                if isSearching {
-                    searchBar
-                } else {
-                    HStack(alignment: .center, spacing: 10) {
-                        tabStrip
-                        trailingButton
-                    }
-                }
+            HStack(alignment: .center, spacing: 10) {
+                tabStrip
+                trailingButton
             }
-            .animation(.spring(response: 0.35, dampingFraction: 0.9), value: isSearching)
         }
     }
 
@@ -351,7 +348,7 @@ private extension MainTabView {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    private var searchBar: some View {
+    private var searchField: some View {
         let binding = searchFieldBinding
         let currentText = binding.wrappedValue
 
@@ -382,21 +379,10 @@ private extension MainTabView {
                 }
                 .buttonStyle(.plain)
             }
-
-            Button {
-                dismissSearchFocus()
-            } label: {
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.8))
-            }
-            .buttonStyle(.plain)
-            .padding(.trailing, 4)
         }
         .padding(.horizontal, 14)
         .frame(height: 48)
-        .background(floatingBackground(cornerRadius: 24))
-        .transition(.move(edge: .bottom).combined(with: .opacity))
+        .background(floatingBackground(cornerRadius: 20))
     }
 
     private var searchFieldBinding: Binding<String> {
@@ -418,24 +404,52 @@ private extension MainTabView {
     }
 
     @ViewBuilder
-    private func searchOverlay(bottomSafeAreaInset: CGFloat, contentBottomPadding: CGFloat) -> some View {
-        Group {
-            switch searchContext {
-            case .episodes:
-                episodesSearchList(
-                    contentBottomPadding: contentBottomPadding,
-                    bottomSafeAreaInset: bottomSafeAreaInset
-                )
-            case .briefs:
-                briefsSearchList(
-                    contentBottomPadding: contentBottomPadding,
-                    bottomSafeAreaInset: bottomSafeAreaInset
-                )
+    private func searchOverlay(
+        bottomSafeAreaInset: CGFloat,
+        contentBottomPadding: CGFloat,
+        topSafeAreaInset: CGFloat
+    ) -> some View {
+        VStack(spacing: 12) {
+            searchHeader(topSafeAreaInset: topSafeAreaInset)
+
+            Group {
+                switch searchContext {
+                case .episodes:
+                    episodesSearchList(
+                        contentBottomPadding: contentBottomPadding,
+                        bottomSafeAreaInset: bottomSafeAreaInset
+                    )
+                case .briefs:
+                    briefsSearchList(
+                        contentBottomPadding: contentBottomPadding,
+                        bottomSafeAreaInset: bottomSafeAreaInset
+                    )
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(Color.brieflyBackground)
+        .background(Color.brieflyBackground.ignoresSafeArea())
         .animation(.easeInOut(duration: 0.2), value: isSearching)
+    }
+
+    private func searchHeader(topSafeAreaInset: CGFloat) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            searchField
+                .frame(maxWidth: .infinity)
+
+            Button {
+                dismissSearchFocus()
+            } label: {
+                Text("Cancel")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.9))
+            }
+            .buttonStyle(.plain)
+            .padding(.trailing, 4)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, topSafeAreaInset + 12)
+        .padding(.bottom, 4)
     }
 
     @ViewBuilder
