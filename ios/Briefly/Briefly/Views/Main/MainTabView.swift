@@ -443,15 +443,6 @@ private extension MainTabView {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(filteredEpisodeSections) { section in
-                    if section.title.isEmpty == false {
-                        Text(section.title)
-                            .font(.headline)
-                            .foregroundStyle(Color.brieflyTextPrimary)
-                            .padding(.horizontal, 20)
-                            .padding(.top, 12)
-                            .padding(.bottom, 6)
-                    }
-
                     ForEach(section.episodes) { episode in
                         Button {
                             appViewModel.presentEpisodeDetail(episode)

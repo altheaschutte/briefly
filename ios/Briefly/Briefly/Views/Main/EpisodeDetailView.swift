@@ -1,6 +1,5 @@
 import SwiftUI
 import UIKit
-import WaveformScrubber
 
 	struct EpisodeDetailView: View {
 	    let episodeId: UUID
@@ -210,16 +209,16 @@ private extension EpisodeDetailView {
     private var contentHorizontalPadding: CGFloat { 16 }
 
     var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             coverImageHero
-                .padding(.bottom, 12)
+                .padding(.bottom, 16)
             if let date = detailedEpisode.displayDate {
                 Text(episodeDateLabel(date).uppercased())
                     .font(.caption.weight(.semibold))
                     .foregroundColor(episodeDetailTextSecondary)
             }
             Text(detailedEpisode.displayTitle)
-                .font(.system(size: 20, weight: .semibold))
+                .font(.system(size: 24, weight: .semibold))
                 .foregroundColor(episodeDetailTextPrimary)
             summaryText
         }
@@ -231,6 +230,7 @@ private extension EpisodeDetailView {
             .foregroundColor(episodeDetailTextSecondary)
             .multilineTextAlignment(.leading)
             .lineLimit(nil)
+            .lineSpacing(2)
             .fixedSize(horizontal: false, vertical: true)
     }
 
@@ -433,54 +433,14 @@ private extension EpisodeDetailView {
 	    }
 
         private var waveformScrubber: some View {
-            Group {
-                if let audioURL = waveformAudioURL {
-                    WaveformScrubber(
-                        config: .init(activeTint: waveformActiveColor, inactiveTint: waveformInactiveColor),
-                        drawer: BarDrawer(config: .init(barWidth: 3, spacing: 2, minBarHeight: 4, cornerRadius: 1.5)),
-                        url: audioURL,
-                        progress: waveformProgressBinding,
-                        onGestureActive: { isDragging in
-                            if isDragging == false {
-                                finishScrubIfNeeded()
-                            }
-                        }
-                    )
-                    .waveformScrubberStyle(
-                        DefaultWaveformScrubberStyle(
-                            active: waveformActiveColor,
-                            inactive: waveformInactiveColor
-                        )
-                    )
-                    .accessibilityLabel("Playback position")
-                    .accessibilityValue(Text("\(Int(waveformDisplayProgress * 100)) percent"))
-                } else {
-                    StaticWaveformPlaceholder(
-                        progress: waveformDisplayProgress,
-                        barColor: waveformInactiveColor,
-                        progressColor: waveformActiveColor
-                    )
-                }
-            }
-            .frame(height: 26)
-        }
-
-        private var waveformAudioURL: URL? {
-            if let url = detailedEpisode.audioURL {
-                return url
-            }
-            if audioManager.currentEpisode?.id == detailedEpisode.id {
-                return audioManager.currentEpisode?.audioURL
-            }
-            return nil
-        }
-
-        private var waveformProgressBinding: Binding<CGFloat> {
-            Binding(
-                get: { CGFloat(waveformDisplayProgress) },
-                set: { newValue in
-                    dragPreviewProgress = Double(max(0, min(newValue, 1)))
-                }
+            EpisodeWaveformScrubber(
+                progress: waveformDisplayProgress,
+                activeColor: waveformActiveColor,
+                inactiveColor: waveformInactiveColor,
+                onScrubChanged: { newValue in
+                    dragPreviewProgress = max(0, min(newValue, 1))
+                },
+                onScrubEnded: finishScrubIfNeeded
             )
         }
 
@@ -1253,46 +1213,91 @@ private struct EpisodeDetailScrollOffsetKey: PreferenceKey {
     }
 }
 
-private struct StaticWaveformPlaceholder: View {
+private struct EpisodeWaveformScrubber: View {
     let progress: Double
-    let barColor: Color
-    let progressColor: Color
+    let activeColor: Color
+    let inactiveColor: Color
+    let onScrubChanged: (Double) -> Void
+    let onScrubEnded: () -> Void
+
+    // Derived from branding/fake-waveform.svg to match the desired bar profile.
+    private let barHeights: [CGFloat] = [
+        2, 8, 14, 4, 16, 14, 10, 10, 10, 14, 10, 16, 10, 4, 8, 2, 8, 14, 4, 20,
+        14, 10, 10, 10, 18, 10, 20, 10, 4, 2, 2, 8, 14, 4, 16, 14, 10, 10, 10, 14,
+        10, 16, 10, 4, 9, 2, 8, 14, 4, 16, 14, 10, 10, 10, 14, 10, 16, 10, 4, 2
+    ]
+    private let maxBarHeight: CGFloat = 20
+    private let barSpacing: CGFloat = 4
 
     var body: some View {
         GeometryReader { proxy in
-            let width = proxy.size.width
-            let height = proxy.size.height
-            let barCount = 56
-            let spacing: CGFloat = 3
-            let barWidth = max(2, (width - (CGFloat(barCount - 1) * spacing)) / CGFloat(barCount))
+            let width = max(proxy.size.width, 1)
+            let height = max(proxy.size.height, 1)
+            let barWidth = max(2, (width - (CGFloat(barHeights.count - 1) * barSpacing)) / CGFloat(barHeights.count))
+            let clampedProgress = progress.clamped(to: 0...1)
+            let activeFill = LinearGradient(
+                colors: [activeColor, activeColor.opacity(0.9)],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+            let inactiveFill = inactiveColor.opacity(0.75)
 
-            let bars = HStack(alignment: .center, spacing: spacing) {
-                ForEach(0..<barCount, id: \.self) { index in
-                    Capsule(style: .continuous)
-                        .frame(width: barWidth, height: height * amplitude(for: index, count: barCount))
-                }
+            ZStack(alignment: .leading) {
+                bars(width: barWidth, height: height, fill: inactiveFill)
+
+                bars(width: barWidth, height: height, fill: activeFill)
+                    .mask(alignment: .leading) {
+                        Rectangle()
+                            .frame(width: width * CGFloat(clampedProgress))
+                    }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-
-            bars
-                .foregroundStyle(barColor)
-                .overlay {
-                    bars
-                        .foregroundStyle(progressColor)
-                        .mask(alignment: .leading) {
-                            Rectangle()
-                                .frame(width: width * max(0, min(progress, 1)))
-                        }
-                }
-                .accessibilityHidden(true)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        let x = max(0, min(value.location.x, width))
+                        let newProgress = Double(x / width)
+                        onScrubChanged(newProgress)
+                    }
+                    .onEnded { _ in
+                        onScrubEnded()
+                    }
+            )
+        }
+        .frame(height: 34)
+        .padding(.vertical, 2)
+        .accessibilityElement()
+        .accessibilityLabel("Playback position")
+        .accessibilityValue("\(Int(progress.clamped(to: 0...1) * 100)) percent")
+        .accessibilityAdjustableAction { direction in
+            let step = 0.05
+            switch direction {
+            case .increment:
+                onScrubChanged(min(progress + step, 1))
+                onScrubEnded()
+            case .decrement:
+                onScrubChanged(max(progress - step, 0))
+                onScrubEnded()
+            default:
+                break
+            }
         }
     }
 
-    private func amplitude(for index: Int, count: Int) -> CGFloat {
-        guard count > 1 else { return 0.6 }
-        let x = Double(index) / Double(count - 1)
-        let wave = abs(sin((x * 3.1 + 0.2) * .pi) * cos((x * 1.6 + 0.1) * .pi))
-        return max(0.18, min(1.0, 0.28 + (wave * 0.72)))
+    @ViewBuilder
+    private func bars<S: ShapeStyle>(width: CGFloat, height: CGFloat, fill: S) -> some View {
+        HStack(alignment: .center, spacing: barSpacing) {
+            ForEach(Array(barHeights.enumerated()), id: \.offset) { _, barHeight in
+                Capsule(style: .continuous)
+                    .frame(
+                        width: width,
+                        height: max(4, height * (barHeight / maxBarHeight))
+                    )
+            }
+        }
+        .foregroundStyle(fill)
+        .animation(.easeInOut(duration: 0.15), value: progress)
     }
 }
 
@@ -1402,6 +1407,12 @@ private extension String {
     var nonEmpty: String? {
         let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+private extension Double {
+    func clamped(to range: ClosedRange<Double>) -> Double {
+        min(max(self, range.lowerBound), range.upperBound)
     }
 }
 
