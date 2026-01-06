@@ -1,0 +1,1 @@
+Always use Mastra MCP for docs and example patterns

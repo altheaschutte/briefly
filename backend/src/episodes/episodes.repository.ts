@@ -8,7 +8,12 @@ export interface ListEpisodesOptions {
 }
 
 export interface EpisodesRepository {
-  create(userId: string, targetDurationMinutes: number, status: EpisodeStatus): Promise<Episode>;
+  create(
+    userId: string,
+    targetDurationMinutes: number,
+    status: EpisodeStatus,
+    options?: { planId?: string },
+  ): Promise<Episode>;
   listByUser(userId: string, options?: ListEpisodesOptions): Promise<Episode[]>;
   getById(userId: string, episodeId: string): Promise<Episode | undefined>;
   update(userId: string, episodeId: string, updates: Partial<Episode>): Promise<Episode | undefined>;

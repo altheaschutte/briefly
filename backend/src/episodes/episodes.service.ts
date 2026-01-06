@@ -6,44 +6,16 @@ import { EPISODES_REPOSITORY, EpisodesRepository } from './episodes.repository';
 @Injectable()
 export class EpisodesService {
   private readonly defaultDuration: number;
-  private readonly diveDeeperDefaultDuration: number;
 
   constructor(
     @Inject(EPISODES_REPOSITORY) private readonly repository: EpisodesRepository,
     private readonly configService: ConfigService,
   ) {
     this.defaultDuration = Number(this.configService.get('EPISODE_DEFAULT_DURATION_MINUTES')) || 20;
-    this.diveDeeperDefaultDuration = Number(this.configService.get('DIVE_DEEPER_DEFAULT_DURATION_MINUTES')) || 8;
   }
 
-  createEpisode(userId: string, targetDurationMinutes?: number): Promise<Episode> {
-    return this.repository.create(userId, targetDurationMinutes || this.defaultDuration, 'queued');
-  }
-
-  getDiveDeeperDefaultDurationMinutes(): number {
-    return this.diveDeeperDefaultDuration;
-  }
-
-  async createDiveDeeperEpisode(
-    userId: string,
-    input: {
-      parentEpisodeId: string;
-      parentSegmentId: string;
-      diveDeeperSeedId: string;
-      targetDurationMinutes?: number;
-    },
-  ): Promise<Episode> {
-    const episode = await this.repository.create(
-      userId,
-      input.targetDurationMinutes ?? this.diveDeeperDefaultDuration,
-      'queued',
-    );
-    const updated = await this.repository.update(userId, episode.id, {
-      parentEpisodeId: input.parentEpisodeId,
-      parentSegmentId: input.parentSegmentId,
-      diveDeeperSeedId: input.diveDeeperSeedId,
-    });
-    return updated ?? episode;
+  createEpisode(userId: string, targetDurationMinutes?: number, planId?: string): Promise<Episode> {
+    return this.repository.create(userId, targetDurationMinutes || this.defaultDuration, 'queued', { planId });
   }
 
   listEpisodes(userId: string): Promise<Episode[]> {
@@ -78,13 +50,14 @@ export class EpisodesService {
       coverImageUrl: updates.coverImageUrl ?? existing.coverImageUrl,
       coverPrompt: updates.coverPrompt ?? existing.coverPrompt,
       transcript: updates.transcript ?? existing.transcript,
-      scriptPrompt: updates.scriptPrompt ?? existing.scriptPrompt,
       showNotes: updates.showNotes ?? existing.showNotes,
       description: updates.description ?? existing.description,
       errorMessage: updates.errorMessage ?? existing.errorMessage,
       durationSeconds: updates.durationSeconds ?? existing.durationSeconds,
       usageRecordedAt: updates.usageRecordedAt ?? existing.usageRecordedAt,
       archivedAt: updates.archivedAt ?? existing.archivedAt,
+      planId: updates.planId ?? existing.planId,
+      workflowRunId: updates.workflowRunId ?? existing.workflowRunId,
     });
     if (!updated) {
       throw new NotFoundException('Episode not found');

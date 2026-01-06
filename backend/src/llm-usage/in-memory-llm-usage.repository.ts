@@ -13,9 +13,4 @@ export class InMemoryLlmUsageRepository implements LlmUsageRepository {
   async listByEpisode(userId: string, episodeId: string): Promise<LlmUsageRecord[]> {
     return (this.recordsByUser.get(userId) ?? []).filter((r) => r.episodeId === episodeId);
   }
-
-  async listByTopic(userId: string, topicId: string): Promise<LlmUsageRecord[]> {
-    return (this.recordsByUser.get(userId) ?? []).filter((r) => r.topicId === topicId);
-  }
 }
-

@@ -48,27 +48,10 @@ export class SupabaseLlmUsageRepository implements LlmUsageRepository {
     });
   }
 
-  async listByTopic(userId: string, topicId: string): Promise<LlmUsageRecord[]> {
-    return handleSupabaseErrors(this.logger, `list llm usage for topic ${topicId}`, async () => {
-      const result = await this.client
-        .from('llm_usage_events')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('topic_id', topicId)
-        .order('created_at', { ascending: true });
-      if (result.error) {
-        throw result.error;
-      }
-      const rows = (result.data as LlmUsageEventRow[] | null) ?? [];
-      return rows.map((row) => this.fromRow(row));
-    });
-  }
-
   private toRow(record: LlmUsageRecord): Omit<LlmUsageEventRow, 'id' | 'created_at'> {
     return {
       user_id: record.userId,
       episode_id: record.episodeId ?? null,
-      topic_id: record.topicId ?? null,
       segment_id: record.segmentId ?? null,
       flow: record.flow ?? null,
       operation: record.operation,
@@ -86,7 +69,6 @@ export class SupabaseLlmUsageRepository implements LlmUsageRepository {
     return {
       userId: row.user_id,
       episodeId: row.episode_id ?? undefined,
-      topicId: row.topic_id ?? undefined,
       segmentId: row.segment_id ?? undefined,
       flow: row.flow ?? undefined,
       operation: row.operation,

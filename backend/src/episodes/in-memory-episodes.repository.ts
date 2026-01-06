@@ -8,7 +8,12 @@ import { EpisodesRepository, ListEpisodesOptions } from './episodes.repository';
 export class InMemoryEpisodesRepository implements EpisodesRepository {
   constructor(private readonly store: InMemoryStoreService) {}
 
-  async create(userId: string, targetDurationMinutes: number, status: EpisodeStatus): Promise<Episode> {
+  async create(
+    userId: string,
+    targetDurationMinutes: number,
+    status: EpisodeStatus,
+    options?: { planId?: string },
+  ): Promise<Episode> {
     const now = new Date();
     const existing = this.store.getEpisodes(userId);
     const nextNumber = (existing.map((e) => e.episodeNumber || 0).sort((a, b) => b - a)[0] ?? 0) + 1;
@@ -20,6 +25,7 @@ export class InMemoryEpisodesRepository implements EpisodesRepository {
       status,
       archivedAt: undefined,
       targetDurationMinutes,
+      planId: options?.planId,
       coverImageUrl: undefined,
       coverPrompt: undefined,
       createdAt: now,

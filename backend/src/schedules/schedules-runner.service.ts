@@ -1,9 +1,4 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { Queue } from 'bullmq';
-import { EpisodesService } from '../episodes/episodes.service';
-import { TopicsService } from '../topics/topics.service';
-import { EntitlementsService } from '../billing/entitlements.service';
-import { EPISODES_QUEUE_TOKEN } from '../queue/queue.constants';
 import { EpisodeSchedule } from '../domain/types';
 import { SchedulesService } from './schedules.service';
 
@@ -14,10 +9,6 @@ export class SchedulesRunnerService {
 
   constructor(
     private readonly schedulesService: SchedulesService,
-    private readonly topicsService: TopicsService,
-    private readonly episodesService: EpisodesService,
-    private readonly entitlementsService: EntitlementsService,
-    @Inject(EPISODES_QUEUE_TOKEN) private readonly episodesQueue: Queue,
   ) {}
 
   async processDueSchedules(now = new Date()): Promise<void> {
@@ -42,60 +33,17 @@ export class SchedulesRunnerService {
       { skipCurrentWindow: true },
     );
 
-    try {
-      const topics = await this.topicsService.listTopics(schedule.userId, { isActive: true });
-      if (!topics.length) {
-        await this.schedulesService.recordRun({
-          scheduleId: schedule.id,
-          userId: schedule.userId,
-          status: 'skipped',
-          message: 'No active topics',
-        });
-        await this.schedulesService.updateAfterRun(schedule, {
-          status: 'skipped',
-          error: 'No active topics',
-          nextRunAt,
-        });
-        return;
-      }
-
-      const duration =
-        schedule.targetDurationMinutes ?? this.entitlementsService.getDefaultDurationMinutes();
-      await this.entitlementsService.ensureCanCreateEpisode(schedule.userId, duration);
-      const episode = await this.episodesService.createEpisode(schedule.userId, duration);
-      await this.episodesQueue.add('generate', {
-        episodeId: episode.id,
-        userId: schedule.userId,
-        duration: episode.targetDurationMinutes,
-        scheduleId: schedule.id,
-      });
-
-      await this.schedulesService.recordRun({
-        scheduleId: schedule.id,
-        userId: schedule.userId,
-        status: 'success',
-        message: 'Episode queued',
-        episodeId: episode.id,
-      });
-      await this.schedulesService.updateAfterRun(schedule, {
-        status: 'success',
-        error: null,
-        nextRunAt,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Schedule ${schedule.id} failed: ${message}`);
-      await this.schedulesService.recordRun({
-        scheduleId: schedule.id,
-        userId: schedule.userId,
-        status: 'failed',
-        message,
-      });
-      await this.schedulesService.updateAfterRun(schedule, {
-        status: 'failed',
-        error: message,
-        nextRunAt,
-      });
-    }
+    // Automatic scheduled runs are disabled in the new plan-based workflow (requires a planId).
+    await this.schedulesService.recordRun({
+      scheduleId: schedule.id,
+      userId: schedule.userId,
+      status: 'skipped',
+      message: 'Skipped: plan-based workflow requires manual plan creation',
+    });
+    await this.schedulesService.updateAfterRun(schedule, {
+      status: 'skipped',
+      error: 'Plan-based workflow requires manual plan creation',
+      nextRunAt,
+    });
   }
 }

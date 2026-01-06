@@ -1,377 +1,257 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Job } from 'bullmq';
-import { v4 as uuid } from 'uuid';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import { spawn } from 'child_process';
 import ffmpeg from 'ffmpeg-static';
 import { parseBuffer } from 'music-metadata';
-import { TopicsService } from '../topics/topics.service';
-import { EpisodesService } from './episodes.service';
-import { LlmService } from '../llm/llm.service';
-import { PerplexityService } from '../perplexity/perplexity.service';
-import { TtsService } from '../tts/tts.service';
-import { Episode, EpisodeSegment } from '../domain/types';
-import { EpisodeSourcesService } from './episode-sources.service';
-import { TopicQueriesService } from '../topic-queries/topic-queries.service';
-import { TopicQueryCreateInput } from '../topic-queries/topic-queries.repository';
-import { CoverImageService } from './cover-image.service';
-import { getDefaultVoices } from '../tts/voice-config';
-import { EntitlementsService } from '../billing/entitlements.service';
-import { StorageService } from '../storage/storage.service';
-import { NotificationsService } from '../notifications/notifications.service';
-import {
-  buildEpisodeSources,
-  buildSegmentContent,
-  combineDialogueScripts,
-  coerceTextToDialogue,
-  estimateDurationSeconds,
-  renderDialogueScript,
-  selectFreshQueries,
-} from './episode-script.utils';
+import { v4 as uuid } from 'uuid';
 import { EpisodeSegmentsService } from './episode-segments.service';
+import { EpisodeSourcesService } from './episode-sources.service';
+import { EpisodesService } from './episodes.service';
+import { EpisodePlansService } from '../episode-plans/episode-plans.service';
 import { SegmentDialogueScript } from '../llm/llm.types';
-import { SegmentDiveDeeperSeedsService } from './segment-dive-deeper-seeds.service';
+import { getDefaultVoice } from '../tts/voice-config';
+import { TtsService } from '../tts/tts.service';
+import { estimateDurationSeconds } from './episode-script.utils';
+import { EpisodeSegment, EpisodeSource } from '../domain/types';
+import { StorageService } from '../storage/storage.service';
+import { CoverImageService } from './cover-image.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { EntitlementsService } from '../billing/entitlements.service';
 import { LlmUsageContextService } from '../llm-usage/llm-usage.context';
+import { ConfigService } from '@nestjs/config';
+import fetch from 'node-fetch';
 
 @Injectable()
 export class EpisodeProcessorService {
   private readonly logger = new Logger(EpisodeProcessorService.name);
-  private readonly segmentGapSeconds = 2;
+  private readonly segmentGapSeconds = 1.5;
 
   constructor(
-    private readonly topicsService: TopicsService,
     private readonly episodesService: EpisodesService,
-    private readonly llmService: LlmService,
-    private readonly llmUsageContext: LlmUsageContextService,
-    private readonly topicQueriesService: TopicQueriesService,
-    private readonly perplexityService: PerplexityService,
-    private readonly ttsService: TtsService,
     private readonly episodeSegmentsService: EpisodeSegmentsService,
     private readonly episodeSourcesService: EpisodeSourcesService,
-    private readonly segmentDiveDeeperSeedsService: SegmentDiveDeeperSeedsService,
-    private readonly coverImageService: CoverImageService,
-    private readonly configService: ConfigService,
-    private readonly entitlementsService: EntitlementsService,
+    private readonly episodePlansService: EpisodePlansService,
+    private readonly ttsService: TtsService,
     private readonly storageService: StorageService,
+    private readonly coverImageService: CoverImageService,
     private readonly notificationsService: NotificationsService,
+    private readonly entitlementsService: EntitlementsService,
+    private readonly llmUsageContext: LlmUsageContextService,
+    private readonly configService: ConfigService,
   ) {}
 
-  async process(job: Job<{ episodeId: string; userId: string }>): Promise<void> {
-    const { episodeId, userId } = job.data;
+  async process(job: Job<{ episodeId: string; userId: string; planId: string }>): Promise<void> {
+    const { episodeId, userId, planId } = job.data;
     return this.llmUsageContext.run({ userId, episodeId, flow: 'episode_generation' }, async () => {
-    let stage = 'init';
-    try {
-      stage = 'get_episode';
-      const episode = await this.episodesService.getEpisode(userId, episodeId);
-      const targetDuration = episode.targetDurationMinutes;
-      stage = 'status:rewriting_queries';
-      await this.markEpisodeStatus(userId, episodeId, 'rewriting_queries');
-      stage = 'list_topics';
-      const activeTopics = episode.diveDeeperSeedId
-        ? [await this.topicsService.getDiveDeeperTopicForSeed(userId, episode.diveDeeperSeedId)]
-        : (await this.topicsService.listTopics(userId, { isActive: true })).sort((a, b) => a.orderIndex - b.orderIndex);
-      if (!activeTopics.length) {
-        throw new Error('No active topics configured for user');
-      }
-      const testMode = this.isTestModeEnabled();
-      const topics = testMode ? activeTopics.slice(0, 1) : activeTopics;
-      if (testMode && activeTopics.length > topics.length) {
-        this.logger.log(`API_TEST_MODE enabled: limiting episode ${episodeId} to ${topics.length} segment(s)`);
-      }
-      const perSegmentTargetMinutes = Math.max(1, Math.round(targetDuration / activeTopics.length));
+      let stage = 'init';
+      try {
+        this.logger.log(`Episode ${episodeId}: starting worker job (plan ${planId})`);
 
-      stage = 'status:retrieving_content';
-      await this.markEpisodeStatus(userId, episodeId, 'retrieving_content');
-      const segments: EpisodeSegment[] = [];
-      let cumulativeStartSeconds = 0;
-      const { voiceA, voiceB } = getDefaultVoices(this.configService);
-      let previousSegmentTitle: string | null = null;
+        stage = 'load_episode';
+        const episode = await this.episodesService.getEpisode(userId, episodeId);
+        if (!planId) {
+          throw new Error('Missing planId in job payload');
+        }
 
-      for (const [index, topic] of topics.entries()) {
-        stage = `topic:${index}:previous_queries`;
-        const previousQueries = await this.topicQueriesService.listByTopic(userId, topic.id);
-        stage = `topic:${index}:plan_queries`;
-        const diveDeeperSeedId = topic.segmentDiveDeeperSeedId;
-        const diveDeeperSeed = diveDeeperSeedId ? await this.segmentDiveDeeperSeedsService.getSeedById(diveDeeperSeedId) : undefined;
-        const topicPlan = await this.llmService.generateTopicQueries(topic.originalText, previousQueries.map((q) => q.query), {
-          mode: diveDeeperSeedId ? 'dive_deeper' : 'standard',
-          seedQueries: diveDeeperSeed?.seedQueries,
-          focusClaims: diveDeeperSeed?.focusClaims,
-          angle: diveDeeperSeed?.angle,
-          contextBundle: diveDeeperSeed?.contextBundle,
-          parentQueryTexts: Array.isArray(diveDeeperSeed?.contextBundle?.parent_query_texts)
-            ? diveDeeperSeed?.contextBundle?.parent_query_texts
-            : undefined,
+        stage = 'load_plan';
+        const plan = await this.episodePlansService.getPlan(userId, planId);
+        if (!plan) {
+          throw new Error('Episode plan not found');
+        }
+        this.logger.debug(`Episode ${episodeId}: loaded plan ${plan.id} (resource ${plan.resourceId}, thread ${plan.threadId})`);
+
+        stage = 'status:retrieving_content';
+        await this.episodesService.updateEpisode(userId, episodeId, { status: 'retrieving_content' });
+        this.logger.log(`Episode ${episodeId}: status -> retrieving_content`);
+
+        stage = 'run_workflow';
+        const workflowResult = await this.callMastraResearchAndScript({
+          episodeSpec: plan.episodeSpec,
+          assistantMessage: plan.assistantMessage,
+          confidence: plan.confidence,
+          userProfile: plan.userProfile,
+          resourceId: plan.resourceId,
+          threadId: plan.threadId,
         });
-        const topicIntent = topicPlan.intent;
-        const freshQueries = selectFreshQueries(topicPlan.queries, previousQueries);
-        const fallbackQueries = selectFreshQueries([topic.originalText], previousQueries);
-        const plannedQueries = (freshQueries.length ? freshQueries : fallbackQueries).slice(0, 5);
-        const queriesToRun = plannedQueries.length ? plannedQueries : [topic.originalText];
 
-        const queryResults: TopicQueryCreateInput[] = [];
-        for (const [orderIndex, queryText] of queriesToRun.entries()) {
-          stage = `topic:${index}:perplexity:${orderIndex}`;
-          const perplexityResult = await this.perplexityService.search(queryText);
-          queryResults.push({
-            topicId: topic.id,
-            episodeId,
-            query: queryText,
-            answer: perplexityResult.answer,
-            citations: perplexityResult.citations || [],
-            citationMetadata: perplexityResult.citationMetadata,
-            orderIndex,
-            intent: topicIntent,
+        if (workflowResult.runId) {
+          try {
+            await this.episodesService.updateEpisode(userId, episodeId, { workflowRunId: workflowResult.runId });
+            this.logger.log(`Episode ${episodeId}: workflow runId ${workflowResult.runId} saved`);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            this.logger.error(`Episode ${episodeId}: failed to save workflow runId ${workflowResult.runId}: ${msg}`);
+          }
+        } else {
+          this.logger.warn(`Episode ${episodeId}: workflow runId missing from start-async response`);
+        }
+
+        const { script, research, summary } = workflowResult.output;
+        this.logger.debug(
+          `Episode ${episodeId}: workflow output received (segments=${script?.script?.segments?.length ?? 0}, sourcesByQuery=${research?.sourcesByQuery?.length ?? 0})`,
+        );
+        const segments = this.buildSegmentsFromScript(script);
+
+        stage = 'status:generating_audio';
+        await this.episodesService.updateEpisode(userId, episodeId, { status: 'generating_audio' });
+        this.logger.log(`Episode ${episodeId}: status -> generating_audio`);
+
+        const voicedSegments = await this.synthesizeSegments(userId, episodeId, segments);
+        stage = 'status:stitching_audio';
+        await this.episodesService.updateEpisode(userId, episodeId, { status: 'stitching_audio' });
+        this.logger.log(`Episode ${episodeId}: status -> stitching_audio`);
+
+        const stitched = await this.stitchAudio(voicedSegments, userId, episodeId);
+        this.logger.log(
+          `Episode ${episodeId}: stitched audio (durationSeconds=${stitched.durationSeconds ?? 'n/a'}, key=${stitched.storageKey ?? stitched.audioUrl})`,
+        );
+
+        stage = 'persist_segments';
+        const { segmentsWithSources, flattenedSources } = this.mapSourcesToSegments(voicedSegments, research);
+        // Drop large research payload before continuing
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        workflowResult.output.research = undefined;
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        (workflowResult as any).output = { ...workflowResult.output, research: undefined };
+        const persistedSegments = await this.episodeSegmentsService.replaceSegments(episodeId, segmentsWithSources);
+
+        stage = 'persist_sources';
+        await this.episodeSourcesService.replaceSources(episodeId, flattenedSources);
+        this.logger.debug(
+          `Episode ${episodeId}: persisted ${persistedSegments.length} segments and ${flattenedSources.length} sources`,
+        );
+
+        stage = 'generate_cover';
+        await this.episodesService.updateEpisode(userId, episodeId, { status: 'generating_cover_image' });
+        this.logger.log(`Episode ${episodeId}: status -> generating_cover_image`);
+
+        const coverPrompt = await this.coverImageService.buildPrompt(script.episodeTitle, persistedSegments);
+        const cover = await this.coverImageService
+          .generateCoverImage(userId, episodeId, coverPrompt)
+          .catch((error) => {
+            this.logger.warn(`Cover generation failed for episode ${episodeId}: ${error instanceof Error ? error.message : error}`);
+            return { prompt: coverPrompt } as { prompt: string; imageUrl?: string; storageKey?: string };
           });
-        }
+        const coverPromptValue = 'prompt' in cover ? cover.prompt : coverPrompt;
 
-        stage = `topic:${index}:persist_queries`;
-        const savedQueries = await this.topicQueriesService.createMany(userId, queryResults);
-        const segmentId = uuid();
-        const segmentSources = buildEpisodeSources(queryResults, episodeId, segmentId);
-        const segmentContent = buildSegmentContent(topic.originalText, savedQueries);
-        stage = `topic:${index}:segment_script`;
-        const instructionParts: string[] = [];
-        if (diveDeeperSeed?.contextBundle?.segment_summary) {
-          instructionParts.push(
-            `This is a Dive Deeper continuation. Assume the listener just heard: ${String(diveDeeperSeed.contextBundle.segment_summary).trim()}`,
-          );
-        }
-        if (diveDeeperSeed?.angle) {
-          instructionParts.push(`Go deeper using this angle: ${diveDeeperSeed.angle.trim()}`);
-        }
-        if (Array.isArray(diveDeeperSeed?.focusClaims) && diveDeeperSeed.focusClaims.length) {
-          instructionParts.push(`Prioritize deepening these claims: ${diveDeeperSeed.focusClaims.slice(0, 3).join(' | ')}`);
-        }
-        if (previousSegmentTitle !== null) {
-          instructionParts.push(`This continues immediately after the previous segment on "${previousSegmentTitle}".`);
-        }
-        const instruction = instructionParts.length ? instructionParts.join(' ') : undefined;
-        const segmentDraft = await this.llmService.generateSegmentScript(
-          topic.originalText,
-          segmentContent,
-          segmentSources,
-          perSegmentTargetMinutes,
-          instruction,
-        );
-        const segmentTitle = segmentDraft.title;
-        const segmentDialogue: SegmentDialogueScript = {
-          title: segmentTitle,
-          intent: undefined,
-          turns: coerceTextToDialogue(segmentDraft.script),
-        };
-        const segmentScriptText = renderDialogueScript(segmentDialogue);
-        stage = `topic:${index}:tts`;
-        const segmentTtsResult = await this.ttsService.synthesize(segmentDialogue, { voiceA, voiceB });
-        const segmentDurationSeconds =
-          segmentTtsResult.durationSeconds ?? estimateDurationSeconds(segmentScriptText);
-        const segmentStartSeconds = cumulativeStartSeconds;
-        const gapPadding = index < topics.length - 1 ? this.segmentGapSeconds : 0;
-        cumulativeStartSeconds += segmentDurationSeconds + gapPadding;
-
-        segments.push({
-          id: segmentId,
-          episodeId,
-          orderIndex: index,
-          title: segmentTitle,
-          intent: segmentDialogue.intent || topicIntent,
-          rawContent: segmentContent,
-          rawSources: segmentSources,
-          script: segmentScriptText,
-          dialogueScript: segmentDialogue,
-          audioUrl: segmentTtsResult.storageKey ?? segmentTtsResult.audioUrl,
-          startTimeSeconds: segmentStartSeconds,
-          durationSeconds: segmentDurationSeconds,
+        stage = 'status:ready';
+        const transcript = this.combineTranscript(script);
+        await this.episodesService.updateEpisode(userId, episodeId, {
+          status: 'ready',
+          transcript,
+          showNotes: script.showNotes.join('\n'),
+          title: script.episodeTitle,
+          description: summary,
+          audioUrl: stitched.storageKey ?? stitched.audioUrl,
+          durationSeconds: stitched.durationSeconds ?? this.sumDurations(voicedSegments),
+          coverImageUrl: cover.imageUrl,
+          coverPrompt: coverPromptValue,
+          targetDurationMinutes: script.durationMinutes,
+          planId: planId,
         });
+        this.logger.log(`Episode ${episodeId}: status -> ready (title="${script.episodeTitle}")`);
 
-        previousSegmentTitle = segmentTitle;
-      }
-
-      stage = 'persist_segments';
-      const persistedSegments =
-        await this.episodeSegmentsService.replaceSegments(episodeId, segments);
-      const normalizedSources = persistedSegments.flatMap((segment) => segment.rawSources || []);
-      stage = 'persist_sources';
-      await this.episodeSourcesService.replaceSources(episodeId, normalizedSources);
-
-      stage = 'status:generating_dive_deeper_seeds';
-      await this.markEpisodeStatus(userId, episodeId, 'generating_dive_deeper_seeds');
-      try {
-        stage = 'generate_dive_deeper_seeds';
-        const now = new Date();
-        const results = await Promise.allSettled(
-          persistedSegments.map(async (segment) => {
-            const parentQueryTexts = this.extractParentQueryTexts(segment.rawContent);
-            const draft = await this.llmService.generateSegmentDiveDeeperSeed({
-              parentTopicText: segment.title ?? 'Segment',
-              segmentScript: segment.script ?? '',
-              segmentSources: segment.rawSources ?? [],
-              parentQueryTexts,
-            });
-            return {
-              id: uuid(),
-              episodeId,
-              segmentId: segment.id,
-              position: segment.orderIndex,
-              title: draft.title,
-              angle: draft.angle,
-              focusClaims: draft.focusClaims ?? [],
-              seedQueries: draft.seedQueries ?? [],
-              contextBundle: draft.contextBundle ?? {},
-              createdAt: now,
-              updatedAt: now,
-            };
-          }),
-        );
-        const seeds = results
-          .filter((result): result is PromiseFulfilledResult<any> => result.status === 'fulfilled')
-          .map((result) => result.value);
-        const failures = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
-        for (const failure of failures) {
-          const error = failure.reason;
-          const message = error instanceof Error ? error.message : String(error);
-          const raw = (error as any)?.rawContent;
-          const snippet =
-            typeof raw === 'string' && raw.trim()
-              ? ` | snippet=${raw.replace(/\s+/g, ' ').trim().slice(0, 200)}`
-              : '';
-          this.logger.warn(`Dive deeper seed generation failed for a segment in episode ${episodeId}: ${message}${snippet}`);
-        }
-        if (seeds.length) {
-          await this.segmentDiveDeeperSeedsService.replaceSeeds(episodeId, seeds);
-        }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        const raw = (error as any)?.rawContent;
-        const snippet =
-          typeof raw === 'string' && raw.trim()
-            ? ` | snippet=${raw.replace(/\s+/g, ' ').trim().slice(0, 260)}`
-            : '';
-        this.logger.warn(`Dive deeper seed generation failed for episode ${episodeId}: ${message}${snippet}`);
-      }
-
-      stage = 'generating_script';
-      await this.markEpisodeStatus(userId, episodeId, 'generating_script');
-      const fullDialogue = combineDialogueScripts(persistedSegments);
-      const fullScript = renderDialogueScript(fullDialogue);
-
-      stage = 'status:generating_audio';
-      await this.markEpisodeStatus(userId, episodeId, 'generating_audio');
-      stage = 'generate_metadata';
-      const metadata = await this.llmService.generateEpisodeMetadata(fullScript, persistedSegments);
-      const coverPrompt = await this.coverImageService.buildPrompt(metadata.title, persistedSegments);
-      const coverPromise = this.coverImageService
-        .generateCoverImage(userId, episodeId, coverPrompt)
-        .then((result) => ({ ...result, prompt: coverPrompt }))
-        .catch((error) => {
-          stage = 'cover_image';
-          const message = error instanceof Error ? error.message : String(error);
-          this.logger.warn(`Cover image generation failed for episode ${episodeId}: ${message}`);
-          return { prompt: coverPrompt } as { prompt: string; imageUrl?: string; storageKey?: string };
-        });
-      const audioPromise = this.stitchSegmentAudioWithRetries(persistedSegments, userId, episodeId).catch((error) => {
-        stage = 'stitch_audio';
-        throw error;
-      });
-      stage = 'generate_audio_and_cover';
-      const [stitchedAudio, coverResult] = await Promise.all([audioPromise, coverPromise]);
-      const audioUrl = stitchedAudio.storageKey ?? stitchedAudio.audioUrl;
-      const episodeDurationSeconds = stitchedAudio.durationSeconds ?? cumulativeStartSeconds;
-
-      stage = 'mark_ready';
-      await this.markEpisodeStatus(userId, episodeId, 'ready', {
-        transcript: fullScript,
-        scriptPrompt: 'Per-segment scripts concatenated in topic order.',
-        showNotes: metadata.showNotes,
-        title: metadata.title,
-        description: metadata.description,
-        audioUrl: audioUrl,
-        durationSeconds: episodeDurationSeconds,
-        coverImageUrl: coverResult.imageUrl,
-        coverPrompt: coverResult.prompt,
-      });
-      try {
-        stage = 'notify_ready';
         await this.notificationsService.notifyEpisodeStatus(userId, {
           episodeId,
           status: 'ready',
-          title: metadata.title,
-          description: metadata.description,
+          title: script.episodeTitle,
+          description: summary,
         });
-      } catch (notifyError) {
-        this.logger.warn(
-          `Failed to send ready notification for episode ${episodeId}: ${
-            notifyError instanceof Error ? notifyError.message : notifyError
-          }`,
-        );
-      }
-      try {
-        stage = 'record_usage';
-        await this.entitlementsService.recordEpisodeUsage(userId, episodeId, episodeDurationSeconds);
+
+        await this.entitlementsService.recordEpisodeUsage(userId, episodeId, stitched.durationSeconds ?? 0);
       } catch (error) {
-        this.logger.error(
-          `Failed to record usage for episode ${episodeId}: ${error instanceof Error ? error.message : error}`,
-        );
-      }
-    } catch (error: any) {
-      const axiosData = error?.response?.data ? ` | data=${JSON.stringify(error.response.data)}` : '';
-      const description = this.describeError(error);
-      this.logger.error(`Failed to process episode ${episodeId} at ${stage}: ${description}${axiosData}`);
-      await this.markEpisodeStatus(userId, episodeId, 'failed', {
-        errorMessage: this.buildErrorMessage(error, stage),
-      });
-      try {
-        await this.notificationsService.notifyEpisodeStatus(userId, {
-          episodeId,
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.error(`Failed to process episode ${episodeId} at stage ${stage}: ${message}`);
+        await this.episodesService.updateEpisode(userId, episodeId, {
           status: 'failed',
-          description: this.buildErrorMessage(error, stage),
+          errorMessage: message,
         });
-      } catch (notifyError) {
-        this.logger.warn(
-          `Failed to send failure notification for episode ${episodeId}: ${
-            notifyError instanceof Error ? notifyError.message : notifyError
-          }`,
-        );
+        try {
+          await this.notificationsService.notifyEpisodeStatus(userId, {
+            episodeId,
+            status: 'failed',
+            description: message,
+          });
+        } catch {
+          /* ignore */
+        }
+        throw error;
       }
-      throw error;
-    }
     });
   }
 
-  private extractParentQueryTexts(rawContent: string): string[] {
-    const lines = (rawContent || '').split('\n');
-    const queries: string[] = [];
-    for (const line of lines) {
-      const match = line.match(/^\s*Query\s+\d+\s*:\s*(.+)\s*$/i);
-      if (!match) {
-        continue;
-      }
-      const query = match[1]?.trim();
-      if (query) {
-        queries.push(query);
-      }
+  private buildSegmentsFromScript(script: any): EpisodeSegment[] {
+    const segments: EpisodeSegment[] = [];
+    const pushSegment = (text: string, title: string, segmentType: 'intro' | 'body' | 'outro', order: number) => {
+      segments.push({
+        id: uuid(),
+        episodeId: '',
+        orderIndex: order,
+        segmentType,
+        title,
+        rawContent: '',
+        rawSources: [],
+        script: text,
+      });
+    };
+    let order = 0;
+    if (script.script.intro?.trim()) {
+      pushSegment(script.script.intro.trim(), 'Intro', 'intro', order++);
     }
-    return queries;
+    for (const seg of script.script.segments ?? []) {
+      pushSegment(seg.script.trim(), seg.title || seg.segmentId || 'Segment', 'body', order++);
+    }
+    if (script.script.outro?.trim()) {
+      pushSegment(script.script.outro.trim(), 'Outro', 'outro', order++);
+    }
+    return segments;
   }
 
-  private async stitchSegmentAudio(
+  private async synthesizeSegments(
+    userId: string,
+    episodeId: string,
+    segments: EpisodeSegment[],
+  ): Promise<EpisodeSegment[]> {
+    const { voice } = getDefaultVoice(this.configService);
+    let runningStart = 0;
+    const voiced: EpisodeSegment[] = [];
+
+    for (const segment of segments) {
+      const dialogue: SegmentDialogueScript = {
+        title: segment.title ?? segment.segmentType ?? 'Segment',
+        intent: undefined,
+        turns: [{ speaker: 'SPEAKER_1', text: segment.script ?? '' }],
+      };
+      const tts = await this.ttsService.synthesize(dialogue, {
+        voice,
+        storageKey: `${userId}/${episodeId}/${segment.id}.mp3`,
+      });
+      const duration = tts.durationSeconds ?? estimateDurationSeconds(segment.script ?? '');
+      voiced.push({
+        ...segment,
+        audioUrl: tts.storageKey ?? tts.audioUrl,
+        durationSeconds: duration,
+        startTimeSeconds: runningStart,
+      });
+      runningStart += duration + this.segmentGapSeconds;
+    }
+    return voiced;
+  }
+
+  private async stitchAudio(
     segments: EpisodeSegment[],
     userId: string,
     episodeId: string,
   ): Promise<{ audioUrl: string; storageKey: string; durationSeconds?: number }> {
     const ffmpegPath = ffmpeg;
-    if (!ffmpegPath) {
-      throw new Error('ffmpeg binary not found; cannot stitch episode audio');
-    }
-    const ordered = [...segments].sort((a, b) => a.orderIndex - b.orderIndex);
-    const audioKeys = ordered
-      .map((segment) => segment.audioUrl?.trim())
-      .filter((key): key is string => Boolean(key));
-    if (!audioKeys.length) {
-      throw new Error('No segment audio available to stitch');
-    }
+    if (!ffmpegPath) throw new Error('ffmpeg binary not found; cannot stitch episode audio');
+    const ordered = [...segments].sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
+    const audioKeys = ordered.map((s) => s.audioUrl?.trim()).filter(Boolean) as string[];
+    if (!audioKeys.length) throw new Error('No segment audio available to stitch');
 
     const workingDir = await this.createWorkingDirectory();
     const concatEntries: string[] = [];
@@ -379,25 +259,22 @@ export class EpisodeProcessorService {
 
     try {
       for (const [index, key] of audioKeys.entries()) {
-        const buffer = await this.storageService.fetchAudioBuffer(key);
-        if (!silencePath && audioKeys.length > 1) {
-          const formatHint = await this.detectAudioFormat(buffer);
-          silencePath = await this.createSilenceFile(ffmpegPath, workingDir, {
-            durationSeconds: this.segmentGapSeconds,
-            ...formatHint,
-          });
-        }
-        const partPath = path.join(workingDir, `part-${index}.mp3`);
-        await fs.writeFile(partPath, buffer);
-        concatEntries.push(`file '${partPath.replace(/'/g, "'\\''")}'`);
-        if (silencePath && index < audioKeys.length - 1) {
-          concatEntries.push(`file '${silencePath.replace(/'/g, "'\\''")}'`);
-        }
+      const buffer = await this.storageService.fetchAudioBuffer(key);
+      if (!silencePath && audioKeys.length > 1) {
+        silencePath = await this.createSilenceFile(ffmpegPath, workingDir, {
+          durationSeconds: this.segmentGapSeconds,
+        });
       }
+      const partPath = path.join(workingDir, `part-${index}.mp3`);
+      await fs.writeFile(partPath, buffer);
+      concatEntries.push(`file '${partPath.replace(/'/g, "'\\''")}'`);
+      if (silencePath && index < audioKeys.length - 1) {
+        concatEntries.push(`file '${silencePath.replace(/'/g, "'\\''")}'`);
+      }
+    }
 
       const listPath = path.join(workingDir, 'concat.txt');
       await fs.writeFile(listPath, concatEntries.join('\n'));
-
       const outputPath = path.join(workingDir, 'output.mp3');
       await this.runFfmpeg(ffmpegPath, ['-y', '-f', 'concat', '-safe', '0', '-i', listPath, '-c', 'copy', outputPath]);
 
@@ -409,6 +286,114 @@ export class EpisodeProcessorService {
     } finally {
       await fs.rm(workingDir, { recursive: true, force: true });
     }
+  }
+
+  private mapSourcesToSegments(
+    segments: EpisodeSegment[],
+    research: any,
+  ): { segmentsWithSources: EpisodeSegment[]; flattenedSources: EpisodeSource[] } {
+    const bodySegments = segments.filter((s) => s.segmentType === 'body');
+    const targetSegments = bodySegments.length ? bodySegments : segments;
+    let segIndex = 0;
+
+    const segmentSourcesMap = new Map<string, EpisodeSource[]>();
+    const flattened: EpisodeSource[] = [];
+
+    for (const entry of research?.sourcesByQuery ?? []) {
+      for (const source of entry.sources ?? []) {
+        if (!source.url) continue;
+        const target = targetSegments[segIndex % targetSegments.length];
+        segIndex += 1;
+        const normalized: EpisodeSource = {
+          id: uuid(),
+          episodeId: '',
+          segmentId: target.id,
+          title: source.title ?? undefined,
+          sourceTitle: source.title ?? source.url,
+          url: source.url,
+          type: undefined,
+        };
+        const bucket = segmentSourcesMap.get(target.id) ?? [];
+        bucket.push(normalized);
+        segmentSourcesMap.set(target.id, bucket);
+        flattened.push(normalized);
+      }
+    }
+
+    const segmentsWithSources = segments.map((seg) => ({
+      ...seg,
+      rawSources: segmentSourcesMap.get(seg.id) ?? [],
+    }));
+
+    return { segmentsWithSources, flattenedSources: flattened };
+  }
+
+  private combineTranscript(script: any): string {
+    const parts: string[] = [];
+    if (script.script.intro) parts.push(script.script.intro);
+    for (const seg of script.script.segments ?? []) {
+      if (seg.script) parts.push(seg.script);
+    }
+    if (script.script.outro) parts.push(script.script.outro);
+    return parts.join('\n\n');
+  }
+
+  private sumDurations(segments: EpisodeSegment[]): number {
+    return segments.reduce(
+      (acc, seg, idx) => acc + (seg.durationSeconds ?? 0) + (idx < segments.length - 1 ? this.segmentGapSeconds : 0),
+      0,
+    );
+  }
+
+  private async callMastraResearchAndScript(input: any): Promise<{ output: any; runId?: string }> {
+    const baseUrl = this.configService.get<string>('MASTRA_API_URL');
+    const apiKey = this.configService.get<string>('MASTRA_API_KEY');
+    if (!baseUrl) {
+      throw new Error('MASTRA_API_URL is required to call Mastra workflows');
+    }
+    const normalizedBase = baseUrl.replace(/\/+$/, '');
+    // Mastra workflow routes use the workflow registry key (camelCase), not the ID string
+    // exposed in `workflow.id`. The server reports this key via GET /api/workflows.
+    const url = `${normalizedBase}/api/workflows/researchAndScriptWorkflow/start-async`;
+    // start-async manages the run lifecycle; we only need to pass the input data (and resourceId when available)
+    const payload: Record<string, any> = { inputData: input };
+    if (input?.resourceId) {
+      payload.resourceId = input.resourceId;
+    }
+    this.logger.debug(`Calling Mastra workflow at ${url}`);
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(`Mastra workflow call failed (${resp.status}): ${text.slice(0, 500)}`);
+    }
+    const raw = await resp.clone().text().catch(() => '');
+    this.logger.debug(
+      `Mastra workflow response (status=${resp.status}, runIdHeader=${resp.headers.get('x-run-id') ?? 'n/a'}): ${raw.slice(0, 800)}`,
+    );
+    const data = await resp.json().catch(() => (raw ? JSON.parse(raw) : {}));
+    const outputCandidate =
+      data?.output ??
+      data?.result?.output ??
+      data?.result?.finalOutput ??
+      (typeof data?.result === 'object' ? data.result : undefined);
+    if (!outputCandidate) {
+      throw new Error('Mastra workflow response missing output');
+    }
+    const runId =
+      data?.runId ??
+      data?.id ??
+      data?.result?.runId ??
+      data?.result?.id ??
+      resp.headers.get('x-run-id') ??
+      undefined;
+    return { ...data, output: outputCandidate, runId };
   }
 
   private async createSilenceFile(
@@ -451,38 +436,9 @@ export class EpisodeProcessorService {
       const channels = (metadata?.format as any)?.numberOfChannels ?? (metadata?.format as any)?.channels;
       return { sampleRate, channels };
     } catch (error) {
-      this.logger.warn(
-        `Failed to read segment audio format: ${error instanceof Error ? error.message : error}`,
-      );
+      this.logger.warn(`Failed to read segment audio format: ${error instanceof Error ? error.message : error}`);
       return {};
     }
-  }
-
-  private async stitchSegmentAudioWithRetries(
-    segments: EpisodeSegment[],
-    userId: string,
-    episodeId: string,
-    maxRetries = 2,
-  ): Promise<{ audioUrl: string; storageKey: string; durationSeconds?: number }> {
-    let attempt = 0;
-    let lastError: unknown;
-    while (attempt <= maxRetries) {
-      try {
-        if (attempt > 0) {
-          this.logger.warn(
-            `Retrying stitch for episode ${episodeId} (attempt ${attempt + 1} of ${maxRetries + 1})`,
-          );
-        }
-        return await this.stitchSegmentAudio(segments, userId, episodeId);
-      } catch (error) {
-        lastError = error;
-        attempt += 1;
-        if (attempt > maxRetries) {
-          throw error;
-        }
-      }
-    }
-    throw lastError ?? new Error('Unknown stitching error');
   }
 
   private async runFfmpeg(ffmpegPath: string, args: string[]): Promise<void> {
@@ -490,29 +446,10 @@ export class EpisodeProcessorService {
       const proc = spawn(ffmpegPath, args, { stdio: 'ignore' });
       proc.on('error', reject);
       proc.on('close', (code) => {
-        if (code === 0) {
-          resolve();
-        } else {
-          reject(new Error(`ffmpeg exited with code ${code}`));
-        }
+        if (code === 0) resolve();
+        else reject(new Error(`ffmpeg exited with code ${code}`));
       });
     });
-  }
-
-  private async measureDurationSeconds(buffer: Buffer): Promise<number | undefined> {
-    try {
-      const metadata = await parseBuffer(buffer, 'audio/mpeg');
-      const seconds = metadata?.format?.duration;
-      if (!seconds || !isFinite(seconds) || seconds <= 0) {
-        return undefined;
-      }
-      return Math.round(seconds);
-    } catch (error) {
-      this.logger.warn(
-        `Failed to read stitched audio duration: ${error instanceof Error ? error.message : error}`,
-      );
-      return undefined;
-    }
   }
 
   private async createWorkingDirectory(): Promise<string> {
@@ -521,108 +458,14 @@ export class EpisodeProcessorService {
     return dir;
   }
 
-  private async markEpisodeStatus(
-    userId: string,
-    episodeId: string,
-    status: Episode['status'],
-    extra?: Partial<Episode>,
-  ) {
-    await this.episodesService.updateEpisode(userId, episodeId, { status, ...extra });
-  }
-
-  private isTestModeEnabled(): boolean {
-    const value = this.configService.get('API_TEST_MODE');
-    if (typeof value === 'boolean') {
-      return value;
-    }
-    if (typeof value !== 'string') {
-      return false;
-    }
-    const normalized = value.trim().toLowerCase();
-    return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on';
-  }
-
-  private buildErrorMessage(_: unknown, stage: string): string {
-    const label = this.getUserFacingStageLabel(stage);
-    if (label) {
-      return `Episode generation failed while ${label}. Please try again soon.`;
-    }
-    return 'Episode generation failed. Please try again soon.';
-  }
-
-  private describeError(error: unknown): string {
-    if (!error) return 'Unknown error';
-    const err = error as any;
-    const parts: string[] = [];
-    const message = err?.message || (typeof error === 'string' ? error : '');
-    if (message) parts.push(message);
-    const status = err?.response?.status ?? err?.status;
-    if (status) parts.push(`status=${status}`);
-    const code = err?.code || err?.response?.data?.code;
-    if (code) parts.push(`code=${code}`);
-    const data = err?.response?.data;
-    if (data) {
-      const dataText = typeof data === 'string' ? data : this.safeStringify(data);
-      if (dataText) {
-        parts.push(`data=${dataText}`);
-      }
-    }
-    if (err?.stack && typeof err.stack === 'string') {
-      const firstLine = err.stack.split('\n')[0]?.trim();
-      if (firstLine) {
-        parts.push(firstLine);
-      }
-    }
-    return parts.filter(Boolean).join(' | ') || String(error);
-  }
-
-  private getUserFacingStageLabel(stage: string): string | null {
-    if (!stage) {
-      return null;
-    }
-    const normalized = stage.toLowerCase();
-    if (normalized.includes('segment_script')) {
-      return 'writing this topic script';
-    }
-    if (normalized.includes('enhance_dialogue')) {
-      return 'refining the dialogue';
-    }
-    if (normalized.includes('perplexity') || normalized.includes('retrieving_content')) {
-      return 'gathering research';
-    }
-    if (normalized.includes('tts')) {
-      return 'synthesizing the audio';
-    }
-    if (normalized.includes('generating_audio') || normalized.includes('stitch_audio')) {
-      return 'assembling the audio';
-    }
-    if (normalized.includes('generate_metadata')) {
-      return 'summarizing the episode';
-    }
-    if (normalized.includes('cover_image')) {
-      return 'creating the cover art';
-    }
-    if (normalized.includes('persist_segments') || normalized.includes('persist_sources')) {
-      return 'saving the generated content';
-    }
-    if (normalized.includes('mark_ready')) {
-      return 'finalizing the episode';
-    }
-    if (normalized.includes('notify')) {
-      return 'sending an update';
-    }
-    if (normalized.includes('list_topics') || normalized.includes('init')) {
-      return 'reviewing topics';
-    }
-    return 'processing your episode';
-  }
-
-  private safeStringify(value: unknown, maxLength = 500): string | undefined {
+  private async measureDurationSeconds(buffer: Buffer): Promise<number | undefined> {
     try {
-      const serialized = typeof value === 'string' ? value : JSON.stringify(value);
-      if (!serialized) return undefined;
-      return serialized.length > maxLength ? `${serialized.slice(0, maxLength)}...` : serialized;
-    } catch {
+      const metadata = await parseBuffer(buffer, 'audio/mpeg');
+      const seconds = metadata?.format?.duration;
+      if (!seconds || !isFinite(seconds) || seconds <= 0) return undefined;
+      return Math.round(seconds);
+    } catch (error) {
+      this.logger.warn(`Failed to read stitched audio duration: ${error instanceof Error ? error.message : error}`);
       return undefined;
     }
   }

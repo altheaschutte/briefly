@@ -27,6 +27,7 @@ async function bootstrap() {
     credentials: allowCredentials,
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'Origin', 'X-Requested-With'],
+    exposedHeaders: ['x-run-id', 'x-thread-id'],
   });
 
   const port = process.env.PORT ? Number(process.env.PORT) : 3000;

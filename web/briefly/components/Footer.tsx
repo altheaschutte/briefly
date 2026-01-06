@@ -9,7 +9,7 @@ const legalLinks = [
 
 export default function Footer() {
   return (
-    <footer className="bg-surface">
+    <footer className="site-footer bg-surface">
       <div className="container flex flex-col gap-6 py-8 md:flex-row md:items-center md:justify-between">
         <div className="space-y-2">
           <p className="text-sm font-semibold text-ink">Need help?</p>

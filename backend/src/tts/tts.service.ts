@@ -9,7 +9,7 @@ export class TtsService {
 
   synthesize(
     script: SegmentDialogueScript,
-    options: { voiceA: string; voiceB: string; storageKey?: string },
+    options: { voice: string; storageKey?: string },
   ): Promise<TtsSynthesisResult> {
     return this.provider.synthesize(script, options);
   }

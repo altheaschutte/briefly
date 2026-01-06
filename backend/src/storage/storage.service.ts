@@ -7,6 +7,7 @@ import { v4 as uuid } from 'uuid';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { Readable } from 'stream';
+import { STORAGE_CONFIG } from './storage.config';
 
 @Injectable()
 export class StorageService {
@@ -17,21 +18,13 @@ export class StorageService {
   private imageBucket?: string;
   private imageRegion?: string;
   private imageClient?: S3Client;
-  private readonly driver: 's3' | 'local';
   private readonly audioSignedUrlTtl: number;
 
   constructor(private readonly configService: ConfigService) {
-    this.driver = (this.configService.get<string>('STORAGE_DRIVER') || 's3').toLowerCase() === 'local' ? 'local' : 's3';
-    this.audioSignedUrlTtl = Number(this.configService.get<string>('AUDIO_URL_EXPIRY_SECONDS')) || 60 * 60;
+    this.audioSignedUrlTtl = STORAGE_CONFIG.audioUrlExpirySeconds;
   }
 
   async uploadAudio(buffer: Buffer, key?: string): Promise<{ key: string; url: string; localPath?: string }> {
-    if (this.driver === 'local') {
-      const objectKey = key ?? `audio/${uuid()}.mp3`;
-      const fullPath = await this.saveLocalCopy(objectKey, buffer);
-      return { key: fullPath, url: `file://${fullPath}`, localPath: fullPath };
-    }
-
     const { bucket, client } = this.getClient();
     const objectKey = this.normalizeKey(key ?? `audio/${uuid()}.mp3`);
     await client.send(
@@ -58,12 +51,6 @@ export class StorageService {
     key?: string,
     options?: { contentType?: string; cacheControl?: string },
   ): Promise<{ key: string; url: string; localPath?: string }> {
-    if (this.driver === 'local') {
-      const objectKey = key ?? `images/${uuid()}.png`;
-      const fullPath = await this.saveLocalCopy(objectKey, buffer);
-      return { key: fullPath, url: `file://${fullPath}`, localPath: fullPath };
-    }
-
     const { bucket, region, client } = this.getImageClient();
     const objectKey = key ?? `images/${uuid()}.png`;
     await client.send(
@@ -89,9 +76,6 @@ export class StorageService {
   }
 
   async getSignedUrl(key: string, expiresInSeconds?: number): Promise<string> {
-    if (this.driver === 'local') {
-      return key.startsWith('file://') ? key : `file://${key}`;
-    }
     const ttl = expiresInSeconds ?? this.audioSignedUrlTtl;
     const { bucket, client } = this.getClient();
     const normalizedKey = this.normalizeKey(key);
@@ -125,11 +109,6 @@ export class StorageService {
       return Buffer.from(response.data);
     }
 
-    if (this.driver === 'local' || keyOrUrl.startsWith('file://')) {
-      const localPath = keyOrUrl.replace(/^file:\/\//, '');
-      return fs.readFile(localPath);
-    }
-
     const normalizedKey = this.normalizeKey(keyOrUrl);
     const { bucket, client } = this.getClient();
     const response = await client.send(
@@ -155,11 +134,7 @@ export class StorageService {
   }
 
   private shouldMirrorToLocal(): boolean {
-    const flag = this.configService.get<string>('SAVE_LOCAL_AUDIO_COPY');
-    if (flag !== undefined) {
-      return flag.toLowerCase() === 'true';
-    }
-    return process.env.NODE_ENV !== 'production';
+    return STORAGE_CONFIG.saveLocalAudioCopy;
   }
 
   private normalizeKey(keyOrUrl: string): string {
@@ -223,7 +198,7 @@ export class StorageService {
       return { bucket: this.imageBucket, region: this.imageRegion, client: this.imageClient };
     }
 
-    const { bucket, region, accessKeyId, secretAccessKey, endpoint } = this.requireImageConfigBundle();
+    const { bucket, region, accessKeyId, secretAccessKey, endpoint } = this.requireAudioConfigBundle();
     this.imageClient = new S3Client({
       region,
       endpoint: endpoint || undefined,
@@ -233,36 +208,18 @@ export class StorageService {
         secretAccessKey,
       },
     });
-    this.imageBucket = bucket;
-    this.imageRegion = region;
-    return { bucket, region, client: this.imageClient };
+    this.imageBucket = STORAGE_CONFIG.imagesBucketName || bucket;
+    this.imageRegion = STORAGE_CONFIG.imagesRegion || region;
+    return { bucket: this.imageBucket, region: this.imageRegion, client: this.imageClient };
   }
 
   private requireAudioConfigBundle() {
-    const bucket =
-      this.configService.get<string>('AUDIO_BUCKET_NAME') ||
-      this.configService.get<string>('S3_BUCKET_NAME');
-    if (!bucket) {
-      throw new Error('Missing required env var: AUDIO_BUCKET_NAME or S3_BUCKET_NAME');
-    }
-    const region =
-      this.configService.get<string>('AUDIO_S3_REGION') ||
-      this.requireConfig('S3_REGION');
+    const bucket = STORAGE_CONFIG.audioBucketName;
+    const region = STORAGE_CONFIG.audioRegion;
     const accessKeyId = this.requireConfig('S3_ACCESS_KEY_ID');
     const secretAccessKey = this.requireConfig('S3_SECRET_ACCESS_KEY');
     const endpoint = this.configService.get<string>('S3_ENDPOINT');
     return { bucket, region, accessKeyId, secretAccessKey, endpoint };
-  }
-
-  private requireImageConfigBundle() {
-    const base = this.requireAudioConfigBundle();
-    const imageBucket = this.configService.get<string>('S3_IMAGES_BUCKET_NAME');
-    const imageRegion = this.configService.get<string>('S3_IMAGES_REGION');
-    return {
-      ...base,
-      bucket: imageBucket || base.bucket,
-      region: imageRegion || base.region,
-    };
   }
 
   private requireConfig(key: string): string {
@@ -274,9 +231,6 @@ export class StorageService {
   }
 
   getPublicUrl(key: string): string {
-    if (this.driver === 'local') {
-      return key.startsWith('file://') ? key : `file://${path.resolve(key)}`;
-    }
     const { bucket, region } = this.requireAudioConfigBundle();
     return this.getPublicUrlForBucket(bucket, region, key);
   }

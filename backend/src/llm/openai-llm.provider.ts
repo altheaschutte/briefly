@@ -42,33 +42,14 @@ export class OpenAiLlmProvider implements LlmProvider {
   private readonly apiKeyConfigKeys: string[];
   private readonly baseUrlConfigKeys: string[];
   private readonly defaultBaseUrl?: string;
-  private readonly rewriteModelConfigKeys: string[];
-  private readonly scriptModelConfigKeys: string[];
-  private readonly extractionModelConfigKeys: string[];
 
   constructor(private readonly configService: ConfigService, options: OpenAiLlmProviderOptions = {}) {
     this.apiKeyConfigKeys = this.normalizeKeys(options.apiKeyConfigKeys, options.apiKeyConfigKey, 'OPENAI_API_KEY');
     this.baseUrlConfigKeys = this.normalizeKeys(options.baseUrlConfigKeys, options.baseUrlConfigKey, 'OPENAI_BASE_URL');
-    this.rewriteModelConfigKeys = this.normalizeKeys(
-      options.rewriteModelConfigKeys,
-      undefined,
-      'LLM_PROVIDER_REWRITE_MODEL',
-    );
-    this.scriptModelConfigKeys = this.normalizeKeys(
-      options.scriptModelConfigKeys,
-      undefined,
-      'LLM_PROVIDER_SCRIPT_MODEL',
-    );
-    this.extractionModelConfigKeys = this.normalizeKeys(
-      options.extractionModelConfigKeys,
-      undefined,
-      'LLM_PROVIDER_EXTRACTION_MODEL',
-    );
     this.defaultBaseUrl = options.defaultBaseUrl;
-    this.queryModel = this.getFirstConfigValue(this.rewriteModelConfigKeys) ?? options.defaultQueryModel ?? 'gpt-4.1';
-    this.scriptModel = this.getFirstConfigValue(this.scriptModelConfigKeys) ?? options.defaultScriptModel ?? 'gpt-4.1';
-    this.transcriptExtractionModel =
-      this.getFirstConfigValue(this.extractionModelConfigKeys) ?? options.defaultExtractionModel ?? this.queryModel;
+    this.queryModel = options.defaultQueryModel ?? 'gpt-4.1';
+    this.scriptModel = options.defaultScriptModel ?? 'gpt-4.1';
+    this.transcriptExtractionModel = options.defaultExtractionModel ?? this.queryModel;
     this.providerLabel = options.providerLabel ?? 'OpenAI LLM provider';
     this.usageReporter = options.usageReporter;
   }

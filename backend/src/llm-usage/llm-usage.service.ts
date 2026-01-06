@@ -40,7 +40,6 @@ export class LlmUsageService implements LlmUsageReporter {
     const record: LlmUsageRecord = {
       userId,
       episodeId: ctx?.episodeId,
-      topicId: ctx?.topicId,
       segmentId: ctx?.segmentId,
       flow: ctx?.flow,
       operation: event.operation,
@@ -56,7 +55,7 @@ export class LlmUsageService implements LlmUsageReporter {
     this.logger.debug(
       `LLM usage: op=${record.operation} model=${record.model || 'unknown'} tokens=${record.totalTokens ?? 'n/a'} costUsd=${
         record.costUsd ?? 'n/a'
-      } episode=${record.episodeId ?? '-'} topic=${record.topicId ?? '-'}`,
+      } episode=${record.episodeId ?? '-'}`,
     );
 
     try {
@@ -68,11 +67,6 @@ export class LlmUsageService implements LlmUsageReporter {
 
   async getEpisodeTotals(userId: string, episodeId: string): Promise<LlmUsageTotals> {
     const records = await this.repository.listByEpisode(userId, episodeId);
-    return this.summarize(records);
-  }
-
-  async getTopicTotals(userId: string, topicId: string): Promise<LlmUsageTotals> {
-    const records = await this.repository.listByTopic(userId, topicId);
     return this.summarize(records);
   }
 

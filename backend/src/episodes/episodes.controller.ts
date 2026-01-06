@@ -1,16 +1,29 @@
-import { Body, Controller, Delete, Get, Inject, Logger, Param, Post, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Inject,
+  Logger,
+  Param,
+  Post,
+  Req,
+  BadRequestException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import { Queue } from 'bullmq';
+import fetch from 'node-fetch';
 import { EpisodesService } from './episodes.service';
 import { EPISODES_QUEUE_TOKEN } from '../queue/queue.constants';
 import { StorageService } from '../storage/storage.service';
 import { EpisodeSourcesService } from './episode-sources.service';
-import { Episode, EpisodeSegment, EpisodeSource, SegmentDiveDeeperSeed } from '../domain/types';
+import { Episode, EpisodeSegment, EpisodeSource } from '../domain/types';
 import { EpisodeSegmentsService } from './episode-segments.service';
-import { EntitlementsService } from '../billing/entitlements.service';
-import { SegmentDiveDeeperSeedsService } from './segment-dive-deeper-seeds.service';
-import { TopicsService } from '../topics/topics.service';
 import { LlmUsageService } from '../llm-usage/llm-usage.service';
+import { EntitlementsService } from '../billing/entitlements.service';
+import { EpisodePlansService } from '../episode-plans/episode-plans.service';
 
 @Controller('episodes')
 export class EpisodesController {
@@ -21,20 +34,27 @@ export class EpisodesController {
     private readonly storageService: StorageService,
     private readonly episodeSourcesService: EpisodeSourcesService,
     private readonly episodeSegmentsService: EpisodeSegmentsService,
-    private readonly segmentDiveDeeperSeedsService: SegmentDiveDeeperSeedsService,
-    private readonly topicsService: TopicsService,
     private readonly entitlementsService: EntitlementsService,
     private readonly llmUsageService: LlmUsageService,
+    private readonly episodePlansService: EpisodePlansService,
     @Inject(EPISODES_QUEUE_TOKEN) private readonly episodesQueue: Queue,
+    private readonly configService: ConfigService,
   ) {}
 
   @Post()
-  async createEpisode(@Req() req: Request, @Body('duration') duration?: number) {
+  async createEpisode(@Req() req: Request, @Body('planId') planId?: string) {
     const userId = (req as any).user?.id as string;
-    const targetDuration = duration ?? this.entitlementsService.getDefaultDurationMinutes();
+    if (!planId) {
+      throw new BadRequestException('planId is required');
+    }
+    const plan = await this.episodePlansService.getPlan(userId, planId);
+    if (!plan) {
+      throw new BadRequestException('Episode plan not found');
+    }
+    const targetDuration = plan.episodeSpec?.durationMinutes ?? this.entitlementsService.getDefaultDurationMinutes();
     await this.entitlementsService.ensureCanCreateEpisode(userId, targetDuration);
-    const episode = await this.episodesService.createEpisode(userId, targetDuration);
-    await this.episodesQueue.add('generate', { episodeId: episode.id, userId, duration: targetDuration });
+    const episode = await this.episodesService.createEpisode(userId, targetDuration, planId);
+    await this.episodesQueue.add('generate', { episodeId: episode.id, userId, planId });
     return { episodeId: episode.id, status: episode.status };
   }
 
@@ -56,29 +76,6 @@ export class EpisodesController {
       includeSources: true,
       includeDiveDeeperSeeds: true,
     });
-  }
-
-  @Post(':episodeId/dive-deeper/:seedId')
-  async createDiveDeeperEpisode(
-    @Req() req: Request,
-    @Param('episodeId') episodeId: string,
-    @Param('seedId') seedId: string,
-    @Body('duration') duration?: number,
-  ) {
-    const userId = (req as any).user?.id as string;
-    await this.episodesService.getEpisode(userId, episodeId);
-    const seed = await this.segmentDiveDeeperSeedsService.getSeedForEpisode(episodeId, seedId);
-    const targetDuration = duration ?? this.episodesService.getDiveDeeperDefaultDurationMinutes();
-    await this.entitlementsService.ensureCanCreateEpisode(userId, targetDuration);
-    await this.topicsService.getOrCreateDiveDeeperTopic(userId, seed);
-    const episode = await this.episodesService.createDiveDeeperEpisode(userId, {
-      parentEpisodeId: episodeId,
-      parentSegmentId: seed.segmentId,
-      diveDeeperSeedId: seed.id,
-      targetDurationMinutes: targetDuration,
-    });
-    await this.episodesQueue.add('generate', { episodeId: episode.id, userId, duration: targetDuration });
-    return { episodeId: episode.id, status: episode.status };
   }
 
   @Get(':id/sources')
@@ -103,11 +100,99 @@ export class EpisodesController {
     return this.llmUsageService.getEpisodeTotals(userId, id);
   }
 
+  @Get(':id/status')
+  async getEpisodeWorkflowStatus(@Req() req: Request, @Param('id') id: string) {
+    const userId = (req as any).user?.id as string;
+    const episode = await this.episodesService.getEpisode(userId, id);
+    if (!episode.workflowRunId) {
+      throw new BadRequestException('No workflow run id is recorded for this episode.');
+    }
+
+    const baseUrl = this.configService.get<string>('MASTRA_API_URL');
+    const apiKey = this.configService.get<string>('MASTRA_API_KEY');
+    if (!baseUrl) {
+      throw new ServiceUnavailableException('MASTRA_API_URL is not configured');
+    }
+    const normalizedBase = baseUrl.replace(/\/+$/, '');
+    const apiBase = normalizedBase.endsWith('/api') ? normalizedBase : `${normalizedBase}/api`;
+    const workflowKey = 'researchAndScriptWorkflow'; // registry key used by Mastra routes
+    const url = `${apiBase}/workflows/${workflowKey}/runs/${encodeURIComponent(episode.workflowRunId)}`;
+
+    let resp;
+    try {
+      resp = await fetch(url, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to reach Mastra for run ${episode.workflowRunId}: ${message}`);
+      throw new ServiceUnavailableException(`Failed to reach Mastra: ${message}`);
+    }
+
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '');
+      throw new ServiceUnavailableException(
+        `Mastra run lookup failed (${resp.status}): ${text.slice(0, 200)}`,
+      );
+    }
+
+    const payload = await resp.json().catch(() => ({}));
+    const workerUpdatedAt = episode.updatedAt instanceof Date ? episode.updatedAt.toISOString() : episode.updatedAt;
+    const worker = {
+      status: episode.status,
+      updatedAt: workerUpdatedAt ?? null,
+      errorMessage: episode.errorMessage ?? null,
+    };
+
+    return {
+      workflowId: workflowKey,
+      runId: episode.workflowRunId,
+      run: payload,
+      worker,
+    };
+  }
+
   @Delete(':id')
   async archiveEpisode(@Req() req: Request, @Param('id') id: string) {
     const userId = (req as any).user?.id as string;
     await this.episodesService.archiveEpisode(userId, id);
     return { success: true };
+  }
+
+  @Get('workflows/research-and-script/health')
+  async checkResearchWorkflow(@Req() req: Request) {
+    const userId = (req as any).user?.id as string;
+    if (!userId) {
+      throw new ServiceUnavailableException('Missing user session');
+    }
+    const baseUrl = this.configService.get<string>('MASTRA_API_URL');
+    if (!baseUrl) {
+      throw new ServiceUnavailableException('MASTRA_API_URL is not configured');
+    }
+    const normalizedBase = baseUrl.replace(/\/+$/, '');
+    const apiBase = normalizedBase.endsWith('/api') ? normalizedBase : `${normalizedBase}/api`;
+    const url = `${apiBase}/workflows?partial=true`;
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '');
+      throw new ServiceUnavailableException(
+        `Mastra workflows check failed (${resp.status}): ${text.slice(0, 200)}`,
+      );
+    }
+    const data: any = await resp.json().catch(() => ({}));
+    const workflows = Array.isArray(data) ? data : data?.workflows ?? [];
+    const workflowId = 'research-and-script-workflow';
+    const available = workflows.some((workflow: any) => workflow?.id === workflowId);
+
+    return {
+      ok: true,
+      workflowId,
+      available,
+      url,
+    };
   }
 
   private async formatEpisodeResponse(
@@ -120,10 +205,6 @@ export class EpisodesController {
     const audioUrl = await this.resolveAudioUrl(userId, episode);
     const segments = options?.includeSegments ? await this.episodeSegmentsService.listSegments(episode.id) : undefined;
     const sources = options?.includeSources ? await this.episodeSourcesService.listSources(episode.id) : undefined;
-    const diveDeeperSeeds = options?.includeDiveDeeperSeeds
-      ? await this.segmentDiveDeeperSeedsService.listSeeds(episode.id)
-      : undefined;
-
     return {
       ...episode,
       audioUrl: audioUrl ?? undefined,
@@ -140,7 +221,7 @@ export class EpisodesController {
       dive_deeper_seed_id: episode.diveDeeperSeedId ?? null,
       segments: segments?.map((segment) => this.formatSegmentResponse(segment)),
       sources: sources?.map((source) => this.formatSourceResponse(source)),
-      dive_deeper_seeds: diveDeeperSeeds?.map((seed) => this.formatDiveDeeperSeedResponse(seed)),
+      dive_deeper_seeds: [],
     };
   }
 
@@ -165,23 +246,9 @@ export class EpisodesController {
       ...source,
       episode_id: source.episodeId ?? null,
       segment_id: source.segmentId ?? null,
+      title: source.title ?? source.sourceTitle,
       source_title: source.sourceTitle,
       url: source.url,
-    };
-  }
-
-  private formatDiveDeeperSeedResponse(seed: SegmentDiveDeeperSeed) {
-    const createdAt = seed.createdAt instanceof Date ? seed.createdAt.toISOString() : seed.createdAt;
-    const updatedAt = seed.updatedAt instanceof Date ? seed.updatedAt.toISOString() : seed.updatedAt;
-    return {
-      ...seed,
-      episode_id: seed.episodeId,
-      segment_id: seed.segmentId,
-      focus_claims: seed.focusClaims,
-      seed_queries: seed.seedQueries,
-      context_bundle: seed.contextBundle,
-      created_at: createdAt ?? null,
-      updated_at: updatedAt ?? null,
     };
   }
 

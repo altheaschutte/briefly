@@ -30,7 +30,12 @@ export class SupabaseEpisodesRepository implements EpisodesRepository {
     });
   }
 
-  async create(userId: string, targetDurationMinutes: number, status: Episode['status']): Promise<Episode> {
+  async create(
+    userId: string,
+    targetDurationMinutes: number,
+    status: Episode['status'],
+    options?: { planId?: string },
+  ): Promise<Episode> {
     return handleSupabaseErrors(this.logger, `create episode for user ${userId}`, async () => {
       const now = new Date().toISOString();
       const payload: EpisodeRow = {
@@ -46,13 +51,14 @@ export class SupabaseEpisodesRepository implements EpisodesRepository {
         cover_image_url: null,
         cover_prompt: null,
         transcript: null,
-        script_prompt: null,
         show_notes: null,
         description: null,
         error_message: null,
         parent_episode_id: null,
         parent_segment_id: null,
         dive_deeper_seed_id: null,
+        plan_id: options?.planId ?? null,
+        workflow_run_id: null,
         created_at: now,
         updated_at: now,
         usage_recorded_at: null,
@@ -127,7 +133,6 @@ export class SupabaseEpisodesRepository implements EpisodesRepository {
       if (updates.archivedAt !== undefined) payload.archived_at = updates.archivedAt?.toISOString() ?? null;
       if (updates.audioUrl !== undefined) payload.audio_url = updates.audioUrl ?? null;
       if (updates.transcript !== undefined) payload.transcript = updates.transcript ?? null;
-      if (updates.scriptPrompt !== undefined) payload.script_prompt = updates.scriptPrompt ?? null;
       if (updates.coverImageUrl !== undefined) payload.cover_image_url = updates.coverImageUrl ?? null;
       if (updates.coverPrompt !== undefined) payload.cover_prompt = updates.coverPrompt ?? null;
       if (updates.showNotes !== undefined) payload.show_notes = updates.showNotes ?? null;
@@ -141,6 +146,8 @@ export class SupabaseEpisodesRepository implements EpisodesRepository {
       if (updates.parentEpisodeId !== undefined) payload.parent_episode_id = updates.parentEpisodeId ?? null;
       if (updates.parentSegmentId !== undefined) payload.parent_segment_id = updates.parentSegmentId ?? null;
       if (updates.diveDeeperSeedId !== undefined) payload.dive_deeper_seed_id = updates.diveDeeperSeedId ?? null;
+      if (updates.planId !== undefined) payload.plan_id = updates.planId ?? null;
+      if (updates.workflowRunId !== undefined) payload.workflow_run_id = updates.workflowRunId ?? null;
 
       const { data, error } = await this.client
         .from('episodes')
@@ -198,13 +205,14 @@ export class SupabaseEpisodesRepository implements EpisodesRepository {
       coverImageUrl: row.cover_image_url ?? undefined,
       coverPrompt: row.cover_prompt ?? undefined,
       transcript: row.transcript ?? undefined,
-      scriptPrompt: row.script_prompt ?? undefined,
       showNotes: row.show_notes ?? undefined,
       description: row.description ?? undefined,
       errorMessage: row.error_message ?? undefined,
       parentEpisodeId: row.parent_episode_id ?? undefined,
       parentSegmentId: row.parent_segment_id ?? undefined,
       diveDeeperSeedId: row.dive_deeper_seed_id ?? undefined,
+      planId: row.plan_id ?? undefined,
+      workflowRunId: row.workflow_run_id ?? undefined,
       usageRecordedAt: row.usage_recorded_at ? new Date(row.usage_recorded_at) : undefined,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),

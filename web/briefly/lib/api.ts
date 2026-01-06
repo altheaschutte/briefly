@@ -1,4 +1,13 @@
-import { Episode, Topic, Entitlements, BillingTier, BillingTierInfo } from "./types";
+import {
+  Episode,
+  Topic,
+  Entitlements,
+  BillingTier,
+  BillingTierInfo,
+  EpisodeSegment,
+  EpisodeSource,
+  SegmentDiveDeeperSeed
+} from "./types";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ||
@@ -70,21 +79,76 @@ async function apiRequest<T>(
   return (await res.json()) as T;
 }
 
+const parseNumber = (value: any): number | undefined => {
+  if (typeof value === "number") return value;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const parseDate = (value: any): string | undefined => {
+  if (!value) return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+};
+
+const normalizeSource = (raw: any): EpisodeSource => {
+  const url = typeof raw?.url === "string" ? raw.url : undefined;
+  return {
+    id: raw?.id ?? raw?.source_id ?? crypto.randomUUID(),
+    episodeId: raw?.episode_id ?? raw?.episodeId,
+    segmentId: raw?.segment_id ?? raw?.segmentId,
+    sourceTitle: raw?.sourceTitle ?? raw?.source_title ?? raw?.title,
+    source_title: raw?.source_title,
+    url,
+    type: raw?.type
+  };
+};
+
+const normalizeSegment = (raw: any): EpisodeSegment => {
+  const sourcesArray = raw?.sources ?? raw?.raw_sources ?? raw?.rawSources;
+  const sources = Array.isArray(sourcesArray) ? sourcesArray.map(normalizeSource) : undefined;
+  const durationSeconds = parseNumber(raw?.duration_seconds ?? raw?.durationSeconds);
+  const startTimeSeconds = parseNumber(raw?.start_time_seconds ?? raw?.startTimeSeconds);
+  const orderIndex = parseNumber(raw?.orderIndex ?? raw?.order_index);
+
+  return {
+    id: raw?.id ?? raw?.segment_id ?? crypto.randomUUID(),
+    title: raw?.title,
+    orderIndex,
+    order_index: orderIndex,
+    script: raw?.script,
+    rawContent: raw?.raw_content ?? raw?.rawContent,
+    raw_content: raw?.raw_content ?? raw?.rawContent,
+    audioUrl: raw?.audioUrl ?? raw?.audio_url,
+    audio_url: raw?.audio_url ?? raw?.audioUrl,
+    durationSeconds,
+    duration_seconds: durationSeconds,
+    startTimeSeconds,
+    start_time_seconds: startTimeSeconds,
+    sources,
+    rawSources: sources,
+    raw_sources: sources
+  };
+};
+
+const normalizeDiveDeeperSeed = (raw: any): SegmentDiveDeeperSeed => ({
+  id: raw?.id ?? crypto.randomUUID(),
+  episodeId: raw?.episode_id ?? raw?.episodeId,
+  segmentId: raw?.segment_id ?? raw?.segmentId,
+  position: parseNumber(raw?.position),
+  title: raw?.title ?? "Dive deeper",
+  angle: raw?.angle,
+  focusClaims: Array.isArray(raw?.focus_claims ?? raw?.focusClaims) ? raw.focus_claims ?? raw.focusClaims : undefined,
+  seedQueries: Array.isArray(raw?.seed_queries ?? raw?.seedQueries) ? raw.seed_queries ?? raw.seedQueries : undefined,
+  contextBundle: raw?.context_bundle ?? raw?.contextBundle,
+  createdAt: parseDate(raw?.created_at ?? raw?.createdAt),
+  updatedAt: parseDate(raw?.updated_at ?? raw?.updatedAt)
+});
+
 const normalizeEpisode = (raw: any): Episode => {
-  const parseNumber = (value: any) => {
-    if (typeof value === "number") return value;
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  };
-
-  const parseDate = (value: any) => {
-    if (!value) return undefined;
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
-  };
-
   const audio = raw.audio_url ?? raw.audioUrl ?? raw.audioURL;
   const cover = raw.cover_image_url ?? raw.coverImageUrl ?? raw.cover_imageURL;
+  const diveDeeperSeeds = raw.dive_deeper_seeds ?? raw.diveDeeperSeeds;
 
   return {
     id: raw.id ?? raw.episode_id ?? crypto.randomUUID(),
@@ -98,22 +162,23 @@ const normalizeEpisode = (raw: any): Episode => {
     createdAt: parseDate(raw.created_at ?? raw.createdAt),
     updatedAt: parseDate(raw.updated_at ?? raw.updatedAt),
     publishedAt: parseDate(raw.published_at ?? raw.publishedAt),
-    topics: raw.topics,
-    segments: raw.segments,
-    sources: raw.sources,
+    topics: Array.isArray(raw.topics) ? raw.topics.map(normalizeTopic) : undefined,
+    segments: Array.isArray(raw.segments) ? raw.segments.map(normalizeSegment) : undefined,
+    sources: Array.isArray(raw.sources) ? raw.sources.map(normalizeSource) : undefined,
     status: raw.status,
     showNotes: raw.show_notes ?? raw.showNotes,
     transcript: raw.transcript,
     coverImageUrl: typeof cover === "string" ? cover : undefined,
     coverPrompt: raw.cover_prompt ?? raw.coverPrompt,
-    errorMessage: raw.error_message ?? raw.errorMessage
+    errorMessage: raw.error_message ?? raw.errorMessage,
+    diveDeeperSeeds: Array.isArray(diveDeeperSeeds) ? diveDeeperSeeds.map(normalizeDiveDeeperSeed) : undefined
   };
 };
 
 const normalizeTopic = (raw: any): Topic => ({
   id: raw.id ?? raw.topic_id ?? crypto.randomUUID(),
   originalText: raw.originalText ?? raw.original_text ?? raw.title ?? "",
-  orderIndex: Number(raw.orderIndex ?? raw.order_index ?? 0),
+  orderIndex: parseNumber(raw.orderIndex ?? raw.order_index) ?? 0,
   isActive: Boolean(raw.isActive ?? raw.is_active ?? raw.active ?? true),
   isSeed: Boolean(raw.isSeed ?? raw.is_seed ?? false)
 });
@@ -182,6 +247,25 @@ export async function createStripeCheckoutSession(token: string, tier: BillingTi
 
 export async function createStripePortalSession(token: string): Promise<{ url: string }> {
   return apiRequest<{ url: string }>("/billing/portal-session", "POST", token);
+}
+
+export async function requestDiveDeeperEpisode(
+  token: string,
+  episodeId: string,
+  seedId: string,
+  durationMinutes?: number
+): Promise<{ episodeId: string; status?: string }> {
+  const body = durationMinutes !== undefined ? { duration: durationMinutes } : undefined;
+  const res = await apiRequest<any>(
+    `/episodes/${episodeId}/dive-deeper/${seedId}`,
+    "POST",
+    token,
+    body as any
+  );
+  return {
+    episodeId: res?.episodeId ?? res?.id ?? res?.episode_id ?? seedId,
+    status: res?.status
+  };
 }
 
 export function isEpisodeReady(episode?: Episode) {

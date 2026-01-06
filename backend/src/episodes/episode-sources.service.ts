@@ -31,6 +31,7 @@ export class EpisodeSourcesService {
         id: source.id ?? uuid(),
         episodeId,
         segmentId: source.segmentId,
+        title: source.title ?? source.sourceTitle ?? url,
         sourceTitle: source.sourceTitle?.trim() || url,
         url,
       });

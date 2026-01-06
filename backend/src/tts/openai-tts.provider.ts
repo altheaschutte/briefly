@@ -10,27 +10,21 @@ import { TtsProvider, TtsSynthesisResult } from './tts.interfaces';
 @Injectable()
 export class OpenAiTtsProvider implements TtsProvider {
   private readonly logger = new Logger(OpenAiTtsProvider.name);
-  private readonly model: string;
-  private readonly defaultVoice: string;
+  private readonly model = 'gpt-4o-mini-tts';
+  private readonly defaultVoice = 'alloy';
   private client: OpenAI | null = null;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly storageService: StorageService,
-  ) {
-    this.model = this.configService.get<string>('OPENAI_TTS_MODEL') ?? 'gpt-4o-mini-tts';
-    this.defaultVoice = this.configService.get<string>('OPENAI_SPEAKER_1') || 'alloy';
-  }
+  ) {}
 
   async synthesize(
     script: SegmentDialogueScript,
-    options: { voiceA: string; voiceB: string; storageKey?: string },
+    options: { voice: string; storageKey?: string },
   ): Promise<TtsSynthesisResult> {
     const client = this.getClient();
-    const voice = (options.voiceA || this.defaultVoice || '').trim();
-    if (!voice) {
-      throw new Error('OPENAI_SPEAKER_1 must be set for OpenAI TTS');
-    }
+    const voice = (options.voice || this.defaultVoice || '').trim() || this.defaultVoice;
 
     const input = this.renderDialogueText(script);
     const response = await client.audio.speech.create({
@@ -50,16 +44,14 @@ export class OpenAiTtsProvider implements TtsProvider {
   private renderDialogueText(script: SegmentDialogueScript): string {
     const rendered = (script.turns || [])
       .map((turn) => turn.text)
-      .filter((line) => line.trim().length > 0)
+      .filter((line) => line?.trim().length > 0)
       .join('\n\n')
       .trim();
     return rendered || script.title || 'Podcast segment';
   }
 
   private getClient(): OpenAI {
-    if (this.client) {
-      return this.client;
-    }
+    if (this.client) return this.client;
     const apiKey = this.configService.get<string>('OPENAI_API_KEY');
     if (!apiKey) {
       throw new Error('OPENAI_API_KEY must be set for OpenAI TTS');
@@ -75,9 +67,7 @@ export class OpenAiTtsProvider implements TtsProvider {
     try {
       const metadata = await parseBuffer(buffer, 'audio/mpeg');
       const seconds = metadata?.format?.duration;
-      if (!seconds || !isFinite(seconds) || seconds <= 0) {
-        return undefined;
-      }
+      if (!seconds || !isFinite(seconds) || seconds <= 0) return undefined;
       return Math.round(seconds);
     } catch (error) {
       this.logger.warn(

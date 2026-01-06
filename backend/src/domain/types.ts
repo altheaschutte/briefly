@@ -49,6 +49,8 @@ export type EpisodeStatus =
   | 'generating_dive_deeper_seeds'
   | 'generating_script'
   | 'generating_audio'
+  | 'stitching_audio'
+  | 'generating_cover_image'
   | 'ready'
   | 'failed';
 
@@ -65,22 +67,24 @@ export interface Episode {
   coverImageUrl?: string;
   coverPrompt?: string;
   transcript?: string;
-  scriptPrompt?: string;
   showNotes?: string;
   description?: string;
   errorMessage?: string;
   parentEpisodeId?: string;
   parentSegmentId?: string;
   diveDeeperSeedId?: string;
+  planId?: string;
   createdAt: Date;
   updatedAt: Date;
   usageRecordedAt?: Date;
+  workflowRunId?: string;
 }
 
 export interface EpisodeSegment {
   id: string;
   episodeId: string;
   orderIndex: number;
+  segmentType?: 'intro' | 'body' | 'outro';
   title?: string;
   intent?: import('../llm/llm.types').TopicIntent;
   rawContent: string;
@@ -96,6 +100,7 @@ export interface EpisodeSource {
   id: string;
   episodeId: string;
   segmentId?: string;
+  title?: string;
   sourceTitle: string;
   url: string;
   type?: string;

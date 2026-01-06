@@ -59,3 +59,24 @@ body {
 .prose blockquote {
   @apply border-l-4 border-accent/40 text-muted;
 }
+
+body:has(#producer-chat-root) main {
+  align-items: stretch;
+  justify-content: flex-start;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+body:has(#producer-chat-root) .site-footer {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  body:has(#producer-chat-root) {
+    overflow: hidden;
+  }
+
+  body:has(#producer-chat-root) main {
+    overflow: hidden;
+  }
+}

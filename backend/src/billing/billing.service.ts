@@ -2,13 +2,9 @@ import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
 import { BILLING_REPOSITORY, BillingRepository } from './billing.repository';
-import {
-  BillingTier,
-  BillingTierInfo,
-  SubscriptionStatus,
-  TierLimits,
-} from './billing.types';
-import { TIER_LIMITS, TIER_PRICE_ENV_MAP } from './billing.constants';
+import { BillingTier, BillingTierInfo, SubscriptionStatus, TierLimits } from './billing.types';
+import { TIER_LIMITS } from './billing.constants';
+import { STRIPE_PRICE_MAP } from './billing.config';
 
 @Injectable()
 export class BillingService {
@@ -27,7 +23,7 @@ export class BillingService {
     const secret = this.configService.get<string>('STRIPE_SECRET_KEY');
     this.webhookSecret = this.configService.get<string>('STRIPE_WEBHOOK_SECRET') || undefined;
     this.appWebUrl = this.configService.get<string>('APP_WEB_URL') || 'https://example.com';
-    this.priceMap = this.loadPriceMap();
+    this.priceMap = STRIPE_PRICE_MAP;
     if (secret) {
       this.stripe = new Stripe(secret, { apiVersion: '2024-04-10' });
     }
@@ -414,22 +410,13 @@ export class BillingService {
   }
 
   private getPriceId(tier: BillingTier): string | undefined {
-    const envKey = TIER_PRICE_ENV_MAP[tier];
-    if (!envKey) return undefined;
-    return this.configService.get<string>(envKey) || this.priceMap[tier];
+    return this.priceMap[tier];
   }
 
   private async createCustomer(userId: string): Promise<Stripe.Customer> {
     if (!this.stripe) throw new BadRequestException('Stripe is not configured');
     const customer = await this.stripe.customers.create({ metadata: { user_id: userId } });
     return customer as Stripe.Customer;
-  }
-
-  private loadPriceMap(): Partial<Record<BillingTier, string>> {
-    const entries = Object.entries(TIER_PRICE_ENV_MAP)
-      .map(([tier, envKey]) => [tier, this.configService.get<string>(envKey)] as const)
-      .filter(([, value]) => Boolean(value)) as Array<[BillingTier, string]>;
-    return Object.fromEntries(entries);
   }
 
   private ensureStripe() {

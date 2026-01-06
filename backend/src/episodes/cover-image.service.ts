@@ -16,7 +16,7 @@ export class CoverImageService {
   private readonly provider: ProviderName;
   private readonly apiKeyConfigKeys: string[];
   private readonly baseUrlConfigKeys: string[];
-  private readonly modelConfigKeys: string[];
+  private readonly imageModel = 'gpt-image-1';
 
   constructor(
     private readonly configService: ConfigService,
@@ -24,19 +24,9 @@ export class CoverImageService {
     private readonly llmService: LlmService,
     private readonly llmUsageService: LlmUsageService,
   ) {
-    this.provider = resolveImageProvider(configService.get<string>('COVER_IMAGE_PROVIDER') ?? 'openai');
-    this.apiKeyConfigKeys =
-      this.provider === 'openai'
-        ? ['COVER_IMAGE_OPENAI_API_KEY', 'OPENAI_API_KEY']
-        : ['COVER_IMAGE_XAI_API_KEY', 'XAI_API_KEY'];
-    this.baseUrlConfigKeys =
-      this.provider === 'openai'
-        ? ['COVER_IMAGE_OPENAI_BASE_URL', 'OPENAI_BASE_URL']
-        : ['COVER_IMAGE_XAI_BASE_URL', 'XAI_BASE_URL'];
-    this.modelConfigKeys =
-      this.provider === 'openai'
-        ? ['COVER_IMAGE_OPENAI_MODEL', 'COVER_IMAGE_MODEL', 'OPENAI_IMAGE_MODEL']
-        : ['COVER_IMAGE_XAI_MODEL', 'COVER_IMAGE_MODEL', 'XAI_IMAGE_MODEL'];
+    this.provider = 'openai';
+    this.apiKeyConfigKeys = ['OPENAI_API_KEY'];
+    this.baseUrlConfigKeys = ['OPENAI_BASE_URL'];
   }
 
   async buildPrompt(title?: string, segments: EpisodeSegment[] = []): Promise<string> {
@@ -72,9 +62,7 @@ export class CoverImageService {
     prompt: string,
   ): Promise<{ imageUrl: string; storageKey: string }> {
     const client = this.getClient();
-    const model =
-      this.getFirstConfigValue(this.modelConfigKeys) ||
-      (this.provider === 'xai' ? 'grok-image-1' : 'gpt-image-1');
+    const model = this.imageModel;
     const supportsGptImageParams =
       this.provider !== 'xai' && typeof model === 'string' && model.toLowerCase().includes('gpt-image-1');
     const request: Parameters<OpenAI['images']['generate']>[0] = {
@@ -391,14 +379,3 @@ if (t.match(/learn|education|explain|how to|guide|lesson|history/)) {
 }
 
 type ProviderName = 'openai' | 'xai';
-
-function resolveImageProvider(raw: string): ProviderName {
-  const normalized = (raw || '').toLowerCase();
-  if (normalized === 'openai') {
-    return 'openai';
-  }
-  if (normalized === 'xai' || normalized === 'grok') {
-    return 'xai';
-  }
-  throw new Error(`Unsupported cover image provider: ${raw}`);
-}

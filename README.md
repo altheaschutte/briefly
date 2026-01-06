@@ -1,166 +1,109 @@
 # Briefly
 
 ## High-Level Architecture
-- iOS app (`ios/Briefly/`) in Swift/SwiftUI with a CarPlay audio extension.
-- Marketing website (`briefly-landing/`) built with Astro + Tailwind CSS.
-- Web app (`web/briefly/`) built with Next.js + Tailwind, mirroring the iOS feature set (login, library, create/topics, settings, Stripe billing).
-- Backend NestJS API (`backend/`) with a BullMQ worker for episode generation and a schedule runner that queues auto-episodes.
-- Supabase for Auth + Postgres (row-level security), Redis for queues, and S3-compatible storage for audio and covers.
-- AI services are pluggable: LLMs (OpenAI/Anthropic/Gemini), TTS vendors (e.g. ElevenLabs), search/retrieval via Perplexity.
-- Deployment targeting Render (web service + background worker + managed Redis).
+- iOS app (`ios/BrieflyV2/`) in Swift/SwiftUI (MVP focus)
+- Web app (`web/briefly/`) built with Next.js + Tailwind, will serve as landing page and web app
+- Backend NestJS API (`backend/`) with BullMQ worker for audio/cover generation
+- Orchestration service (`briefly-orchestration/`) running Mastra workflows for producer chat + research/script generation
+- Supabase for Auth + Postgres (row-level security), Redis for queues, S3-compatible storage for audio and covers
+- AI services: LLMs (OpenAI/Anthropic/Gemini), TTS (OpenAI), search/retrieval via Exa
+- Deployment targeting Render (web service + background worker + managed Redis)
 
 ## Tech Stack
-- Backend: NestJS 10 (TypeScript/Express), BullMQ + Redis, Stripe SDK, jose for JWT verification, AWS SDK for S3, Luxon for scheduling, worker entry at `backend/worker/worker-main.ts`.
-- Data: Supabase Postgres with RLS, migrations in `backend/supabase/migrations`, seed data in `backend/supabase/seed.sql`, billing/usage/schedule tables for entitlements.
-- Auth: Supabase JWTs enforced by a global guard (`Authorization: Bearer <token>`); JWKS or HS secret supported.
-- AI: LLM abstraction with interchangeable providers; onboarding transcription uses OpenAI (`gpt-4o-transcribe` by default). TTS providers are swappable.
-- Mobile: Swift/SwiftUI client + CarPlay extension; communicates with the NestJS API using Supabase auth tokens.
-- Web app: Next.js + Tailwind in `web/briefly`, designed to match iOS features (topics, episodes, playback, billing via Stripe).
-- Landing: Astro 5 + Tailwind CSS 4 (Vite) in `briefly-landing/`; scripts: `npm run dev`, `npm run build`, `npm run preview`.
+- Backend: NestJS 10 (TypeScript/Express), BullMQ + Redis, Stripe SDK, jose for JWT verification, AWS SDK for S3, worker entry at `backend/worker/worker-main.ts`
+- Orchestration: Mastra framework in `briefly-orchestration/` for producer agent and research/script workflows
+- Data: Supabase Postgres with RLS, migrations in `backend/supabase/migrations/`
+- Auth: Supabase JWTs enforced by a global guard (`Authorization: Bearer <token>`)
+- Mobile: Swift/SwiftUI client communicating with NestJS API using Supabase auth tokens
+- Web app: Next.js + Tailwind in `web/briefly/`
 
-## Current App Features
-- Auth, billing, and entitlements: Supabase auth with Stripe checkout/portal; entitlements enforce per-tier caps (minutes/month, max episode duration, active topics, schedule availability) and record usage once episodes are ready.
-- Onboarding: live voice capture streaming to `/onboarding/stream` (SSE transcripts + topic extraction), manual entry fallback, and a `/onboarding/complete` step that saves timezone + schedule plus topic seeding via user-provided context.
-- Topics: create/edit/deactivate topics, enforce max active topics from the current plan, drag-and-drop reordering, and LLM-powered seeding from `user_about_context` or onboarding transcripts.
-- Episodes + library: trigger episode jobs, poll status through the pipeline, resume in-flight jobs on app launch, and show covers/notes/segments/source links with signed audio URLs when missing from payloads.
-- LLM usage tracking: records per-call token usage + estimated USD cost (pricing is configured in `backend/src/llm-usage/llm-pricing.ts`), with per-episode/topic totals available via API.
-- Dive deeper: each episode can include per-segment “Dive deeper” prompts; tapping one creates a follow-up micro-episode seeded from that segment.
-- Scheduling: timezone-aware schedules (daily/every N days/weekly) with target durations; onboarding bootstraps a default schedule, and the worker sweeps every 5 minutes to queue due episodes while logging run history.
-- Notifications: register/unregister push device tokens and send APNs on episode ready/failure.
-- Playback: global audio player with play/pause/resume, segment-level seeking, configurable speed, and persistent per-episode listening progress (resume where you left off + “X min left” progress indicator in episode lists).
-- Settings + profile: playback preferences, logout, timezone updates, and stored `user_about_context` to personalize topic generation.
-
-### iOS Playback Progress (Resume Where You Left Off)
-- The iOS app persists per-episode playback position locally via `PlaybackHistory` and updates it from `AudioPlayerManager` while listening (and on pause/seek/stop).
-- When you press play on an episode you’ve partially listened to, playback resumes from the last saved timestamp.
-- In episode lists, partially played episodes show “X min left” plus a small progress bar next to the duration pill.
-
-## TODO Features
-- Wire Episode detail secondary actions (transcript view, bookmark/queue, share, “talk to producer”, overflow) to real flows/endpoints.
-- Add voice selection in Settings (UI placeholder exists) and surface multiple TTS voices when available.
-- Build notification settings/UX once backend support is ready (currently a placeholder section).
-- Add the analytics snippet to `briefly-landing` once tracking is decided.
-- Hook the new Next.js web app to Supabase auth + backend endpoints (topics, episodes, billing) instead of static data.
+## Core Flow
+1. **Producer Chat** → User chats with producer agent (Mastra workflow via backend proxy) to define what they want to learn
+2. **Plan Review** → When agent has enough info, workflow suspends for explicit user confirmation
+3. **Confirm/Revise** → User reviews plan and either revises (continues chat) or confirms (saves plan, triggers generation, starts new thread)
+4. **Research & Script** → Mastra workflow handles deep research and script generation
+5. **Audio & Cover** → Backend worker generates TTS audio (OpenAI, single host voice) and cover image
 
 ## Repository Structure
 ```text
 .
-├─ backend/              # NestJS API + BullMQ worker + Supabase migrations
-├─ briefly-landing/      # Marketing site (Astro + Tailwind)
-├─ ios/Briefly/          # Xcode workspace (Swift/SwiftUI app + CarPlay extension)
-├─ web/briefly/          # Next.js web app mirroring iOS features
-├─ branding/             # Visual assets
-├─ supabase/             # Additional database migrations (project-level)
+├─ backend/               # NestJS API + BullMQ worker + Supabase migrations
+├─ briefly-orchestration/ # Mastra workflows (producer agent + research/script)
+├─ ios/BrieflyV2/         # Xcode project (Swift/SwiftUI app)
+├─ web/briefly/           # Next.js web app + landing page
+├─ branding/              # Visual assets
 └─ README.md
 ```
 
-## Brand & UI Theme
-- Dark mode only: the entire experience sits on a deep midnight background.
-- Palette:
-  - `#132a3b` — primary background
-  - `#1f3a4e` — card and surface panels
-  - `#ffa563` — brightest accent for primary CTAs and highlights (always white text)
-  - `#2a7997`, `#37a8ae`, `#93c8c2` — secondary teals for secondary buttons, chips, duration labels, and glow accents (also white text on any button treatment)
-- Foreground: use near-white text for headings and lighter body copy, with muted text on surfaces for readability.
-- Imagery: cover art and illustration prompts lean on pastel takes of these colors blended with complementary hues for cohesion without being repetitive.
+## Brand & UI
+- **Aesthetic**: ChatGPT meets Spotify meets Notion
+- Minimalist - avoid borders, cards, and visual clutter
+- Primary buttons: off-black `#2E2E2E` with white text
+- Secondary buttons: warm grey `#F3EFEA` with off-black text
+- Gold accent `#A2845E` used sparingly
+- No superfluous text, explainers, or "how to" copy - tone is direct and concise
+- iOS: liquid glass, native animations and transitions
+
+### Color Palette
+- Background: `#FFFFFF` (white)
+- Surface: `#F3EFEA` (warm grey)
+- Dark surface: `#383838`, Deep background: `#282828`
+- Primary accent: `#A2845E` (gold)
+- Text primary: `#2E2E2E` (off-black), secondary: `#757575`, muted: `#8A8A8E`
+- Border: `#E2DFDB` (medium warm grey)
+- Tab bar: `#2E2E2E` (off-black)
 
 ## Database Schema (Supabase/Postgres)
-- `topics`: `id uuid` PK, `user_id uuid`, `original_text text` (unique per user), `order_index int`, `is_active bool`, `is_seed bool`, optional `segment_dive_deeper_seed_id uuid`, optional `context_bundle jsonb`, timestamps; RLS restricts to `auth.uid() = user_id`. Topics with `segment_dive_deeper_seed_id` are system-generated for Dive Deeper and are not user-editable.
-- `topic_queries`: `id uuid`, `user_id uuid`, `topic_id` → `topics`, `episode_id` → `episodes`, `query text`, `answer text`, `citations jsonb[]`, optional `intent`, `order_index int`, timestamps; RLS user-scoped.
-- `episodes`: `id uuid` PK, `user_id uuid`, optional `episode_number`, `title`, `description`, `status enum (queued | rewriting_queries | retrieving_content | generating_dive_deeper_seeds | generating_script | generating_audio | ready | failed)`, `archived_at`, `target_duration_minutes int`, `duration_seconds numeric`, `audio_url`, `cover_image_url`, `cover_prompt`, `transcript`, `script_prompt`, `show_notes`, `error_message`, optional `parent_episode_id uuid`, optional `parent_segment_id uuid`, optional `dive_deeper_seed_id uuid`, `usage_recorded_at`, timestamps. Trigger assigns per-user `episode_number`; RLS user-scoped; `archived_at` filters list views.
-- `episode_segments`: `id uuid` PK, `episode_id` → `episodes` (cascade), `order_index int`, `title`, `raw_content text`, `raw_sources jsonb`, `script`, `audio_url`, `start_time_seconds numeric`, `duration_seconds numeric`, `created_at`; RLS tied to owning episode.
-- `episode_sources`: `id uuid` PK, `episode_id` → `episodes` (cascade), optional `segment_id` FK to `episode_segments`, `source_title text`, `url text`, `type text`, `created_at`; RLS tied to owning episode.
-- `segment_dive_deeper_seeds`: `id uuid` PK, `episode_id` → `episodes` (cascade), `segment_id` → `episode_segments` (cascade), optional `position int`, `title text`, `angle text`, `focus_claims jsonb`, `seed_queries jsonb`, `context_bundle jsonb`, timestamps; used to render “Dive deeper” prompts in clients.
-- `onboarding_transcripts`: `id uuid` PK, `user_id uuid`, `transcript text`, `status in_progress|completed|failed|cancelled`, `extracted_topics jsonb`, `error_message`, timestamps; RLS user-scoped.
-- `profiles`: `id uuid` PK → `auth.users`, `first_name`, `intention`, `user_about_context`, `timezone`, timestamps; RLS scoped to the owning user.
-- `user_subscriptions`: `user_id uuid` PK, `stripe_customer_id`, `stripe_subscription_id` (unique), `tier enum (free|starter|pro|power)`, `status enum (none|active|trialing|past_due|canceled|incomplete)`, `current_period_start/end timestamptz`, `cancel_at_period_end bool`, timestamps; RLS user-scoped.
-- `usage_periods`: `id uuid`, `user_id uuid`, `period_start timestamptz`, `period_end timestamptz`, `minutes_used numeric`, `seconds_used numeric`, timestamps; unique `(user_id, period_start, period_end)`; RLS user-scoped.
-- `device_tokens`: `id uuid`, `user_id uuid` → `auth.users`, `platform text`, `token text unique`, `last_seen_at`, timestamps; RLS user-scoped.
-- `episode_schedules`: `id uuid`, `user_id uuid` → `profiles`, `frequency enum (daily|every_2_days|every_3_days|every_4_days|every_5_days|every_6_days|weekly)`, `local_time_minutes int`, `timezone text`, `is_active bool`, `next_run_at timestamptz`, `last_run_at timestamptz`, `last_status enum (queued|success|skipped|failed)`, `last_error text`, `target_duration_minutes int`, timestamps; RLS user-scoped.
-- `schedule_runs`: `id uuid`, `schedule_id` → `episode_schedules`, `user_id uuid`, `run_at timestamptz`, `status enum (queued|success|skipped|failed)`, `message text`, `episode_id uuid`, `duration_seconds numeric`, `created_at`; RLS user-scoped.
+- `episode_plans`: `id uuid` PK, `user_id uuid`, `resource_id text`, optional `thread_id text`, optional `assistant_message text`, optional `confidence double`, `episode_spec jsonb`, optional `user_profile jsonb`, timestamps; stored producer outcomes
+- `episodes`: `id uuid` PK, `user_id uuid`, optional `episode_number`, `title`, `description`, `status enum (queued | retrieving_content | generating_audio | stitching_audio | generating_cover_image | ready | failed)`, `archived_at`, `target_duration_minutes int`, `duration_seconds numeric`, `audio_url`, `cover_image_url`, `cover_prompt`, `transcript`, `show_notes`, `error_message`, optional `plan_id uuid`, optional `workflow_run_id text`, `usage_recorded_at`, timestamps; RLS user-scoped
+- `episode_segments`: `id uuid` PK, `episode_id` → `episodes` (cascade), `order_index int`, `segment_type text`, `title`, `raw_content text`, `raw_sources jsonb`, `script`, `audio_url`, `start_time_seconds numeric`, `duration_seconds numeric`, `created_at`; RLS tied to owning episode
+- `episode_sources`: `id uuid` PK, `episode_id` → `episodes` (cascade), optional `segment_id` FK, `source_title text`, `url text`, `type text`, `created_at`; RLS tied to owning episode
+- `profiles`: `id uuid` PK → `auth.users`, `first_name`, `intention`, `user_about_context`, `timezone`, timestamps; RLS user-scoped
+- `user_subscriptions`: `user_id uuid` PK, `stripe_customer_id`, `stripe_subscription_id`, `tier enum (free|starter|pro|power)`, `status enum`, `current_period_start/end`, `cancel_at_period_end`, timestamps; RLS user-scoped
+- `usage_periods`: `id uuid`, `user_id uuid`, `period_start/end timestamptz`, `minutes_used numeric`, `seconds_used numeric`, timestamps; RLS user-scoped
+- `device_tokens`: `id uuid`, `user_id uuid`, `platform text`, `token text unique`, `last_seen_at`, timestamps; RLS user-scoped
 
 ## API (NestJS)
-- Base URL: default `http://localhost:3000`.
-- Auth: `Authorization: Bearer <supabase JWT>` on every route except the Stripe webhook; JSON bodies; responses use camelCase with snake_case mirrors for some mobile clients.
+Base URL: `http://localhost:3000`. Auth: `Authorization: Bearer <supabase JWT>` on all routes except Stripe webhook.
 
 ### Root & Health
-- `GET /` → `{ "name": "Briefly API", "status": "ok" }`.
-- `GET /health` → `{ "ok": true }`.
+- `GET /` → `{ "name": "Briefly API", "status": "ok" }`
+- `GET /health` → `{ "ok": true }`
 
-### Topics
-- `GET /topics?status=active|inactive&is_active=true|false` → list topics for the user (filter optional).
-- `POST /topics` with `{ "original_text": "..." }` → creates a topic (enforces plan-based active cap). Returns topic with `isSeed`.
-- `POST /topics/seed` with `{ "user_about_context": "..." }` → generates and persists seed topics from user context (respects active-topic limit).
-- `PATCH /topics/:id` with `{ "original_text"?, "is_active"?, "order_index"? }` → updates and returns the topic.
-- `GET /topics/:id/llm-usage` → summed LLM token usage + estimated cost for that topic’s creation/updates.
-- `DELETE /topics/:id` → soft-deactivates (`is_active: false`) and returns the topic.
+### Producer (Plan Orchestration)
+- `POST /producer/chat/stream` with `{ "userMessage": "...", "threadId"?, "messages"? }` → streams producer conversation, returns `episodeSpec` + confidence when ready
+- `POST /producer/chat/confirm` with `{ "outcome": {...}, "threadId"?, "userProfile"? }` → persists plan, queues episode. Returns `{ "planId", "episodeId", "status": "queued" }`
+- `POST /producer/chat/resume` with `{ "runId": "...", "confirmed": true|false, ... }` → resumes suspended workflow
+- `GET /producer/chat/thread/:threadId` → fetch chat thread history
 
 ### Episodes
-- `POST /episodes` with optional `{ "duration": <minutes> }` → queues a new episode job after entitlement checks. Returns `{ "episodeId": "uuid", "status": "queued" }`.
-- `GET /episodes` → lists non-archived, non-failed episodes (newest first) with camel + snake fields (`id`, `episode_number`, `status`, `title`, `description`, `target_duration_minutes`, `duration_seconds`, `audio_url`, `cover_image_url`, `cover_prompt`, `created_at`, `updated_at`).
-- `GET /episodes/:id` → full episode with segments, sources, and `dive_deeper_seeds` (includes snake/camel mirrors for audio URLs, start/duration, raw_sources/rawSources).
-- `GET /episodes/:id/llm-usage` → summed LLM token usage + estimated cost for that episode generation run.
-- `POST /episodes/:episodeId/dive-deeper/:seedId` with optional `{ "duration": <minutes> }` → creates a Dive Deeper follow-up episode (a “micro-episode” seeded from the selected segment). Returns `{ "episodeId": "uuid", "status": "queued" }`.
-- `GET /episodes/:id/sources` → array of source objects (`id`, `episode_id`, optional `segment_id`, `source_title`, `url`, `type`).
-- `GET /episodes/:id/audio` → `{ "audioUrl": "https://signed-s3-url-or-null" }`.
-- `DELETE /episodes/:id` → `{ "success": true }` (archives the episode).
-
-### Onboarding
-- `POST /onboarding/stream` (send raw audio bytes; content-type e.g. `audio/webm`). SSE events:
-  - `session` → `{ "session_id": "<uuid>" }`
-  - `transcript` → `{ "session_id": "...", "transcript": "partial text" }`
-  - `completed` → `{ "session_id": "...", "transcript": "...", "topics": ["..."], "created_topic_ids": ["..."] }`
-  - `error` → `{ "message": "transcription_failed|finalization_failed" }`
-- `POST /onboarding/complete` with `{ "timezone"?, "local_time_minutes"?, "frequency"? }` → saves profile timezone (default `Australia/Brisbane`) and ensures/creates a schedule (default daily at 7:00). Returns `{ profile, schedule }`.
+- `POST /episodes` with `{ "planId": "<uuid>" }` → queue episode from plan. Returns `{ "episodeId", "status": "queued" }`
+- `GET /episodes` → list non-archived episodes (newest first)
+- `GET /episodes/:id` → full episode with segments, sources
+- `GET /episodes/:id/status` → workflow + worker status
+- `GET /episodes/:id/sources` → array of source objects
+- `GET /episodes/:id/audio` → `{ "audioUrl": "..." }`
+- `DELETE /episodes/:id` → archives the episode
 
 ### Billing & Entitlements
-- `GET /billing/tiers` → tier metadata including limits and Stripe price info.
-- `POST /billing/checkout-session` with `{ "tier": "starter|pro|power" }` → Stripe Checkout session URL.
-- `POST /billing/portal-session` → Stripe Billing Portal URL for the user.
-- `POST /billing/webhook` → Stripe webhook endpoint (expects raw body + `Stripe-Signature`).
-- `GET /billing/entitlements` or `GET /me/entitlements` → current tier, period window, limits, usage totals, and seconds remaining.
+- `GET /billing/tiers` → tier metadata with limits and Stripe prices
+- `POST /billing/checkout-session` with `{ "tier": "..." }` → Stripe Checkout URL
+- `POST /billing/portal-session` → Stripe Billing Portal URL
+- `POST /billing/webhook` → Stripe webhook endpoint
+- `GET /billing/entitlements` or `GET /me/entitlements` → current tier, limits, usage
 
 ### Profiles
-- `GET /me/profile` → stored profile (fallback placeholder if missing).
-- `PATCH /me/profile` with `{ "timezone": "Continent/City" }` → updates timezone and recomputes schedule next-run times.
-
-### Schedules
-- `GET /schedules` → user schedules with snake_case fields.
-- `POST /schedules` with `{ "frequency": "...", "local_time_minutes": 0-1439, "timezone": "...", "target_duration_minutes"?: number }` → create schedule (limit 2 active).
-- `PATCH /schedules/:id` with any of the schedule fields plus `is_active` to pause/resume.
-- `DELETE /schedules/:id` → `{ "success": true }`.
-- `GET /schedules/:id/runs` → recent run history (`status`, `message`, `episode_id`, `duration_seconds`).
-- `POST /schedules/bootstrap` with optional `{ "timezone", "local_time_minutes" }` → returns existing schedules or creates a default daily schedule.
+- `GET /me/profile` → stored profile
+- `PATCH /me/profile` with `{ "timezone": "..." }` → update timezone
 
 ### Notifications
-- `POST /notifications/device` with `{ "token": "...", "platform": "ios"|"android" }` → register/update a device token.
-- `DELETE /notifications/device/:token` → unregisters the token for the user.
-
-## Dive Deeper Flow
-Dive Deeper lets a listener tap a per-segment prompt on an episode detail screen to generate a short follow-up episode that goes deeper on that segment (not a recap).
-
-### Seed generation (backend worker)
-- During episode generation, after segments/sources are persisted, the worker generates one `segment_dive_deeper_seeds` row per segment with an LLM-produced `title`, `angle`, `focus_claims`, `seed_queries`, and `context_bundle`.
-- `GET /episodes/:id` returns these as `dive_deeper_seeds`, which clients render in the episode detail view.
-
-### Creating a Dive Deeper episode (API + worker)
-- Client calls `POST /episodes/:episodeId/dive-deeper/:seedId` (optional `{ "duration": <minutes> }`).
-- Backend validates the seed belongs to the parent episode, creates (or reuses) a system-generated `topics` row tied to that seed (`segment_dive_deeper_seed_id = seedId`), and creates a new episode with `parent_episode_id`, `parent_segment_id`, and `dive_deeper_seed_id` set.
-- When the worker processes this new episode, it runs with only that Dive Deeper topic and generates content in `dive_deeper` mode (default duration is `DIVE_DEEPER_DEFAULT_DURATION_MINUTES`, fallback 8).
-
-### iOS UI behavior
-- `ios/Briefly/Briefly/Views/Main/EpisodeDetailView.swift` renders a “Dive deeper” section from `Episode.diveDeeperSeeds`.
-- Tapping a row starts a 5-second “starting… tap to undo” queue; if not cancelled it fires the POST, fetches the created episode, and navigates to its detail view.
+- `POST /notifications/device` with `{ "token": "...", "platform": "ios"|"android" }` → register device
+- `DELETE /notifications/device/:token` → unregister device
 
 ## Episode Generation Flow
-1. Trigger & entitlement checks: `/episodes` (or schedule runner) enqueues a BullMQ `generate` job after validating plan limits and target duration (default 20 minutes from `EPISODE_DEFAULT_DURATION_MINUTES`).
-2. Load episode & topics: status moves to `rewriting_queries`, then `retrieving_content`; active topics are fetched/sorted (test mode can limit to one segment), per-segment target minutes are derived, and default TTS voices are selected.
-3. Per-topic work:
-   - Fetch previous `topic_queries`, plan fresh queries + intent via the LLM, and fall back to the topic text if all queries were previously used.
-   - Run Perplexity for each planned query; persist `topic_queries` with answers/citations.
-   - Build `episode_sources` from citations and segment content from query answers.
-   - Generate a dialogue script per segment (optionally chained to the previous segment), enhance for ElevenLabs voice tags when applicable, synthesize TTS (voices A/B), and capture start/duration with 2s gaps between segments.
-4. Persist segments/sources: replace `episode_segments` and `episode_sources`, generate per-segment Dive Deeper seeds (`generating_dive_deeper_seeds`), then mark status `generating_script` and combine dialogue into a full transcript.
-5. Metadata & assets: move to `generating_audio`; LLM produces title/description/show notes and a cover prompt. In parallel, generate the cover image (S3-backed) and stitch segment audio with ffmpeg (download parts, insert silence, concat, upload final MP3, measure duration).
-6. Finalize: mark `ready` with transcript, script prompt note, show notes, metadata, cover prompt/URL, audio key/URL, and duration; send APNs status notifications; record usage into `usage_periods` (idempotent via `usage_recorded_at`).
-7. Failure handling: on any error, mark `failed` with a contextual message (stage/status/code), attempt a failure notification, and leave logs for debugging.
+1. **Plan creation**: Producer workflow (`/producer/chat/stream` + `resume`) arrives at confirmed `episodeSpec`. On confirm, `/producer/chat/confirm` persists plan and queues episode
+2. **Queue & load**: BullMQ worker pulls job, loads episode + plan, sets status `retrieving_content`
+3. **Research + script**: Worker calls Mastra `researchAndScriptWorkflow`, stores `workflow_run_id`, receives `{ script, research, summary }`
+4. **Audio generation**: Build segments from script, set `generating_audio`, synthesize TTS (OpenAI) per segment, then `stitching_audio` and stitch into final MP3 (ffmpeg)
+5. **Assets**: Upsert segments + sources, set `generating_cover_image`, generate cover image
+6. **Finalize**: Mark `ready` with all metadata, send APNs notification, record usage. On error, mark `failed` and notify

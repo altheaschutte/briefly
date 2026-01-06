@@ -31,6 +31,7 @@ export class EpisodeSegmentsService {
             id: source.id ?? uuid(),
             episodeId,
             segmentId: source.segmentId ?? id,
+            title: source.title ?? source.sourceTitle ?? url,
             sourceTitle: source.sourceTitle?.trim() || url,
             url,
           };
@@ -47,6 +48,7 @@ export class EpisodeSegmentsService {
         startTimeSeconds,
         durationSeconds,
         rawSources,
+        segmentType: segment.segmentType ?? 'body',
       };
     });
 

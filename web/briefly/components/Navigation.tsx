@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type FocusEvent } from "react";
-import { X, LogOut, LogIn, CircleUser, CreditCard, ExternalLink, Loader2 } from "lucide-react";
+import { X, LogOut, LogIn, CircleUser, CreditCard, ExternalLink, Loader2, MessageSquare } from "lucide-react";
 import clsx from "clsx";
 import { useAuth } from "@/context/AuthContext";
 import { createStripePortalSession } from "@/lib/api";
@@ -22,6 +22,7 @@ export default function Navigation() {
   const router = useRouter();
   const { session, accessToken, email, logout } = useAuth();
   const isLoginPage = pathname === "/login";
+  const isProducerChat = pathname === "/producer-chat";
 
   const handleAccountBlur = (event: FocusEvent<HTMLDivElement>) => {
     const nextFocus = event.relatedTarget as Node | null;
@@ -97,7 +98,12 @@ export default function Navigation() {
         scrolled ? "border-b border-borderSoft bg-white/80 backdrop-blur" : "bg-transparent"
       )}
     >
-      <div className="container relative flex items-center justify-between py-4">
+      <div
+        className={clsx(
+          "relative flex items-center justify-between py-4",
+          isProducerChat ? "w-full px-6 lg:px-10" : "container"
+        )}
+      >
         <Link href="/" className="text-ink">
           <div className="flex items-center gap-3">
             <Image
@@ -149,6 +155,16 @@ export default function Navigation() {
                         >
                           <CircleUser className="h-4 w-4 text-muted" />
                           Subscription
+                        </button>
+                        <button
+                          onClick={() => {
+                            setAccountOpen(false);
+                            router.push("/producer-chat");
+                          }}
+                          className="flex items-center gap-2 rounded-xl px-3 py-2 text-left text-ink transition hover:bg-overlay/60"
+                        >
+                          <MessageSquare className="h-4 w-4 text-muted" />
+                          Producer chat
                         </button>
                         <button
                           onClick={handleManageBilling}

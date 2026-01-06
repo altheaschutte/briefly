@@ -9,6 +9,6 @@ export interface TtsSynthesisResult {
 export interface TtsProvider {
   synthesize(
     script: SegmentDialogueScript,
-    options: { voiceA: string; voiceB: string; storageKey?: string },
+    options: { voice: string; storageKey?: string },
   ): Promise<TtsSynthesisResult>;
 }

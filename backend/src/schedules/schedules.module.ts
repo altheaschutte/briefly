@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { TopicsModule } from '../topics/topics.module';
 import { EpisodesModule } from '../episodes/episodes.module';
 import { BillingModule } from '../billing/billing.module';
 import { QueueModule } from '../queue/queue.module';
@@ -11,7 +10,7 @@ import { SCHEDULES_REPOSITORY } from './schedules.repository';
 import { SupabaseSchedulesRepository } from './supabase-schedules.repository';
 
 @Module({
-  imports: [ConfigModule, TopicsModule, EpisodesModule, BillingModule, QueueModule],
+  imports: [ConfigModule, EpisodesModule, BillingModule, QueueModule],
   controllers: [SchedulesController],
   providers: [
     SchedulesService,

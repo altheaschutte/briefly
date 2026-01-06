@@ -2,7 +2,6 @@ export type LlmUsageEventRow = {
   id: string;
   user_id: string;
   episode_id?: string | null;
-  topic_id?: string | null;
   segment_id?: string | null;
   flow?: string | null;
   operation: string;
@@ -34,4 +33,3 @@ export type SupabaseDatabase = {
     CompositeTypes: Record<string, never>;
   };
 };
-

@@ -16,6 +16,8 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { AppController } from './app.controller';
 import { ProfilesModule } from './profiles/profiles.module';
 import { SchedulesModule } from './schedules/schedules.module';
+import { EpisodePlansModule } from './episode-plans/episode-plans.module';
+import { ProducerModule } from './producer/producer.module';
 
 @Module({
   imports: [
@@ -35,6 +37,8 @@ import { SchedulesModule } from './schedules/schedules.module';
     NotificationsModule,
     ProfilesModule,
     SchedulesModule,
+    EpisodePlansModule,
+    ProducerModule,
   ],
   controllers: [AppController],
 })

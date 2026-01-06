@@ -1,0 +1,1 @@
+Always use kimsungwhee MCP for ios docs and example patterns

@@ -115,7 +115,11 @@ export default function EpisodeStack({
                     key={segment.id || segment.title}
                     className="rounded-full border border-borderSoft/70 bg-overlay/60 px-3 py-1 text-ink/80"
                   >
-                    {segment.title || "Segment"} {segment.duration_seconds ? `· ${formatMinutes(segment.duration_seconds)}` : ""}
+                    {segment.title || "Segment"}{" "}
+                    {(() => {
+                      const duration = segment.durationSeconds ?? segment.duration_seconds;
+                      return duration ? `· ${formatMinutes(duration)}` : "";
+                    })()}
                   </span>
                 ))}
               </div>

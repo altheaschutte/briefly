@@ -3,9 +3,8 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 export type LlmUsageContext = {
   userId: string;
-  flow?: 'episode_generation' | 'topic_creation' | 'topic_update' | 'other';
+  flow?: 'episode_generation' | 'other';
   episodeId?: string;
-  topicId?: string;
   segmentId?: string;
 };
 
@@ -23,4 +22,3 @@ export class LlmUsageContextService {
     return this.storage.getStore();
   }
 }
-

@@ -1,7 +1,6 @@
 export type LlmUsageRecord = {
   userId: string;
   episodeId?: string;
-  topicId?: string;
   segmentId?: string;
   flow?: string;
   operation: string;
@@ -24,4 +23,3 @@ export type LlmUsageTotals = {
   costUsdUnknownCount: number;
   eventCount: number;
 };
-

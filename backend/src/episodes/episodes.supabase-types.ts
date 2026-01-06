@@ -11,13 +11,14 @@ export type EpisodeRow = {
   cover_image_url?: string | null;
   cover_prompt?: string | null;
   transcript?: string | null;
-  script_prompt?: string | null;
   show_notes?: string | null;
   description?: string | null;
   error_message?: string | null;
   parent_episode_id?: string | null;
   parent_segment_id?: string | null;
   dive_deeper_seed_id?: string | null;
+  plan_id?: string | null;
+  workflow_run_id?: string | null;
   created_at: string;
   updated_at: string;
   usage_recorded_at?: string | null;
@@ -34,6 +35,7 @@ export type EpisodeSourceRow = {
   id: string;
   episode_id: string;
   segment_id?: string | null;
+  title?: string | null;
   source_title: string;
   url: string;
   type?: string | null;
@@ -51,6 +53,7 @@ export type EpisodeSegmentRow = {
   id: string;
   episode_id: string;
   order_index: number;
+  segment_type?: string | null;
   title?: string | null;
   raw_content: string;
   raw_sources?: any | null;
